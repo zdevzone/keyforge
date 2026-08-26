@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/zdevzone/keyforge/security/advisories/new
+    about: Report privately. Please do not open a public issue for anything that could expose a signing key, a token, or a customer's ledger.

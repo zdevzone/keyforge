@@ -1,0 +1,23 @@
+node_modules/
+dist/
+
+# Build output is not tracked. `npm run build:all` regenerates it, and the
+# console bundle is content-hashed -- committing it would add a new ~350 KB
+# blob on every UI change and conflict between any two contributors who
+# touch ui/.
+#
+# Deploying to a host that cannot build (cPanel) does mean committing dist/
+# in *your* project. docs/deploy.md covers that; it is a property of that
+# deployment, not of this repository.
+
+db/
+database/
+license-signing.key
+*.pem
+
+.env
+.env.*
+!.env.example
+
+# Both lockfiles ARE tracked, so CI, image builds and deploys resolve the
+# same dependency tree every time.

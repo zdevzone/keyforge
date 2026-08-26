@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: keyforge
+    runtime: node
+    plan: free
+    autoDeploy: true
+    # npm ci, matching CI and the Dockerfile: both lockfiles are tracked, so
+    # every build resolves the same dependency tree.
+    buildCommand: npm ci && npm run build && npm --prefix ui ci && npm run build:ui
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: LICENSE_HOST
+        value: 0.0.0.0
+      - key: LICENSE_PORT
+        value: 10000
+      - key: LICENSE_DB_PATH
+        value: ./db/licenses.sqlite
+      - key: LICENSE_ADMIN_TOKEN
+        sync: false
+      - key: LICENSE_SIGNING_KEY
+        sync: false
+      - key: LICENSE_AUTH_SECRET
+        sync: false
+      - key: LICENSE_SEED_ADMIN_EMAIL
+        sync: false
+      - key: LICENSE_SEED_ADMIN_PASSWORD
+        sync: false

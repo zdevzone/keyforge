@@ -1,0 +1,28 @@
+{
+  "$comment": "Copy to keyforge.config.json (or set LICENSE_CONFIG to its path). Everything here is optional; these are illustrative values, not the defaults.",
+  "branding": { "name": "Acme Licensing" },
+  "key": { "prefix": "ACME", "groupLength": 5, "groups": 4 },
+  "tokens": { "offlineGraceDays": 14 },
+  "limits": {
+    "enabled": true,
+    "activate": { "max": 20, "timeWindow": "1 minute" },
+    "validate": { "max": 20, "timeWindow": "1 minute" },
+    "register": { "max": 30, "timeWindow": "1 minute" }
+  },
+  "licenses": {
+    "defaultPlan": "standard",
+    "defaultActivationLimit": 1,
+    "planPresets": {
+      "standard": { "entitlements": { "allowance": 200000 } },
+      "pro": { "entitlements": { "allowance": 1000000, "pro": true }, "activationLimit": 3 },
+      "trial": { "entitlements": { "allowance": 500, "trial": true }, "durationDays": 14 },
+      "subscription-yearly": { "entitlements": { "tier": "full" }, "durationDays": 365 }
+    }
+  },
+  "registry": { "enabled": true, "collectUserInfo": true },
+  "features": { "audit": true, "backups": true },
+  "auth": {
+    "$comment": "core = operator + session management; full adds bans and impersonation; or list features: [operators, sessions, bans, impersonation]",
+    "admin": "core"
+  }
+}

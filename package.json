@@ -1,0 +1,68 @@
+{
+  "name": "keyforge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hostable product-key server: signed offline license tokens, activation seats, install census, and an admin console.",
+  "keywords": [
+    "ed25519",
+    "fastify",
+    "license",
+    "license-server",
+    "licensing",
+    "product-key",
+    "self-hosted"
+  ],
+  "homepage": "https://github.com/zdevzone/keyforge#readme",
+  "bugs": {
+    "url": "https://github.com/zdevzone/keyforge/issues"
+  },
+  "license": "MIT",
+  "author": "Abraham Bekele <keyforge@zdevzone.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zdevzone/keyforge.git"
+  },
+  "type": "module",
+  "scripts": {
+    "license": "node --env-file-if-exists=.env.local scripts/license-tool.mjs",
+    "db": "node --env-file-if-exists=.env.local scripts/db-tool.mjs",
+    "admin:create": "node --env-file-if-exists=.env.local scripts/create-admin.mjs",
+    "build": "tsc -p tsconfig.json",
+    "build:ui": "npm --prefix ui run build",
+    "build:all": "npm run build && npm --prefix ui ci && npm run build:ui",
+    "start": "node --env-file-if-exists=.env.local dist/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "check": "vp lint && vp fmt --check && npm run typecheck",
+    "test": "tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/static": "^10.1.3",
+    "@t3-oss/env-core": "^0.13.11",
+    "better-auth": "^1.7.1",
+    "better-sqlite3": "^12.11.1",
+    "fastify": "^5.12.1",
+    "kysely": "^0.29.5",
+    "pg": "^8.23.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.23.1",
+    "smol-toml": "^1.8.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite-plus": "^0.3.0",
+    "yaml": "^2.9.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "12.0.2",
+      "onFail": "warn"
+    }
+  }
+}

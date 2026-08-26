@@ -1,0 +1,43 @@
+services:
+  keyforge:
+    build: .
+    ports:
+      - "4100:4100"
+    volumes:
+      - keyforge-data:/data
+      # Uncomment to supply a deployment config:
+      # - ./keyforge.config.json:/app/keyforge.config.json:ro
+    environment:
+      # Unset = SQLite in the volume. Point at the postgres service below
+      # (docker compose --profile postgres up) for a durable ledger.
+      DATABASE_URL: ${DATABASE_URL:-}
+      # Required: PEM private key (or mount a file and use LICENSE_SIGNING_KEY_FILE).
+      LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:?set in .env}
+      # Optional surfaces — each is disabled when unset.
+      LICENSE_ADMIN_TOKEN: ${LICENSE_ADMIN_TOKEN:-}
+      LICENSE_AUTH_SECRET: ${LICENSE_AUTH_SECRET:-}
+      LICENSE_SEED_ADMIN_EMAIL: ${LICENSE_SEED_ADMIN_EMAIL:-}
+      LICENSE_SEED_ADMIN_PASSWORD: ${LICENSE_SEED_ADMIN_PASSWORD:-}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+
+  # Optional durable ledger:
+  #   docker compose --profile postgres up
+  #   DATABASE_URL=postgres://keyforge:keyforge@postgres:5432/keyforge
+  postgres:
+    image: postgres:16
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: keyforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keyforge}
+      POSTGRES_DB: keyforge
+    volumes:
+      - keyforge-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keyforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  keyforge-data:
+  keyforge-pgdata:

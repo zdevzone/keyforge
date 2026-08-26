@@ -1,0 +1,71 @@
+name: CI
+
+# Read-only by default: nothing here writes to the repo.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install server dependencies
+        # npm ci installs the locked tree exactly, and fails when the lockfile
+        # and package.json disagree — which is the whole point of tracking it.
+        run: npm ci
+      - name: Check (Oxlint, Oxfmt, typecheck)
+        # Runs the LOCAL vp from node_modules, installed by npm ci. No global
+        # curl|bash install in CI, and no unpinned binary in the build path.
+        run: npm run check
+      - name: Test
+        run: npm test
+      - name: Build server
+        run: npm run build
+      - name: Install console dependencies
+        run: npm --prefix ui ci
+      - name: Build console
+        run: npm --prefix ui run build
+
+  # The same suite against Postgres — dialect differences (LIKE case
+  # sensitivity, bigint counts, identity columns) only show up here.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: keyforge
+          POSTGRES_PASSWORD: keyforge
+          POSTGRES_DB: keyforge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Test against Postgres
+        run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://keyforge:keyforge@localhost:5432/keyforge_test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t keyforge .

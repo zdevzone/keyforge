@@ -1,0 +1,37 @@
+{
+  "name": "create-keyforge",
+  "version": "1.0.0",
+  "description": "Scaffold a self-hosted Keyforge license server: pick a database, an operator-admin scope, and a licensing model, and get a configured project ready to deploy.",
+  "keywords": [
+    "create",
+    "keyforge",
+    "license",
+    "license-server",
+    "licensing",
+    "product-key",
+    "scaffold"
+  ],
+  "homepage": "https://github.com/zdevzone/keyforge#readme",
+  "bugs": {
+    "url": "https://github.com/zdevzone/keyforge/issues"
+  },
+  "license": "MIT",
+  "author": "Abraham Bekele",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zdevzone/keyforge.git",
+    "directory": "packages/create-keyforge"
+  },
+  "bin": {
+    "create-keyforge": "bin/create-keyforge.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  }
+}
