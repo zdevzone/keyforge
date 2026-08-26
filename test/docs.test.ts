@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -114,9 +114,21 @@ test("documented invocations pass their flags through npm", () => {
   );
 });
 
-test("the docs are linked from the README, so they can be found", () => {
+/**
+ * The README is an index now: the reference it used to carry inline lives under
+ * docs/, and the only way there is a link. Naming two files here would let the
+ * five it does not name rot unnoticed -- so read the directory, and let adding
+ * a doc be what makes this fail until it is linked.
+ */
+test("every doc is linked from the README, so none of them can go missing", () => {
   const readme = read("README.md");
-  for (const doc of ["docs/api.md", "docs/cli.md"]) {
-    assert.ok(readme.includes(doc), `${doc} is not linked from the README`);
-  }
+  const docs = readdirSync(join(root, "docs")).filter((name) => name.endsWith(".md"));
+  assert.ok(docs.length >= 5, "expected the docs directory to be populated");
+
+  const unlinked = docs.filter((name) => !readme.includes(`docs/${name}`));
+  assert.deepEqual(
+    unlinked,
+    [],
+    `add these to the README's documentation table:\n  ${unlinked.join("\n  ")}`,
+  );
 });
