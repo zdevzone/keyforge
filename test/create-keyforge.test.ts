@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createReadStream, existsSync } from "node:fs";
 import { statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -709,6 +709,80 @@ test("the `--` separator appears for npm and for nobody else", () => {
       assert.deepEqual(separators, [], `${manager} does not need npm's -- separator`);
     }
   }
+});
+
+/**
+ * The docs are the gap the string-level check above cannot see. It inspects
+ * values returned by generators; `docs/` is retargeted by file I/O in
+ * index.mjs, so a doc that never reached the rewriter looks identical to one
+ * that did -- until a pnpm user reads it and runs npm.
+ *
+ * That is not hypothetical. The rewriter iterated a hardcoded list of five
+ * filenames, so the two docs added with this README split arrived carrying
+ * `npm run admin:create -- --email …`, npm's `--` separator and all, in a
+ * project that uses pnpm.
+ *
+ * Only code is checked -- fenced blocks and inline spans -- because that is
+ * exactly what retargetDocs rewrites. docs/cli.md discusses npm's own
+ * devEngines and flag-swallowing behavior in prose on purpose, and rewriting
+ * that would turn true sentences about npm into false ones about pnpm.
+ */
+test("a non-npm project's docs never tell it to run npm", async (t) => {
+  const parent = await mkdtemp(join(tmpdir(), "keyforge-docs-pm-"));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  const directory = join(parent, "acme");
+
+  await run("node", [
+    CLI,
+    directory,
+    "--template",
+    REPO,
+    "--package-manager",
+    "pnpm",
+    "--yes",
+    "--no-git",
+  ]);
+
+  const docsDir = join(directory, "docs");
+  // keyforge.md is upstream's own README, kept verbatim by design.
+  const docs = (await readdir(docsDir)).filter(
+    (name) => name.endsWith(".md") && name !== "keyforge.md",
+  );
+  assert.ok(docs.length >= 5, "expected the scaffolded project to carry the docs");
+
+  // retargetDocs deliberately protects one section from the heading below to
+  // the next top-level heading (generate.mjs, `carveOut`): it explains npm's
+  // own devEngines behaviour, so its `npm install` is the subject of the
+  // sentence rather than an instruction. The rewriter and this check have to
+  // agree on that boundary -- if the heading moves, move it in both.
+  const PROTECTED = "## If you re-run `vp migrate`";
+  const stripProtected = (text: string) => {
+    const start = text.indexOf(PROTECTED);
+    if (start === -1) return text;
+    const rest = text.slice(start + PROTECTED.length);
+    const nextTop = rest.search(/\n# /);
+    const end = nextTop === -1 ? text.length : start + PROTECTED.length + nextTop;
+    return text.slice(0, start) + text.slice(end);
+  };
+
+  const offenders: string[] = [];
+  for (const name of docs) {
+    const text = stripProtected(await readFile(join(docsDir, name), "utf8"));
+    const code = [
+      ...(text.match(/```[\s\S]*?```/g) ?? []),
+      ...(text.match(/`[^`\n]+`/g) ?? []),
+    ].join("\n");
+    // `npm create keyforge` is how the scaffolder is invoked and stays correct
+    // whatever the project then uses.
+    for (const hit of code.match(/\bnpm (?!create)\S*/g) ?? []) {
+      offenders.push(`${name}: ${hit}`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `these docs still issue npm commands to a pnpm project:\n  ${offenders.join("\n  ")}`,
+  );
 });
 
 test("no scaffolded output tells a non-npm project to run npm", () => {

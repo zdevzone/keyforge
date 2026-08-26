@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -189,6 +189,27 @@ async function retargetTextFile(path, answers, transform) {
 }
 
 /**
+ * The markdown files in a template's `docs/`, or none if it has none.
+ *
+ * `--template` accepts any repository or directory, so a fork with no docs/ is
+ * a supported shape rather than an error -- the same reason retargetTextFile
+ * above swallows ENOENT.
+ */
+async function templateDocs(directory) {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => entry.name)
+    .filter((name) => name !== "keyforge.md");
+}
+
+/**
  * Turn the freshly copied template into this deployer's project: their config,
  * their secrets, their package name, their README. Upstream's README is kept
  * as reference documentation rather than deleted.
@@ -228,9 +249,14 @@ async function writeProject(directory, answers) {
   await retargetTextFile(at("AGENTS.md"), answers, retargetNpmCommands);
 
   // The reference docs are this project's documentation now, not upstream's, so
-  // their commands must be this project's too. docs/keyforge.md is deliberately
-  // excluded: it is kept verbatim as upstream's own README.
-  for (const doc of ["api.md", "cli.md", "deploy.md", "backups.md", "verify-token.md"]) {
+  // their commands must be this project's too.
+  //
+  // Read the directory rather than listing the files. A hardcoded list silently
+  // stops covering the next doc anyone adds upstream, and the failure is a
+  // pnpm project whose docs tell it to run npm -- which is the papercut this
+  // whole retargeting exists to remove. docs/keyforge.md is excluded on
+  // purpose: it is upstream's own README, kept verbatim.
+  for (const doc of await templateDocs(at("docs"))) {
     await retargetTextFile(at("docs", doc), answers, retargetDocs);
   }
 
