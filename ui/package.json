@@ -10,11 +10,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.90.5",
-    "better-auth": "^1.7.1",
+    "@tanstack/react-query": "^5.102.8",
+    "better-auth": "^1.7.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.16",
