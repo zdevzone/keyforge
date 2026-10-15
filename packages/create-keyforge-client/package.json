@@ -1,0 +1,30 @@
+{
+  "name": "create-keyforge-client",
+  "version": "0.1.0",
+  "description": "Create a Node.js KeyForge integration starter with explicit secure storage",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zdevzone/keyforge.git",
+    "directory": "packages/create-keyforge-client"
+  },
+  "bin": {
+    "create-keyforge-client": "bin/create-keyforge-client.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "template",
+    "README.md"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.8.1"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || ^26.0.0"
+  }
+}

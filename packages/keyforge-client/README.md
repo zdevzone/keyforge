@@ -1,20 +1,29 @@
 # KeyForge TypeScript client
 
-`@keyforge/client` provides online onboarding, registration/activation, signed offline authorization, trial accounting, public support threads and in-app notifications. It supports the existing product-scoped server API, license v4 and trial v2. It uses Fetch, Web Crypto Ed25519, and Zod; it has no server, database, UI or desktop-framework dependency. Node 22.18+ is the reference runtime. Other desktop runtimes must support those Web APIs or run the client in their trusted Node/main process.
+`@zdevzone/keyforge-client` provides online onboarding, registration/activation, signed offline authorization, trial accounting, public support threads and in-app notifications. It supports the existing product-scoped server API, license v4 and trial v2. It uses Fetch, Web Crypto Ed25519, and Zod; it has no server, database, UI or desktop-framework dependency. Node 22.18+ is the reference runtime. Other desktop runtimes must support those Web APIs or run the client in their trusted Node/main process.
 
-The package is prepared for release, but has not been published. From this repository:
+Install in an existing application:
 
 ```sh
-vp install
-vp -C packages/keyforge-client run build
+vp add @zdevzone/keyforge-client
 ```
 
-Use a workspace dependency (`"@keyforge/client": "workspace:*"`) in this workspace. For another repository, pack it with `vp -C packages/keyforge-client pm pack --pack-destination ../../.artifacts`, copy the resulting archive into that repository's `vendor/` folder, and install it with `vp add ./vendor/keyforge-client-0.1.0.tgz`. Commit the archive, dependency and lockfile in the consuming app so installation remains reproducible. Build before packing; the archive contains compiled ESM and type declarations, with Zod as its only runtime dependency. Package publication is a separate release action.
+Or create a separate Node.js integration starter:
+
+```sh
+vp create keyforge-client
+```
+
+The [starter](../create-keyforge-client/README.md) includes explicit onboarding commands, public-key pinning and a secure-storage adapter boundary. Its memory demo supports local status only; implement secure atomic storage before real activation or offline restart testing.
+
+For workspace development, use `"@zdevzone/keyforge-client": "workspace:*"`. To install a reviewed local build in another repository, run `vp -C packages/keyforge-client pm pack --pack-destination ../../.artifacts`, copy the archive into that app's `vendor/` folder, and run `vp add ./vendor/zdevzone-keyforge-client-0.1.0.tgz`. The prepack hook builds and verifies JavaScript/type exports automatically; do not disable lifecycle scripts. Commit the archive, dependency and lockfile so installs remain reproducible. Zod is the only runtime dependency.
+
+The old name `@keyforge/client` belongs to another project. Maintainers should follow the [package release guide](../../docs/publishing.md).
 
 ## Onboarding and authorization
 
 ```ts
-import { KeyForgeClient, type SecureStorage } from "@keyforge/client";
+import { KeyForgeClient, type SecureStorage } from "@zdevzone/keyforge-client";
 
 // Implement this using your framework's credential vault and an atomic state record.
 declare const secureStorage: SecureStorage;
@@ -97,7 +106,7 @@ The [OpenAPI document](../../docs/client-openapi.json) covers public routes, inc
 
 ## Optional desktop recognition
 
-Use `createDeviceSignalsProvider()` from `@keyforge/client/device-signals` to select **Windows, Linux or macOS** automatically in a trusted Node process. Explicit `/windows`, `/linux` and `/macos` entry points are also exported. The core import stays framework-independent. This SDK remains JavaScript/TypeScript; other languages can use the HTTP API/OpenAPI contract directly and implement the documented signing, secure storage and retry rules. A generated HTTP client alone does not provide offline authorization.
+Use `createDeviceSignalsProvider()` from `@zdevzone/keyforge-client/device-signals` to select **Windows, Linux or macOS** automatically in a trusted Node process. Explicit `/windows`, `/linux` and `/macos` entry points are also exported. The core import stays framework-independent. This SDK remains JavaScript/TypeScript; other languages can use the HTTP API/OpenAPI contract directly and implement the documented signing, secure storage and retry rules. A generated HTTP client alone does not provide offline authorization.
 
 Linux reports hashed `linux-machine-id`, accessible `smbios-uuid` and `root-volume-uuid`; macOS reports hashed `macos-platform-uuid` and `root-volume-uuid`. Linux reads fixed machine-id/DMI files and queries findmnt; macOS uses fixed ioreg/diskutil queries. No elevation is requested. Permission/tool/sandbox failures yield safe partial reports; browsers/mobile platforms retain installation-based operation. Reads and individual identifiers are bounded to 4 KiB, Apple tool output to 64 KiB, and queries to eight seconds. Available means the OS's complete set (two Mac signals, three Windows/Linux), not an attested physical device. See the repository's `docs/device-identity.md` for sources, normalization, cross-language hash vectors and recovery guidance. `KEYFORGE_DEVICE_SIGNALS=1` enables auto selection in the Node example.
 
@@ -106,7 +115,7 @@ Linux reports hashed `linux-machine-id`, accessible `smbios-uuid` and `root-volu
 The core entry point remains framework-independent. In a trusted Node process, opt in with:
 
 ```ts
-import { createWindowsDeviceSignalsProvider } from "@keyforge/client/windows";
+import { createWindowsDeviceSignalsProvider } from "@zdevzone/keyforge-client/windows";
 // Add to the existing KeyForgeClient options (keep the same secure storage):
 const deviceSignalsProvider = createWindowsDeviceSignalsProvider();
 const client = new KeyForgeClient({ serverUrl, productId, publicKeys, storage, deviceSignalsProvider });

@@ -14,9 +14,9 @@ A plan name is a label; only its copied typed entitlement values grant features.
 
 ## Registration and identity
 
-For optional Windows/Linux/macOS collection, use `createDeviceSignalsProvider()` from `@keyforge/client/device-signals` in a trusted Node process; see [desktop identity and language support](device-identity.md). The official SDK is JS/TS, while HTTPS/OpenAPI works from any language. Native clients must implement secure storage, exact registration replay and signed offline verification themselves; generating an HTTP client does not supply those pieces.
+For optional Windows/Linux/macOS collection, use `createDeviceSignalsProvider()` from `@zdevzone/keyforge-client/device-signals` in a trusted Node process; see [desktop identity and language support](device-identity.md). The official SDK is JS/TS, while HTTPS/OpenAPI works from any language. Native clients must implement secure storage, exact registration replay and signed offline verification themselves; generating an HTTP client does not supply those pieces.
 
-Windows apps can opt in to the Node-only [`@keyforge/client/windows` adapter](windows-device-identity.md) through `deviceSignalsProvider`. It supplies scoped hashes and safe diagnostics; partial or missing signals never replace installation credentials. Existing authenticated installations use `updateDeviceSignals()` for recognition-only backfill. Legacy signals remain supported, but cross-scheme recognition requires backfill. See the linked contract for normalization, test vectors, limits, privacy and recovery guidance.
+Windows apps can opt in to the Node-only [`@zdevzone/keyforge-client/windows` adapter](windows-device-identity.md) through `deviceSignalsProvider`. It supplies scoped hashes and safe diagnostics; partial or missing signals never replace installation credentials. Existing authenticated installations use `updateDeviceSignals()` for recognition-only backfill. Legacy signals remain supported, but cross-scheme recognition requires backfill. See the linked contract for normalization, test vectors, limits, privacy and recovery guidance.
 
 Generate and persist an installation ID and an independent random 256-bit base64url credential in secure application storage. Generate a UUID request ID and persist it with the registration body until the request succeeds.
 

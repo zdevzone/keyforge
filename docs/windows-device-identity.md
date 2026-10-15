@@ -7,8 +7,8 @@ The SDK always creates a random installation ID and an independent secret. These
 ## Enable the adapter
 
 ```ts
-import { KeyForgeClient } from "@keyforge/client";
-import { createWindowsDeviceSignalsProvider } from "@keyforge/client/windows";
+import { KeyForgeClient } from "@zdevzone/keyforge-client";
+import { createWindowsDeviceSignalsProvider } from "@zdevzone/keyforge-client/windows";
 
 const client = new KeyForgeClient({
   serverUrl, productId, publicKeys,

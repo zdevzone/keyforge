@@ -1,4 +1,4 @@
-/** Optional Node-only auto-detection. The core @keyforge/client entry point never imports this. */
+/** Optional Node-only auto-detection. The core @zdevzone/keyforge-client entry point never imports this. */
 import { createLinuxDeviceSignalsProvider, type LinuxDeviceSignalsOptions } from "./linux.js";
 import { createMacOSDeviceSignalsProvider, type MacOSDeviceSignalsOptions } from "./macos.js";
 import type { DeviceSignalsProvider } from "./types.js";

@@ -4,7 +4,7 @@
 
 The HTTP API is language- and framework-independent. Any application able to make HTTPS requests can register an installation, activate/refresh/deactivate a license and use the permitted customer endpoints. See [OpenAPI](client-openapi.json), [the API reference](api.md) and [integration guide](dependent-app-integration.md).
 
-The official SDK is currently **JavaScript/TypeScript only**. The core `@keyforge/client` uses Fetch, Web Crypto and explicit application-supplied secure storage. Optional OS collectors run in a **trusted Node process**; they are separate imports and never enter the core/browser bundle. No Python, C#, Go, Rust, Swift or mobile SDK is shipped. Node 22.18+ is the reference runtime; package publication remains a separate release step.
+The official SDK is currently **JavaScript/TypeScript only**. The core `@zdevzone/keyforge-client` uses Fetch, Web Crypto and explicit application-supplied secure storage. Optional OS collectors run in a **trusted Node process**; they are separate imports and never enter the core/browser bundle. No Python, C#, Go, Rust, Swift or mobile SDK is shipped. Node 22.18+ is the reference runtime; package publication remains a separate release step.
 
 The SDK adds work an ordinary REST wrapper does not do: create and securely persist installation identity/credential, preserve exact registration UUID/body across retries and restarts, retry transient failures with bounds, verify pinned Ed25519 v4/v2 grants, enforce signed deadlines/context/status and maintain trial consumption across refresh. Applications still enforce their own entitlements at protected operations. Online API inspection alone does not produce offline authorization.
 
@@ -13,8 +13,8 @@ Other languages can implement this contract directly. Verify the exact decoded J
 ## Opt-in automatic desktop collection
 
 ```ts
-import { KeyForgeClient } from "@keyforge/client";
-import { createDeviceSignalsProvider } from "@keyforge/client/device-signals";
+import { KeyForgeClient } from "@zdevzone/keyforge-client";
+import { createDeviceSignalsProvider } from "@zdevzone/keyforge-client/device-signals";
 
 const client = new KeyForgeClient({
   serverUrl, productId, publicKeys, storage,
@@ -26,7 +26,7 @@ const diagnostics = await client.getDeviceSignalsDiagnostics();
 await client.updateDeviceSignals();
 ```
 
-Explicit adapters remain available as `@keyforge/client/windows`, `/linux`, and `/macos`, exporting `createWindowsDeviceSignalsProvider`, `createLinuxDeviceSignalsProvider`, and `createMacOSDeviceSignalsProvider`. Existing Windows imports, manual signals, registration state and v1 hashes remain compatible. The Node reference enables automatic selection with `KEYFORGE_DEVICE_SIGNALS=1`; its older `KEYFORGE_WINDOWS_SIGNALS=1` option remains Windows-only.
+Explicit adapters remain available as `@zdevzone/keyforge-client/windows`, `/linux`, and `/macos`, exporting `createWindowsDeviceSignalsProvider`, `createLinuxDeviceSignalsProvider`, and `createMacOSDeviceSignalsProvider`. Existing Windows imports, manual signals, registration state and v1 hashes remain compatible. The Node reference enables automatic selection with `KEYFORGE_DEVICE_SIGNALS=1`; its older `KEYFORGE_WINDOWS_SIGNALS=1` option remains Windows-only.
 
 | Desktop OS | Reported kinds | Fixed read-only sources |
 | --- | --- | --- |

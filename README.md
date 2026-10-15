@@ -1,38 +1,43 @@
 # KeyForge
 
-**License your software. Host it yourself.**
+**Self-hosted licensing for your software.**
 
-An MIT-licensed license server with an admin console, REST API and TypeScript SDK. Run it on your own infrastructure with SQLite or PostgreSQL.
+KeyForge is an MIT-licensed license server with an admin console, REST API and TypeScript SDK. Run it on your own infrastructure with SQLite or PostgreSQL.
 
-- Products, priced plans, entitlements and plan-based license issuance.
-- Activation limits, trials and signed authorizations for bounded offline use.
-- Optional device recognition on Windows, Linux and macOS.
-- Manual ETB sales, payments, refunds and financial reports.
-- Customer requests, support conversations and in-app notifications.
-- Operator permissions, audit history and verified encrypted backups.
+- Product catalog, plans, entitlements and license issuance.
+- Activations, trials, offline tokens and optional device recognition.
+- Sales, payments, customer support and financial reports.
+- Operator permissions, audit history and encrypted backups.
 
-## Get started
+## Getting started
 
-Install [Vite+](https://viteplus.dev/guide/install) and the Node.js version in [.node-version](.node-version).
+### Requirements
 
-[Use this template](https://github.com/new?template_name=keyforge&template_owner=zdevzone), or generate a configured deployment with the included CLI:
+- [Node.js](.node-version)
+- [Vite+](https://viteplus.dev/guide/install)
+
+### Create a project
+
+[Use this template](https://github.com/new?template_name=keyforge&template_owner=zdevzone) or generate a configured deployment with the CLI.
+
+```sh
+vp create keyforge@latest
+```
+
+Use Up/Down and Enter to choose a database, starting plans and deployment target, or Ctrl+C to cancel. See the [CLI guide](packages/create-keyforge/README.md), or run the generator from source:
 
 ```sh
 git clone https://github.com/zdevzone/keyforge.git
 cd keyforge
-node packages/create-keyforge/bin/create-keyforge.mjs ../my-license-server --template .
+vp node packages/create-keyforge/bin/create-keyforge.mjs ../my-license-server --template .
 ```
 
-For the CLI, follow its printed next steps. For a template copy, follow the [beginner guide](docs/getting-started.md) to configure secrets, build, create your first administrator and start the server. The console runs at `http://localhost:4100`; documentation is served at `/docs`.
+Follow the generator's printed steps or the [setup guide](docs/getting-started.md) to configure secrets, create an administrator and start the server. The console runs at `http://localhost:4100`; docs are served at `/docs`.
 
-For guided database, licensing and deployment choices, use the [configurable CLI](packages/create-keyforge/README.md). Its source is included; the short `vp create keyforge` command requires publishing `create-keyforge` first.
-
-## Develop
+## Development
 
 Build output is generated, not tracked. Run `vp run build:all` before deployment.
 For cPanel, explicitly include prebuilt `dist/`; see the [deployment guide](docs/deploy.md).
-
-From the repository root:
 
 ```sh
 vp install --frozen-lockfile
@@ -41,14 +46,14 @@ vp run test
 vp run build:all
 ```
 
-Run `vp -C ui run dev` alongside the configured server for frontend development. See [contributing](CONTRIBUTING.md) for the full workflow.
+For UI development, run `vp -C ui run dev` alongside the server. See [contributing](CONTRIBUTING.md) for details.
 
 ## Documentation
 
-- [All guides](docs/index.md) · [Setup and secrets](docs/getting-started.md) · [Deployment](docs/deploy.md)
-- [Client integration](docs/dependent-app-integration.md) · [TypeScript SDK](packages/keyforge-client/README.md) · [OpenAPI](docs/client-openapi.json)
-- [CLI](docs/cli.md) · [Backups](docs/backups.md) · [Upgrading](docs/database.md#upgrade-existing-installations)
-- [Security](SECURITY.md) · [Current limitations](docs/integration-review.md)
+- [Guides](docs/index.md) · [Setup](docs/getting-started.md) · [Deployment](docs/deploy.md)
+- [Client integration](docs/dependent-app-integration.md) · [TypeScript SDK](packages/keyforge-client/README.md) · [Client starter](packages/create-keyforge-client/README.md) · [OpenAPI](docs/client-openapi.json)
+- [CLI](packages/create-keyforge/README.md) · [Backups](docs/backups.md) · [Database upgrades](docs/database.md#upgrade-existing-installations)
+- [Security](SECURITY.md) · [Known limitations](docs/integration-review.md) · [Package releases](docs/publishing.md)
 
 ## License
 

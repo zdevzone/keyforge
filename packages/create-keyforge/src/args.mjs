@@ -16,7 +16,7 @@ create-keyforge — scaffold a self-hosted license server.
 
 Usage
   node packages/create-keyforge/bin/create-keyforge.mjs <directory> [options]
-  vp create keyforge -- <directory> [options]  (after package publication)
+  vp create keyforge -- <directory> [options]
 
 Options
   -d, --db <sqlite|postgres>   Database the ledger and operators run on.

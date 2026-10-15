@@ -339,6 +339,7 @@ export function buildPackageJson(templatePackageJson, answers) {
   pkg.devEngines = devEngines(answers.packageManager, answers.runtime);
   // Client tooling belongs to upstream's SDK workspace, which deployments prune.
   pkg.scripts = { ...pkg.scripts };
+  delete pkg.scripts["test:packages"];
   if (pkg.scripts?.build)
     pkg.scripts.build = pkg.scripts.build.replace(
       " && vp -C packages/keyforge-client run build",
@@ -499,6 +500,8 @@ function carveOut(text, heading) {
  * @param {import("./toolchain.d.mts").PackageManagerId} packageManager
  */
 export function retargetWorkflow(contents, packageManager) {
+  // Package release tests belong to upstream, whose workspaces are pruned.
+  contents = contents.replace(/^      - if: .*\n        run: vp run test:packages\n/gm, "");
   if (packageManager === "npm") return contents;
   const run = commands(packageManager);
   const prepare =
@@ -605,7 +608,7 @@ export function nextSteps(answers) {
   }
   steps.push(
     run.run("build:all").padEnd(29) + "# server -> dist/, console -> dist/public",
-    run.runWithFlags("admin:create", '--email you@example.com --password "long secret"'),
+    run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"'),
     run.run("start").padEnd(29) + "# console on http://localhost:4100/",
   );
   const deploy = platformSteps(answers);
@@ -649,15 +652,14 @@ documentation is kept in [docs/keyforge.md](docs/keyforge.md).
 | --- | --- |
 | Database | ${database} |
 | Licensing model | ${useCase?.title ?? answers.useCase} — ${useCase?.description ?? ""} |
-| Plan presets | ${plans} |
+| Starting plans | ${plans} |
 | Product key format | \`${answers.keyPrefix}-XXXXX-XXXXX-XXXXX-XXXXX\` |
 | Operator admin scope | ${describeAuthScope(answers.authScope)} |
 | Deployment target | ${getPlatform(answers.platform).title} |
 
-Policy lives in \`keyforge.config.json\` — plans, entitlements, key format,
-grace window, rate limits. Secrets live in \`.env.local\` and never in the
-config file. Edit either and restart; an invalid config refuses to boot rather
-than half-applying.
+Deployment policy lives in \`keyforge.config.json\`. Its catalog seeds the first
+product; later plan and entitlement changes are saved in the database through
+the console. Secrets live in \`.env.local\`, never in the policy file.
 
 ## Run it
 
@@ -665,7 +667,7 @@ than half-applying.
 ${run.install}
 ${`${run.run("license")} keygen`.padEnd(29)}# one-time: the Ed25519 signing key pair
 ${run.run("build:all").padEnd(29)}# server -> dist/, console -> dist/public
-${run.runWithFlags("admin:create", '--email you@example.com --password "long secret"')}
+${run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"')}
 ${run.run("start").padEnd(29)}# console on http://localhost:4100/
 \`\`\`
 
@@ -679,9 +681,10 @@ ${plans
   .map((plan) => `- \`${plan}\``)
   .join("\n")}
 
-Plans are starting points for the issue form. Entitlements are freeform: the
-server signs them into every token verbatim and never interprets them, so your
-app enforces the ones it cares about.
+In the console, review these plans and set an explicit ETB price before issuing
+a license. Issuance selects an existing plan, snapshots its terms and price,
+and records an unpaid sale or the payment you enter. Later plan changes do not
+rewrite old licenses or sales. Your app enforces the signed entitlements.
 
 ## A second copy of the ledger
 

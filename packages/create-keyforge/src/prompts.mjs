@@ -1,63 +1,45 @@
-import { createInterface } from "node:readline/promises";
+import { cancel, confirm, isCancel, select, text } from "@clack/prompts";
 
-/**
- * A very small prompter: numbered choices and free text, no dependencies.
- *
- * When prompting is off — `--yes`, a pipe, a CI job — every question answers
- * with its default instead of hanging. A scaffolder that blocks forever on a
- * non-interactive terminal is a scaffolder nobody can script.
- */
+/** Clack supplies arrow keys, Enter, Ctrl+C and terminal restoration. Pipes
+ * and --yes retain deterministic defaults without entering terminal mode. */
 export function createPrompter({ interactive, input = process.stdin, output = process.stdout }) {
-  let rl = null;
-  const ensure = () => (rl ??= createInterface({ input, output }));
-
+  const streams = { input, output };
+  function answer(value) {
+    if (isCancel(value)) {
+      cancel("Setup cancelled. No project was created.", { output });
+      throw new Error("Setup cancelled.");
+    }
+    return value;
+  }
   return {
     interactive,
-
     async text(question, defaultValue) {
       if (!interactive) return defaultValue;
-      const suffix = defaultValue ? ` (${defaultValue})` : "";
-      const answer = (await ensure().question(`${question}${suffix}: `)).trim();
-      return answer || defaultValue;
+      return (
+        answer(
+          await text({ message: question, defaultValue, placeholder: defaultValue, ...streams }),
+        ).trim() || defaultValue
+      );
     },
-
-    /** `choices` are {id, title, description}; returns the chosen id. */
     async select(question, choices, defaultId) {
       if (!interactive) return defaultId;
-      const defaultIndex = Math.max(
-        0,
-        choices.findIndex((choice) => choice.id === defaultId),
+      return answer(
+        await select({
+          message: question,
+          initialValue: defaultId,
+          options: choices.map((choice) => ({
+            value: choice.id,
+            label: choice.title,
+            hint: choice.description,
+          })),
+          ...streams,
+        }),
       );
-      output.write(`\n${question}\n`);
-      choices.forEach((choice, index) => {
-        const marker = index === defaultIndex ? "*" : " ";
-        output.write(`  ${marker} ${index + 1}) ${choice.title} — ${choice.description}\n`);
-      });
-      for (;;) {
-        const answer = (await ensure().question(`  choice (${defaultIndex + 1}): `)).trim();
-        if (!answer) return choices[defaultIndex].id;
-        const byId = choices.find((choice) => choice.id === answer);
-        if (byId) return byId.id;
-        const index = Number(answer);
-        if (Number.isInteger(index) && index >= 1 && index <= choices.length) {
-          return choices[index - 1].id;
-        }
-        output.write(`  Pick 1-${choices.length}.\n`);
-      }
     },
-
     async confirm(question, defaultValue) {
       if (!interactive) return defaultValue;
-      const answer = (await ensure().question(`${question} ${defaultValue ? "(Y/n)" : "(y/N)"}: `))
-        .trim()
-        .toLowerCase();
-      if (!answer) return defaultValue;
-      return answer === "y" || answer === "yes";
+      return answer(await confirm({ message: question, initialValue: defaultValue, ...streams }));
     },
-
-    close() {
-      rl?.close();
-      rl = null;
-    },
+    close() {},
   };
 }

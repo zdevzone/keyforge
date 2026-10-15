@@ -26,7 +26,7 @@ In PowerShell, replace the last command with:
 Copy-Item .env.example .env.local
 ```
 
-Do not overwrite an existing deployment's environment or keys. The [scaffolder](../packages/create-keyforge/README.md) can generate a deployment project with independent secrets; its package publication is a separate release step. The source-checkout procedure above works without assuming a published scaffolder or SDK package.
+Do not overwrite an existing deployment's environment or keys. The [scaffolder](../packages/create-keyforge/README.md) generates independent deployment secrets with `vp create keyforge@latest`. The source-checkout procedure above also lets you run the server directly.
 
 ## Understand the keys and credentials
 
@@ -145,7 +145,7 @@ Never substitute an admin token for a customer's installation credential. Never 
 
 For JavaScript/TypeScript, use the [SDK guide](../packages/keyforge-client/README.md) and [integration walkthrough](dependent-app-integration.md). The SDK has a publishable package structure, but public registry publication is separate; use the built workspace or package archive rather than assuming a similarly named registry package is ours.
 
-Configure the app with the server URL, product ID, pinned public verification keys and an application-supplied **secure storage adapter**. Optional device recognition uses the Node-only `@keyforge/client/device-signals` adapter for Windows, Linux and macOS. Browser/mobile runtimes retain installation-based operation; do not request elevated privileges for hardware signals.
+Configure the app with the server URL, product ID, pinned public verification keys and an application-supplied **secure storage adapter**. Optional device recognition uses the Node-only `@zdevzone/keyforge-client/device-signals` adapter for Windows, Linux and macOS. Browser/mobile runtimes retain installation-based operation; do not request elevated privileges for hardware signals.
 
 The onboarding flow is: securely create/save installation identity → register online → activate a customer key or explicitly start a permitted trial → save signed authorization → check entitlements at protected operations → refresh online before the signed deadline. Skipping onboarding grants no paid access. Initial activation requires internet; cached authorization only permits bounded offline use. Hardware recognition never automatically transfers seats.
 

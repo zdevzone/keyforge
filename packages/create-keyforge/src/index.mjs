@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +41,7 @@ import {
   PACKAGE_MANAGERS,
   RUNTIMES,
   runtimeConfig,
+  commands,
 } from "./toolchain.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,8 +77,11 @@ export async function main(argv = process.argv.slice(2), io = process.stdout) {
 
   try {
     io.write(`\n${bold("create-keyforge")} ${dim(`v${await version()}`)}\n`);
+    if (interactive) io.write("Use Up/Down to move, Enter to select, and Ctrl+C to cancel.\n");
 
-    const directoryInput = options.directory ?? (await ask.text("Directory", "keyforge-server"));
+    const directoryInput =
+      options.directory ??
+      (await ask.text("Where should we create your server?", "keyforge-server"));
     const directory = resolve(directoryInput);
     if (!options.force && !(await isEmptyDirectory(directory))) {
       throw new Error(
@@ -86,22 +91,34 @@ export async function main(argv = process.argv.slice(2), io = process.stdout) {
 
     const directoryName = basename(directory);
     const productName =
-      options.productName ?? (await ask.text("Product name", toProductName(directoryName)));
+      options.productName ??
+      (await ask.text("What is your product called?", toProductName(directoryName)));
     const keyPrefix = await resolveKeyPrefix(options, ask, productName);
-    const database = options.database ?? (await ask.select("Database", DATABASES, "sqlite"));
-    const useCase = options.useCase ?? (await ask.select("Licensing model", USE_CASES, "count"));
+    const database =
+      options.database ??
+      (await ask.select("Where should KeyForge store its data?", DATABASES, "sqlite"));
+    const useCase =
+      options.useCase ??
+      (await ask.select("Which license plans should we start with?", USE_CASES, "count"));
     const authScope =
       options.authScope ??
-      parseAuthScope(await ask.select("Operator admin features", AUTH_SCOPES, "core"));
+      parseAuthScope(
+        await ask.select("What should administrators be able to manage?", AUTH_SCOPES, "core"),
+      );
     const platform =
-      options.platform ?? (await ask.select("Where will this run?", PLATFORMS, DEFAULT_PLATFORM));
+      options.platform ??
+      (await ask.select("Where will you deploy this server?", PLATFORMS, DEFAULT_PLATFORM));
     const cpanelUser =
       platform === "cpanel"
         ? (options.cpanelUser ?? (await ask.text("cPanel account name", "")))
         : undefined;
     const packageManager =
       options.packageManager ??
-      (await ask.select("Package manager", PACKAGE_MANAGERS, DEFAULT_PACKAGE_MANAGER));
+      (await ask.select(
+        "Which tool should manage this project's dependencies?",
+        PACKAGE_MANAGERS,
+        DEFAULT_PACKAGE_MANAGER,
+      ));
     // Asked separately from the package manager because they are separate
     // choices: Bun installs happily against a Node runtime. Only one runtime
     // is offered today, so this is a no-op prompt until a second one lands --
@@ -132,14 +149,47 @@ export async function main(argv = process.argv.slice(2), io = process.stdout) {
     // target's own are written back — a project should describe one
     // deployment, and never inherit upstream's service names or home paths.
     const keeps = new Set(platformKeeps(answers));
-    await materializeTemplate(template, directory, {
-      alsoPrune: PLATFORM_PATHS.filter((path) => !keeps.has(path)),
-    });
-    await writeProject(directory, answers);
+    const populate = async (target) => {
+      await materializeTemplate(template, target, {
+        alsoPrune: PLATFORM_PATHS.filter((path) => !keeps.has(path)),
+      });
+      await writeProject(target, answers);
+    };
+    const exists = await stat(directory).then(
+      () => true,
+      (error) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      },
+    );
+    if (exists) {
+      // Preserve the established merge behavior for an explicitly existing
+      // directory (--force), including its Git metadata.
+      await populate(directory);
+    } else {
+      // Vite+ on Windows can count slash-normalized paths at the same depth.
+      // Prepare away from its package discovery, then expose only the root
+      // manifest write. A directory rename does not rewrite ui/package.json.
+      const cache = resolve(dirname(directory), "node_modules/.cache");
+      await mkdir(cache, { recursive: true });
+      const staging = await mkdtemp(resolve(cache, "create-keyforge-"));
+      try {
+        await populate(staging);
+        await rename(staging, directory);
+        writeFileSync(
+          resolve(directory, "package.json"),
+          await readFile(resolve(directory, "package.json")),
+        );
+      } finally {
+        // Only this newly allocated staging directory, never the output app.
+        await rm(staging, { recursive: true, force: true });
+      }
+    }
 
     if (options.install) {
       io.write(`${dim("Installing dependencies")}\n`);
-      await run("npm", ["install"], { cwd: directory });
+      const [command, ...args] = commands(packageManager).install.split(" ");
+      await run(command, args, { cwd: directory });
     }
     if (options.git) await initGit(directory);
 
@@ -157,7 +207,9 @@ async function resolveKeyPrefix(options, ask, productName) {
   if (options.keyPrefix) return options.keyPrefix;
   const suggestion = toKeyPrefix(productName);
   for (;;) {
-    const answer = (await ask.text("Product key prefix", suggestion)).toUpperCase();
+    const answer = (
+      await ask.text("License key prefix (1–10 letters or digits)", suggestion)
+    ).toUpperCase();
     if (/^[A-Z0-9]{1,10}$/.test(answer)) return answer;
     if (!ask.interactive) return suggestion;
     process.stdout.write("  1-10 uppercase letters or digits, e.g. ACME.\n");
@@ -203,7 +255,9 @@ async function writeProject(directory, answers) {
   await writeFile(at(".env.example"), buildEnvExample(answers));
 
   const templatePackage = JSON.parse(await readFile(at("package.json"), "utf8"));
-  await writeFile(
+  // Vite+ detects the generated root from synchronous package.json writes.
+  // Promise-based writes are not consistently reported by its Windows tracer.
+  writeFileSync(
     at("package.json"),
     `${JSON.stringify(buildPackageJson(templatePackage, answers), null, 2)}\n`,
   );
@@ -235,7 +289,7 @@ async function writeProject(directory, answers) {
       pkg.scripts = retargetNpmCommands(JSON.stringify(pkg.scripts), answers.packageManager);
       pkg.scripts = JSON.parse(pkg.scripts);
     }
-    await writeFile(path, JSON.stringify(pkg, null, 2) + "\n");
+    writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
   }
   await writeFile(
     at("pnpm-workspace.yaml"),

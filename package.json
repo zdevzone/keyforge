@@ -42,6 +42,7 @@
     "test:console": "node scripts/console-smoke.mjs",
     "test:issuance": "node scripts/issuance-smoke.mjs",
     "test:docs": "node scripts/docs-smoke.mjs",
+    "test:packages": "node scripts/package-smoke.mjs",
     "docs:api": "node scripts/generate-api-docs.mjs",
     "docs:client-api": "tsx scripts/generate-client-openapi.ts",
     "db:reset": "node --env-file-if-exists=.env.local scripts/reset-database.mjs",

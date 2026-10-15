@@ -1,6 +1,6 @@
 {
   "name": "create-keyforge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Scaffold a self-hosted Keyforge license server: pick a database, an operator-admin scope, and a licensing model, and get a configured project ready to deploy.",
   "keywords": [
     "create",
@@ -31,6 +31,9 @@
     "README.md"
   ],
   "type": "module",
+  "dependencies": {
+    "@clack/prompts": "1.8.1"
+  },
   "engines": {
     "node": "^22.18.0 || ^24.11.0 || ^26.0.0"
   }

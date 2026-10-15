@@ -603,11 +603,13 @@ test("upstream's identity does not travel into a scaffolded project", async (t) 
   };
 
   assert.deepEqual(
-    await matches("zdevzone"),
+    // The published SDK scope is a dependency identity, not deployer metadata.
+    await matches("(?<!@)zdevzone"),
     [
       "README.md",
       "docs/getting-started.md",
       "docs/keyforge.md",
+      "docs/publishing.md",
       "scripts/console-smoke.mjs",
       "ui/.impeccable/surfaces/welcome.md",
       "ui/src/docs/catalog.ts",
@@ -912,6 +914,8 @@ test("the generated CI workflow uses the project's own package manager", async (
   const workflow = await readFile(join(REPO, ".github/workflows/ci.yml"), "utf8");
   const original = parseYaml(workflow);
   assert.match(retargetWorkflow(workflow, "npm"), /setup-vp/);
+  for (const manager of MANAGERS)
+    assert.doesNotMatch(retargetWorkflow(workflow, manager), /test:packages/);
 
   for (const manager of MANAGERS) {
     if (manager === "npm") continue;

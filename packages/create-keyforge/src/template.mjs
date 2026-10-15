@@ -36,6 +36,8 @@ const PRUNE = [
   // would fail on the first `npm test` in a project that has no packages/.
   "test/create-keyforge.test.ts",
   "test/client-sdk.test.ts",
+  "test/scaffold-prompts.test.ts",
+  "scripts/package-smoke.mjs",
   "examples/keyforge-node.ts",
   // Upstream's own community files. They name Keyforge's maintainer, its
   // security mailbox and its advisory URL, none of which belong in someone
@@ -158,7 +160,25 @@ async function downloadRepository({ owner, repo, ref }, destination) {
   try {
     await pipeline(Readable.fromWeb(response.body), createWriteStream(archive));
     // The tarball's single top-level directory is `repo-ref/`, hence --strip-components.
-    await run("tar", ["-xzf", archive, "-C", destination, "--strip-components=1"]);
+    // Do not extract upstream-only workspaces and then delete them. Vite+
+    // observes those temporary package.json writes and can mistake a removed
+    // workspace for the created application (especially on Windows).
+    await run("tar", [
+      "--exclude=*/packages",
+      "--exclude=*/tools",
+      "--exclude=*/node_modules",
+      "--exclude=*/dist",
+      "--exclude=*/.git",
+      "--exclude=*/.artifacts",
+      "--exclude=*/secrets",
+      "--exclude=*/backups",
+      "--exclude=*/db",
+      "-xzf",
+      archive,
+      "-C",
+      destination,
+      "--strip-components=1",
+    ]);
   } finally {
     await rm(staging, { recursive: true, force: true });
   }

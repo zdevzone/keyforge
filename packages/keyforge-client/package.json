@@ -1,8 +1,13 @@
 {
-  "name": "@keyforge/client",
+  "name": "@zdevzone/keyforge-client",
   "version": "0.1.0",
   "description": "Typed KeyForge installation client and signed offline authorization verifier",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zdevzone/keyforge.git",
+    "directory": "packages/keyforge-client"
+  },
   "files": [
     "dist",
     "README.md",
@@ -31,7 +36,11 @@
       "import": "./dist/device-signals.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "prepack": "node scripts/prepack.mjs",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

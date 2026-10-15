@@ -5,7 +5,7 @@ Implement against [the TypeScript SDK](../packages/keyforge-client/README.md), [
 - This is one self-hosting company's multi-product licensing server. Paid multi-vendor hosting is future work.
 - Prefix device routes with /v1/products/:productId. Old unscoped routes are removed.
 - Persist an installation ID and independent random 256-bit base64url credential. Registration pins its hash. Protect the credential in secure storage.
-- Optional Node desktop recognition uses `@keyforge/client/device-signals` to choose Windows, Linux or macOS. Follow [device identity](device-identity.md); missing signals must not block installation-based licensing or trigger elevation. Other languages use the same REST/OpenAPI contract, but must implement secure storage and signed offline verification themselves until a native SDK exists.
+- Optional Node desktop recognition uses `@zdevzone/keyforge-client/device-signals` to choose Windows, Linux or macOS. Follow [device identity](device-identity.md); missing signals must not block installation-based licensing or trigger elevation. Other languages use the same REST/OpenAPI contract, but must implement secure storage and signed offline verification themselves until a native SDK exists.
 - Persist UUID registration/support/message/meter event IDs and request bodies across retries; never generate a replacement ID after a network timeout.
 - Device register/validate/activate/refresh/deactivate authenticate with the installation credential. Admin credentials never belong in a dependent app.
 - Activation and refresh return license token v4. Registration may return trial token v2. Tokens have two base64url segments and an Ed25519 signature over the decoded UTF-8 JSON bytes, not JWT signing semantics.

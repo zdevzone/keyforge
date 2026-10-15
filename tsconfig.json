@@ -14,5 +14,14 @@
     "declaration": false
   },
   "include": ["**/*.ts"],
-  "exclude": ["vite.config.ts", "node_modules", "dist", "db", "scripts", "ui", "**/*.test.ts"]
+  "exclude": [
+    "vite.config.ts",
+    "node_modules",
+    "dist",
+    "db",
+    "scripts",
+    "ui",
+    "packages/create-keyforge-client/template",
+    "**/*.test.ts"
+  ]
 }

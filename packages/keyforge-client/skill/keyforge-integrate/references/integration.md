@@ -5,7 +5,7 @@ The SDK supports Node 22.18+ as its reference runtime and needs Fetch, Web Crypt
 ## Setup and state
 
 ```ts
-import { KeyForgeClient, type SecureStorage } from "@keyforge/client";
+import { KeyForgeClient, type SecureStorage } from "@zdevzone/keyforge-client";
 declare const storage: SecureStorage;
 declare const publicKeys: Record<string, string>;
 const client = new KeyForgeClient({
@@ -32,9 +32,9 @@ const client = new KeyForgeClient({
 
 ## Verification invariants
 
-`createDeviceSignalsProvider()` from `@keyforge/client/device-signals` automatically selects Windows, Linux or macOS in a trusted Node process. Explicit `/linux` and `/macos` exports are available; the `/windows` contract remains compatible. Consult the packaged README or `docs/device-identity.md` for per-OS sources and hash vectors. Never elevate to obtain DMI signals. Unsupported/sandboxed platforms still use installation credentials, not fabricated fingerprints. Only JS/TS has an official SDK; other languages implement the same HTTPS, secure-storage, retry and signed-token contracts. OpenAPI generation covers HTTP plumbing, not offline authorization.
+`createDeviceSignalsProvider()` from `@zdevzone/keyforge-client/device-signals` automatically selects Windows, Linux or macOS in a trusted Node process. Explicit `/linux` and `/macos` exports are available; the `/windows` contract remains compatible. Consult the packaged README or `docs/device-identity.md` for per-OS sources and hash vectors. Never elevate to obtain DMI signals. Unsupported/sandboxed platforms still use installation credentials, not fabricated fingerprints. Only JS/TS has an official SDK; other languages implement the same HTTPS, secure-storage, retry and signed-token contracts. OpenAPI generation covers HTTP plumbing, not offline authorization.
 
-For opt-in Windows recognition, use `@keyforge/client/windows` only in a trusted Node process. Follow the SDK README's exact v1 normalization/hash scope; never invent an all-platform fingerprint. Preserve pending registration signals before networking. Use `getDeviceSignalsDiagnostics()` to explain partial/unsupported collection and `updateDeviceSignals()` for existing authenticated identities. Backfill does not register, reset trial consumption, change meters/seats or merge groups. Test permission/timeout/placeholder cases, interrupted registration with changed hardware, legacy backfill and wrong-product credentials. URL/product changes require coordinated state migration, not silent identity replacement. Hardware signals are forgeable hints; do not promise physical-device enforcement or offline seat transfer.
+For opt-in Windows recognition, use `@zdevzone/keyforge-client/windows` only in a trusted Node process. Follow the SDK README's exact v1 normalization/hash scope; never invent an all-platform fingerprint. Preserve pending registration signals before networking. Use `getDeviceSignalsDiagnostics()` to explain partial/unsupported collection and `updateDeviceSignals()` for existing authenticated identities. Backfill does not register, reset trial consumption, change meters/seats or merge groups. Test permission/timeout/placeholder cases, interrupted registration with changed hardware, legacy backfill and wrong-product credentials. URL/product changes require coordinated state migration, not silent identity replacement. Hardware signals are forgeable hints; do not promise physical-device enforcement or offline seat transfer.
 
 License v4/trial v2 tokens are `base64url(JSON bytes).base64url(Ed25519 signature)`. The signature covers **decoded UTF-8 JSON bytes**, without reserialization. These are not JWTs. `verifySignedToken` authenticates payload/context even for negative statuses; it alone does not grant access. Prefer `getAuthorization` for permission.
 

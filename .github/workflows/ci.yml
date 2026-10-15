@@ -24,6 +24,8 @@ jobs:
       - run: vp run check
       - run: vp run build:all
       - run: vp run test
+      - if: (matrix.os == 'ubuntu-latest' || matrix.os == 'windows-latest') && matrix.node == '24.21.0'
+        run: vp run test:packages
       - if: matrix.os == 'ubuntu-latest' && matrix.node == '24.21.0'
         run: |
           vp exec playwright install --with-deps chromium
