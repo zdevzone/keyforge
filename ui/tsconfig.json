@@ -11,7 +11,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "useDefineForClassFields": true
+    "useDefineForClassFields": true,
+    "paths": { "@/*": ["./src/*"], "cn": ["./src/lib/utils.ts"] }
   },
   "include": ["src", "vite.config.ts"]
 }

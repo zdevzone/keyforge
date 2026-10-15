@@ -4,17 +4,18 @@
  * Sign-up is disabled on the running service; this script is the only door,
  * the same way LICENSE_ADMIN_TOKEN is provisioned by hand. It writes to the
  * auth database directly, so run it on the machine that hosts the service —
- * build first (`npm run build`), then:
+ * build first (`vp run build`), then:
  *
- *   npm run admin:create -- --email you@example.com --password "long secret" [--name "You"]
+ *   vp run admin:create --email you@example.com --password "long secret" [--name "You"]
  *
- * Reads LICENSE_AUTH_SECRET, LICENSE_AUTH_DB_PATH / LICENSE_DB_PATH from the
+ * Reads LICENSE_AUTH_SECRET, LICENSE_DB_PATH from the
  * environment exactly as the server does.
  */
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import { seedOperator } from "../dist/src/auth.js";
+import { resolveRuntime } from "../dist/src/runtime.js";
 
 const rest = process.argv.slice(2);
 
@@ -31,7 +32,7 @@ const name = flag("name") ?? email;
 
 if (!email || !password) {
   console.error(
-    'Usage: npm run admin:create -- --email you@example.com --password "long secret" [--name "You"]',
+    'Usage: vp run admin:create --email you@example.com --password "long secret" [--name "You"]',
   );
   process.exit(1);
 }
@@ -40,23 +41,28 @@ if (!process.env.LICENSE_AUTH_SECRET) {
   process.exit(1);
 }
 
-const dbPath = process.env.LICENSE_DB_PATH ?? "licenses.sqlite";
-const authDbPath = process.env.LICENSE_AUTH_DB_PATH ?? join(dirname(dbPath), "auth.sqlite");
-mkdirSync(dirname(authDbPath), { recursive: true });
+const { url, authDbPath } = resolveRuntime();
+if (!url) {
+  mkdirSync(dirname(authDbPath), { recursive: true });
+}
 
 try {
   const outcome = await seedOperator({
     dbPath: authDbPath,
+    url,
     secret: process.env.LICENSE_AUTH_SECRET,
     // Silences Better Auth's base-URL warning when the env provides one; the
     // value is irrelevant for direct server-side user creation.
-    baseURL: process.env.LICENSE_SERVER_URL?.replace(/\/$/, ""),
+    baseURL: (process.env.LICENSE_SERVER_URL || process.env.RENDER_EXTERNAL_URL)?.replace(
+      /\/$/,
+      "",
+    ),
     email,
     password,
     name,
   });
   if (outcome === "created") {
-    console.log(`Admin user ${email} created in ${authDbPath}.`);
+    console.log(`Admin user ${email} created in ${url ? "Postgres" : authDbPath}.`);
   } else {
     console.log(`Admin user ${email} already exists in ${authDbPath} — nothing changed.`);
   }

@@ -1,57 +1,45 @@
-# Verifying license tokens in your application
+# Signed token verification
 
-The server signs every token with its Ed25519 private key. Your application
-embeds the **public** half (printed by `npm run license keygen`) and verifies
-tokens locally — no network call, no shared secret worth stealing.
+A token is two unpadded base64url strings separated by one dot:
 
-A token is `base64url(payload).base64url(signature)`.
+```text
+base64url(UTF-8 JSON payload).base64url(64-byte Ed25519 signature)
+```
 
-## Node.js / Electron
+The signature covers the **decoded UTF-8 JSON bytes**, exactly as returned by base64url-decoding the first segment. Do not reserialize the JSON or verify the encoded segment. There is no JWT header. Decoding is untrusted inspection, not verification.
+
+## License v4
+
+Required fields: `v:4`, `kind:"license"`, `iss:"default"`, `productId`, `kid`, `licenseId`, `plan`, `entitlements`, `issuedTo`, `subject:{kind:"installation"|"service",id}`, `installationId`, `issuedAt`, nullable `expiresAt`, `offlineGraceUntil`, and `status:"active"|"revoked"|"expired"`. Entitlements are a map of finite numbers, strings or booleans. Subject ID must equal installation ID.
+
+Reject extra or missing fields, unknown versions, malformed timestamps or invalid types. Match issuer, product ID, subject kind and installation ID to your own expected context. Reject future issuance beyond your clock tolerance, negative status, passed expiry and passed offline deadline. The client should persist trusted server time observations to make basic clock rollback harder; this is not protection against a compromised device.
+
+## Trial v2
+
+Required fields: `v:2`, `kind:"trial"`, issuer, productId, kid, installationId, issuedAt, nullable expiresAt, `verdict:"fresh"|"spent"`, nullable nonnegative integer allowance and nullable supportReference. Accept only the expected product/installation, a valid signature and a fresh unexpired grant. A null allowance means the product has no numeric trial ceiling; interpret it according to your product policy. Persist consumption outside the grant.
+
+## Node signature example
 
 ```js
 import { verify } from "node:crypto";
 
-// The public key printed by keygen. Ships inside your app; it is not secret.
-const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-...yours here...
------END PUBLIC KEY-----`;
-
-export function readLicenseToken(token) {
-  const [body, signature] = token.split(".");
-  const bytes = Buffer.from(body, "base64url");
-  const ok = verify(null, bytes, PUBLIC_KEY, Buffer.from(signature, "base64url"));
-  if (!ok) throw new Error("license token signature is invalid");
-  return JSON.parse(bytes.toString("utf8"));
+function verifySignature(token, pinnedKeys) {
+  const parts = token.split(".");
+  if (parts.length !== 2 || parts.some(p => !/^[A-Za-z0-9_-]+$/.test(p))) return null;
+  const [encoded, signature] = parts;
+  let untrusted;
+  try { untrusted = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")); }
+  catch { return null; }
+  const publicKey = pinnedKeys[untrusted.kid];
+  if (!publicKey || !verify(null, Buffer.from(encoded, "base64url"), publicKey,
+      Buffer.from(signature, "base64url"))) return null;
+  // Apply the complete shape and contextual/time checks described above.
+  return untrusted;
 }
 ```
 
-## What the payload contains (v2)
+The example verifies only the cryptographic signature; do not use its return value as authorization before implementing the remaining checks. `src/token-contract.ts` defines server payload schemas. Prefer the complete verifier and authorization evaluator in [the TypeScript SDK](../packages/keyforge-client/README.md). `verifySignedToken` authenticates shape and context, including signed negative statuses; only the SDK's `getAuthorization` result indicates whether use is currently allowed.
 
-```jsonc
-{
-  "v": 2,
-  "licenseId": "…",
-  "plan": "standard",
-  "entitlements": { "allowance": 200000, "pro": true },  // vendor-defined
-  "allowance": 200000,          // mirror of entitlements.allowance (v1 compat)
-  "issuedTo": "Customer Name",
-  "installationId": "…",        // the machine this token is bound to
-  "issuedAt": "…",
-  "expiresAt": null,            // or an ISO date
-  "offlineGraceUntil": "…",     // revalidate against the server after this
-  "status": "active"            // or "revoked" / "expired" — also signed!
-}
-```
+## Rotation
 
-## Enforcement rules your app should apply
-
-1. Signature must verify (above). Otherwise treat as unlicensed.
-2. `installationId` must match this installation.
-3. `status` must be `active` — persist revoked/expired tokens too, so the
-   verdict survives restarts.
-4. If `expiresAt` is set and past, treat as expired.
-5. If `offlineGraceUntil` is past, call `POST /v1/refresh` for a fresh token;
-   keep working during the grace window even when offline.
-6. Enforce whichever `entitlements` your product defines (a count, a feature
-   flag, a tier). Unknown entitlements are ignored, which is what makes the
-   scheme forward-compatible.
+Public product key discovery at `/v1/products/:productId/keys` helps operators distribute keys; downloading a key beside an untrusted token does not establish trust. Authenticate your distribution/update channel and pin approved keys. An admin stages a new key, distributes it to clients, then explicitly activates it. Retired public keys remain available for existing offline grants. Never activate before deployed clients trust the new kid.

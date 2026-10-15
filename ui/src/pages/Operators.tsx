@@ -1,9 +1,22 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  KeyRound,
+  Monitor,
+  Trash2,
+  UserRoundCog,
+  UserRoundX,
+  UserRoundCheck,
+  ScanFace,
+} from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { fetchAdminConfig, type AdminFeature, type OperatorRole } from "../api";
 import { authClient } from "../auth-client";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
 import { Button, Card, ErrorNote, Modal, Spinner, TextField, formatDateTime } from "../components";
+import { ActionButton } from "../components/ActionButton";
+import { Choice } from "../components/Choice";
+import { ListPagination } from "../components/ListPagination";
 
 /**
  * Operator management, built on Better Auth's admin plugin.
@@ -42,7 +55,7 @@ function RoleBadge(props: { role: string | null | undefined }) {
       className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
         role === "admin"
           ? "bg-slate-900 text-white ring-slate-900"
-          : "bg-slate-50 text-slate-600 ring-slate-300"
+          : "bg-slate-50 text-muted-foreground ring-slate-300"
       }`}
     >
       {role}
@@ -57,6 +70,7 @@ export default function Operators() {
     queryFn: fetchAdminConfig,
     staleTime: Infinity,
   });
+  const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [passwordFor, setPasswordFor] = useState<Operator | null>(null);
   const [sessionsFor, setSessionsFor] = useState<Operator | null>(null);
@@ -67,11 +81,13 @@ export default function Operators() {
   const viewer = config?.viewer;
 
   const operatorsQuery = useQuery({
-    queryKey: ["operators"],
+    queryKey: ["operators", page],
     queryFn: async () => {
-      const { data, error } = await authClient.admin.listUsers({ query: { limit: 200 } });
+      const { data, error } = await authClient.admin.listUsers({
+        query: { limit: 20, offset: (page - 1) * 20, sortBy: "createdAt", sortDirection: "desc" },
+      });
       if (error) throw new Error(error.message ?? "Could not list operators.");
-      return (data?.users ?? []) as Operator[];
+      return { users: (data?.users ?? []) as Operator[], total: data?.total ?? 0 };
     },
     placeholderData: keepPreviousData,
   });
@@ -94,14 +110,14 @@ export default function Operators() {
   if (operatorsQuery.isPending) return <Spinner label="Loading operators…" />;
   if (operatorsQuery.error) return <ErrorNote message={(operatorsQuery.error as Error).message} />;
 
-  const operators = operatorsQuery.data;
+  const operators = operatorsQuery.data.users;
 
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-semibold">Operators</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Who can sign in to this console. <strong>admin</strong> runs the counter and manages
             operators; <strong>support</strong> reads everything and can release activations.
           </p>
@@ -112,42 +128,42 @@ export default function Operators() {
       {actionError && <ErrorNote message={actionError} />}
 
       <Card>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-5 py-3 font-medium">Operator</th>
-              <th className="px-5 py-3 font-medium">Role</th>
-              <th className="px-5 py-3 font-medium">Added</th>
-              <th className="px-5 py-3">
+        <Table className="w-full text-sm">
+          <TableHeader>
+            <TableRow className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHead className="px-5 py-3 font-medium">Operator</TableHead>
+              <TableHead className="px-5 py-3 font-medium">Role</TableHead>
+              <TableHead className="px-5 py-3 font-medium">Added</TableHead>
+              <TableHead className="px-5 py-3 text-right">
                 {/* The actions column. Named for screen readers, which
                       otherwise announce nothing at all for this column. */}
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-slate-100">
             {operators.map((operator) => {
               const isSelf = viewer?.actor === operator.email;
               return (
-                <tr key={operator.id} className="align-middle hover:bg-slate-50">
-                  <td className="px-5 py-3">
+                <TableRow key={operator.id} className="align-middle hover:bg-slate-50">
+                  <TableCell className="px-5 py-3">
                     <div className="font-medium">
                       {operator.email}
-                      {isSelf && <span className="ml-2 text-xs text-slate-400">(you)</span>}
+                      {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
                     </div>
                     {operator.banned && (
                       <div className="text-xs text-red-600">
                         banned{operator.banReason ? `: ${operator.banReason}` : ""}
                       </div>
                     )}
-                  </td>
-                  <td className="px-5 py-3">
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
                     <RoleBadge role={operator.role} />
-                  </td>
-                  <td className="px-5 py-3 whitespace-nowrap text-slate-500">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 whitespace-nowrap text-muted-foreground">
                     {operator.createdAt ? formatDateTime(String(operator.createdAt)) : "—"}
-                  </td>
-                  <td className="px-5 py-3">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-right">
                     <div className="flex flex-wrap justify-end gap-2">
                       {scope.has("operators") && !isSelf && (
                         <Button
@@ -161,18 +177,25 @@ export default function Operators() {
                             )
                           }
                         >
+                          <UserRoundCog aria-hidden="true" />
                           Make {roleLabel(operator.role) === "admin" ? "support" : "admin"}
                         </Button>
                       )}
                       {scope.has("operators") && (
-                        <Button variant="secondary" onClick={() => setPasswordFor(operator)}>
-                          Set password
-                        </Button>
+                        <ActionButton
+                          compact
+                          icon={KeyRound}
+                          label="Set password"
+                          onClick={() => setPasswordFor(operator)}
+                        />
                       )}
                       {scope.has("sessions") && (
-                        <Button variant="secondary" onClick={() => setSessionsFor(operator)}>
-                          Sessions
-                        </Button>
+                        <ActionButton
+                          compact
+                          icon={Monitor}
+                          label="Sessions"
+                          onClick={() => setSessionsFor(operator)}
+                        />
                       )}
                       {scope.has("bans") && !isSelf && (
                         <Button
@@ -185,6 +208,11 @@ export default function Operators() {
                             )
                           }
                         >
+                          {operator.banned ? (
+                            <UserRoundCheck aria-hidden="true" />
+                          ) : (
+                            <UserRoundX aria-hidden="true" />
+                          )}
                           {operator.banned ? "Unban" : "Ban"}
                         </Button>
                       )}
@@ -199,28 +227,41 @@ export default function Operators() {
                             })
                           }
                         >
+                          <ScanFace aria-hidden="true" />
                           Impersonate
                         </Button>
                       )}
                       {scope.has("operators") && !isSelf && (
-                        <Button variant="danger" onClick={() => setRemoving(operator)}>
-                          Remove
-                        </Button>
+                        <ActionButton
+                          compact
+                          icon={Trash2}
+                          label="Remove"
+                          variant="danger"
+                          onClick={() => setRemoving(operator)}
+                        />
                       )}
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
             {operators.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-slate-400">
+              <TableRow>
+                <TableCell colSpan={4} className="px-5 py-10 text-center text-muted-foreground">
                   No operators yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
+        <ListPagination
+          page={page}
+          pageCount={Math.ceil(operatorsQuery.data.total / 20)}
+          total={operatorsQuery.data.total}
+          onPageChange={(next) => {
+            if (!operatorsQuery.isPlaceholderData) setPage(next);
+          }}
+        />
       </Card>
 
       {creating && (
@@ -245,7 +286,7 @@ export default function Operators() {
 
       {removing && (
         <Modal title="Remove this operator?" onClose={() => setRemoving(null)}>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             <span className="font-medium">{removing.email}</span> will lose access immediately and
             their sessions end. The audit entries they created stay in the log.
           </p>
@@ -306,30 +347,22 @@ function CreateOperator(props: { onClose: () => void; onCreated: () => void }) {
           value={password}
           onChange={setPassword}
         />
-        <label className="block text-sm">
-          <span className="font-medium text-slate-700">Role</span>
-          <div className="mt-1 flex gap-2">
-            {(["support", "admin"] as OperatorRole[]).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setRole(option)}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
-                  role === option
-                    ? "bg-slate-900 text-white"
-                    : "border border-slate-300 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
+        <div>
+          <Choice
+            label="Role"
+            value={role}
+            onChange={(value) => setRole(value as OperatorRole)}
+            options={[
+              { value: "support", label: "Support" },
+              { value: "admin", label: "Admin" },
+            ]}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
             {role === "admin"
               ? "Full access: issue, edit and revoke licenses, download backups, manage operators."
               : "Read-only on licenses, plus releasing activations for seat transfers."}
           </p>
-        </label>
+        </div>
         {mutation.error && <ErrorNote message={(mutation.error as Error).message} />}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={props.onClose}>
@@ -424,11 +457,13 @@ function Sessions(props: { operator: Operator; onClose: () => void }) {
                 <div className="text-slate-700">
                   {session.createdAt ? formatDateTime(String(session.createdAt)) : "—"}
                 </div>
-                <div className="truncate text-xs text-slate-400">{session.userAgent ?? "—"}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {session.userAgent ?? "—"}
+                </div>
               </li>
             ))}
             {query.data.length === 0 && (
-              <li className="py-4 text-center text-slate-400">No active sessions.</li>
+              <li className="py-4 text-center text-muted-foreground">No active sessions.</li>
             )}
           </ul>
           {revokeAll.error && (

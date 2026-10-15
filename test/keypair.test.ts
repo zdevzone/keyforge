@@ -8,7 +8,7 @@ import {
   resolveSigningKey,
   verifyLicenseToken,
 } from "../src/keypair.js";
-import { generateSigningKeyPair, signLicenseToken, type LicenseTokenPayload } from "../src/sign.js";
+import { generateSigningKeyPair, signLicenseToken, type LicenseTokenV2 } from "../src/sign.js";
 
 /**
  * The signing key, and the ways it goes wrong.
@@ -21,9 +21,11 @@ import { generateSigningKeyPair, signLicenseToken, type LicenseTokenPayload } fr
 
 const ed = generateSigningKeyPair();
 
-function payload(overrides: Partial<LicenseTokenPayload> = {}): LicenseTokenPayload {
+/** A v2 token, which is the version that carries both a kid and entitlements. */
+function payload(overrides: Partial<LicenseTokenV2> = {}): LicenseTokenV2 {
   return {
     v: 2,
+    kid: "test-key",
     licenseId: "9c1e4d2a",
     plan: "pro",
     entitlements: { seats: 5 },
@@ -98,7 +100,7 @@ test("a token verifies against its own key and against no other", () => {
 
   const mine = verifyLicenseToken(token, info.publicKeyPem);
   assert.equal(mine.valid, true);
-  assert.deepEqual((mine.payload as LicenseTokenPayload).entitlements, { seats: 5 });
+  assert.deepEqual((mine.payload as LicenseTokenV2).entitlements, { seats: 5 });
 
   const theirs = verifyLicenseToken(token, generateSigningKeyPair().publicKey);
   assert.equal(theirs.valid, false);
@@ -116,7 +118,7 @@ test("a tampered payload does not verify, even though it still decodes", () => {
   ).toString("base64url");
   const result = verifyLicenseToken(`${forged}.${signature}`, ed.publicKey);
   assert.equal(result.valid, false);
-  assert.deepEqual((result.payload as LicenseTokenPayload).entitlements, { seats: 5000 });
+  assert.deepEqual((result.payload as LicenseTokenV2).entitlements, { seats: 5000 });
 });
 
 test("malformed tokens are reported as answers, not thrown as errors", () => {
@@ -141,10 +143,10 @@ test("the key is resolved from the environment the way the service does", () => 
     resolveSigningKey({ LICENSE_SIGNING_KEY: ed.privateKey.replaceAll("\n", "\\n") }),
     ed.privateKey,
   );
-  // Inline wins over a file, so an override is an override.
-  assert.equal(
-    resolveSigningKey({ LICENSE_SIGNING_KEY: ed.privateKey, LICENSE_SIGNING_KEY_FILE: "/nope" }),
-    ed.privateKey,
+  assert.throws(
+    () =>
+      resolveSigningKey({ LICENSE_SIGNING_KEY: ed.privateKey, LICENSE_SIGNING_KEY_FILE: "/nope" }),
+    /only one/,
   );
   assert.throws(() => resolveSigningKey({}), /LICENSE_SIGNING_KEY/);
 });

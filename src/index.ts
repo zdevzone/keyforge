@@ -1,13 +1,22 @@
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import { buildLicenseApp } from "./app.js";
-import { createAuth, ensureAuthSchema, seedOperator, type AuthInstance } from "./auth.js";
+import {
+  closeAuth,
+  createAuth,
+  ensureAuthSchema,
+  seedOperator,
+  type AuthInstance,
+} from "./auth.js";
+import { storageOptionsFromEnv } from "./backup-destinations.js";
 import { loadConfig, resolveListenPort } from "./config.js";
 import { isPostgresUrl } from "./database.js";
 import { LicenseDatabase } from "./db.js";
 import { parseEnv } from "./env.js";
-import { describeSigningKey, resolveSigningKey } from "./keypair.js";
+import { describeSigningKey, resolveKid, resolveSigningKey } from "./keypair.js";
+import { resolveRuntime } from "./runtime.js";
+import { loadKeyRing } from "./secrets.js";
 
 /**
  * Deployment entry for the vendor's host. The signing key arrives via the
@@ -31,14 +40,19 @@ function resolvePrivateKey(): string {
 // a value that is present and malformed stops the boot here, naming itself,
 // rather than becoming a confusing failure later or a silent wrong default.
 const env = parseEnv(process.env);
+if (process.env.NODE_ENV === "production" && env.LICENSE_AUTH_SECRET && !env.LICENSE_SERVER_URL)
+  throw new Error(
+    "LICENSE_SERVER_URL or Render's RENDER_EXTERNAL_URL is required for the production console.",
+  );
 
 const config = loadConfig();
 const port = resolveListenPort();
 const host = env.LICENSE_HOST ?? "0.0.0.0";
-const dbPath = env.LICENSE_DB_PATH ?? "licenses.sqlite";
+const runtime = resolveRuntime(process.env);
+const dbPath = runtime.sqlitePath;
 // DATABASE_URL is the switch: a postgres:// URL selects Postgres, absence
 // keeps the zero-setup SQLite file.
-const databaseUrl = env.DATABASE_URL;
+const databaseUrl = runtime.url;
 const usingPostgres = isPostgresUrl(databaseUrl);
 
 // Create the containing directory when a nested DB path is configured.
@@ -47,11 +61,10 @@ if (!usingPostgres) mkdirSync(dirname(dbPath), { recursive: true });
 const database = await LicenseDatabase.open({ url: databaseUrl, sqlitePath: dbPath });
 
 // The admin console needs a cookie secret; without one it stays off and the
-// service keeps its CLI-only shape. Auth data lives beside the license ledger:
-// in the same Postgres database, or in a sqlite sidecar file.
+// service keeps its CLI-only shape. Auth and licensing share one database.
 let auth: AuthInstance | undefined;
 if (env.LICENSE_AUTH_SECRET) {
-  const authDbPath = env.LICENSE_AUTH_DB_PATH ?? join(dirname(dbPath), "auth.sqlite");
+  const authDbPath = runtime.authDbPath;
   const baseURL = env.LICENSE_SERVER_URL?.replace(/\/$/, "") ?? `http://localhost:${port}`;
   auth = createAuth({
     dbPath: authDbPath,
@@ -102,20 +115,44 @@ const privateKey = resolvePrivateKey();
 // Throws with a diagnosis when the key is unusable, before anything binds a
 // port. See src/keypair.ts for the cases this catches.
 const signingKey = describeSigningKey(privateKey);
+// Named here rather than inside the app so the boot log below prints the same
+// id the tokens will carry — "which key is production signing with?" and "what
+// kid should the app pin?" are the same question, and this is the answer.
+const kid = resolveKid(signingKey, process.env);
 
 const app = await buildLicenseApp({
   privateKey,
   signingKey,
+  kid,
   adminToken: env.LICENSE_ADMIN_TOKEN,
   database,
   config,
   auth,
-  // Only a sqlite sidecar can be snapshotted through the backup endpoint.
-  authDbPath:
-    auth && !usingPostgres
-      ? (env.LICENSE_AUTH_DB_PATH ?? join(dirname(dbPath), "auth.sqlite"))
-      : undefined,
+  keyring: loadKeyRing("LICENSE_DATA_KEYRING"),
+  backups: {
+    ...storageOptionsFromEnv(process.env),
+    keyring: loadKeyRing("LICENSE_BACKUP_KEYRING"),
+    directory: env.LICENSE_BACKUP_DIR,
+    databaseUrl,
+    verificationUrl: env.LICENSE_BACKUP_VERIFY_DATABASE_URL,
+  },
+  // The unified SQLite snapshot includes auth and licensing.
+  authDbPath: auth && !usingPostgres ? runtime.authDbPath : undefined,
 });
+
+app.addHook("onClose", async () => {
+  if (auth) await closeAuth(auth);
+  await database.close();
+});
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(
+    signal,
+    () =>
+      void app.close().catch(() => {
+        process.exitCode = 1;
+      }),
+  );
+}
 
 await app.listen({ port, host });
 console.log(
@@ -123,7 +160,9 @@ console.log(
 );
 // Printed every boot so "which key is production actually signing with?" is
 // answerable from the platform's log tail. The public half only.
-console.log(`[license-server] signing key ${signingKey.keyType} ${signingKey.fingerprint}`);
+console.log(
+  `[license-server] signing key ${signingKey.keyType} ${signingKey.fingerprint} (kid ${kid})`,
+);
 if (!env.LICENSE_ADMIN_TOKEN) {
   console.warn("[license-server] LICENSE_ADMIN_TOKEN is not set — CLI admin access is disabled.");
 }

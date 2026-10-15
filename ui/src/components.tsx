@@ -1,90 +1,109 @@
-import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { X } from "lucide-react";
+import { useEffect, useId, useRef, type ReactNode, type ComponentProps } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button as UIButton } from "@/components/ui/button";
+import { Card as UICard } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { TableCell as UITableCell, TableHead as UITableHead } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+
+import { productPath, request } from "./api";
 import type { Entitlements, EntitlementValue, LiveStatus } from "./api";
-
+import { Choice } from "./components/Choice";
+import { DateField } from "./components/DateField";
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableFooter,
+  TableCaption,
+} from "@/components/ui/table";
+export { Textarea } from "@/components/ui/textarea";
+export function TableCell(props: ComponentProps<typeof UITableCell>) {
+  return <UITableCell {...props} className={cn("whitespace-normal", props.className)} />;
+}
+export function TableHead(props: ComponentProps<typeof UITableHead>) {
+  return <UITableHead scope="col" {...props} />;
+}
 export function Card(props: { children: ReactNode; className?: string }) {
   return (
-    <div
-      className={`rounded-xl border border-slate-200 bg-white shadow-sm ${props.className ?? ""}`}
-    >
+    <UICard className={cn("console-card block gap-0 py-0 shadow-none", props.className)}>
       {props.children}
-    </div>
+    </UICard>
   );
 }
-
 const statusStyles: Record<LiveStatus, string> = {
-  active: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-  expired: "bg-amber-50 text-amber-700 ring-amber-600/20",
-  revoked: "bg-red-50 text-red-700 ring-red-600/20",
+  active: "bg-success/10 text-success",
+  expired: "bg-warning/10 text-warning",
+  revoked: "bg-destructive/10 text-destructive",
 };
-
 export function StatusBadge(props: { status: LiveStatus }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${statusStyles[props.status]}`}
-    >
+    <Badge variant="outline" className={cn("border-0 capitalize", statusStyles[props.status])}>
       {props.status}
-    </span>
+    </Badge>
   );
 }
-
 export function Spinner(props: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-16 text-slate-500">
-      <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-      {props.label ?? "Loading…"}
-    </div>
-  );
-}
-
-export function Modal(props: { title: string; onClose?: () => void; children: ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
-        <div className="flex items-start justify-between">
-          <h2 className="text-base font-semibold">{props.title}</h2>
-          {props.onClose && (
-            <button
-              onClick={props.onClose}
-              aria-label="Close"
-              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        <div className="mt-4">{props.children}</div>
-      </div>
-    </div>
-  );
-}
-
-const buttonStyles = {
-  primary: "bg-slate-900 text-white hover:bg-slate-700",
-  secondary: "border border-slate-300 text-slate-700 hover:bg-slate-100",
-  danger: "bg-red-600 text-white hover:bg-red-500",
-} as const;
-
-export function Button(props: {
-  children: ReactNode;
-  onClick?: () => void;
-  type?: "button" | "submit";
-  variant?: keyof typeof buttonStyles;
-  disabled?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      type={props.type ?? "button"}
-      onClick={props.onClick}
-      disabled={props.disabled}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${buttonStyles[props.variant ?? "primary"]} ${props.className ?? ""}`}
+    <output
+      aria-live="polite"
+      className="flex items-center justify-center gap-2 py-16 text-muted-foreground"
     >
-      {props.children}
-    </button>
+      <span
+        aria-hidden="true"
+        className="size-4 animate-spin rounded-full border-2 border-input border-t-foreground"
+      />
+      {props.label ?? "Loading…"}
+    </output>
   );
 }
-
+export function Modal(props: { title: string; onClose?: () => void; children: ReactNode }) {
+  const returnFocus = useRef(document.activeElement as HTMLElement | null);
+  useEffect(
+    () => () => {
+      const target = returnFocus.current;
+      requestAnimationFrame(() => {
+        if (target?.isConnected) target.focus({ preventScroll: true });
+      });
+    },
+    [],
+  );
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose?.();
+      }}
+    >
+      <DialogContent
+        aria-describedby={undefined}
+        showCloseButton={Boolean(props.onClose)}
+        className="console-modal max-h-[90dvh] overflow-y-auto sm:max-w-2xl"
+      >
+        <DialogHeader className="text-left">
+          <DialogTitle>{props.title}</DialogTitle>
+        </DialogHeader>
+        <div>{props.children}</div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+const buttonVariants = { primary: "default", secondary: "outline", danger: "destructive" } as const;
+export function Button(
+  props: Omit<ComponentProps<typeof UIButton>, "variant"> & {
+    variant?: keyof typeof buttonVariants;
+  },
+) {
+  const { variant = "primary", ...native } = props;
+  return <UIButton {...native} type={props.type ?? "button"} variant={buttonVariants[variant]} />;
+}
 export function TextField(props: {
   label: string;
   value: string;
@@ -93,18 +112,21 @@ export function TextField(props: {
   required?: boolean;
   placeholder?: string;
 }) {
+  const id = useId();
+  if (props.type === "date")
+    return <DateField label={props.label} value={props.value} onChange={props.onChange} />;
   return (
-    <label className="block text-sm">
-      <span className="font-medium text-slate-700">{props.label}</span>
-      <input
+    <Field>
+      <FieldLabel htmlFor={id}>{props.label}</FieldLabel>
+      <Input
+        id={id}
         type={props.type ?? "text"}
         required={props.required}
         placeholder={props.placeholder}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-slate-500 focus:outline-none"
       />
-    </label>
+    </Field>
   );
 }
 
@@ -129,17 +151,30 @@ export function parseEntitlementValue(raw: string): EntitlementValue {
 export interface EntitlementRow {
   name: string;
   value: string;
+  type?: "number" | "string" | "boolean";
 }
 
 export function entitlementsToRows(entitlements: Entitlements): EntitlementRow[] {
-  return Object.entries(entitlements).map(([name, value]) => ({ name, value: String(value) }));
+  return Object.entries(entitlements).map(([name, value]) => ({
+    name,
+    value: String(value),
+    type: typeof value as EntitlementRow["type"],
+  }));
 }
 
 export function rowsToEntitlements(rows: EntitlementRow[]): Entitlements {
   const result: Entitlements = {};
   for (const row of rows) {
     const name = row.name.trim();
-    if (name) result[name] = parseEntitlementValue(row.value);
+    if (name)
+      result[name] =
+        row.type === "string"
+          ? row.value
+          : row.type === "boolean"
+            ? row.value === "true"
+            : row.type === "number"
+              ? Number(row.value)
+              : parseEntitlementValue(row.value);
   }
   return result;
 }
@@ -150,21 +185,62 @@ export function EntitlementsEditor(props: {
   onChange: (rows: EntitlementRow[]) => void;
 }) {
   const { rows, onChange } = props;
+  const catalog = useQuery({
+    queryKey: ["catalog"],
+    queryFn: () =>
+      request<{
+        definitions: {
+          id: string;
+          type: string;
+          archived: boolean;
+          defaultValue?: EntitlementValue;
+        }[];
+      }>(productPath("/catalog")),
+  });
+  const definitions =
+    catalog.data?.definitions.filter((d) => !d.archived && d.type !== "mixed") ?? [];
   const update = (index: number, patch: Partial<EntitlementRow>) => {
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <span className="text-sm font-medium text-slate-700">Entitlements</span>
       {rows.map((row, index) => (
-        <div key={index} className="flex items-center gap-2">
-          <input
-            placeholder="name (e.g. allowance)"
-            value={row.name}
-            onChange={(event) => update(index, { name: event.target.value })}
-            className="w-2/5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+        <div key={index} className="flex flex-wrap items-center gap-2">
+          <Choice
+            hideLabel
+            label="Entitlement value type"
+            value={row.type ?? "string"}
+            onChange={(value) => update(index, { type: value as EntitlementRow["type"] })}
+            options={[
+              { value: "string", label: "Text" },
+              { value: "number", label: "Number" },
+              { value: "boolean", label: "Boolean" },
+            ]}
           />
-          <input
+          <Choice
+            hideLabel
+            label="Entitlement key"
+            value={row.name}
+            onChange={(value) => {
+              const definition = definitions.find((d) => d.id === value);
+              update(index, {
+                name: value,
+                type: definition?.type as EntitlementRow["type"],
+                value:
+                  definition?.defaultValue === undefined ? "" : String(definition.defaultValue),
+              });
+            }}
+            options={[
+              { value: "", label: "Choose entitlement" },
+              ...(row.name && !definitions.some((d) => d.id === row.name)
+                ? [{ value: row.name, label: row.name + " (unavailable)" }]
+                : []),
+              ...definitions.map((d) => ({ value: d.id, label: d.id })),
+            ]}
+          />
+          <Input
+            aria-label="Entitlement value"
             placeholder="value (number, true/false, or text)"
             value={row.value}
             onChange={(event) => update(index, { value: event.target.value })}
@@ -174,28 +250,33 @@ export function EntitlementsEditor(props: {
             type="button"
             aria-label="Remove entitlement"
             onClick={() => onChange(rows.filter((_, i) => i !== index))}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded p-1 text-muted-foreground hover:bg-slate-100 hover:text-muted-foreground"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
       ))}
       <button
         type="button"
         onClick={() => onChange([...rows, { name: "", value: "" }])}
-        className="text-sm text-slate-500 hover:text-slate-900"
+        className="self-start text-sm text-primary hover:underline"
       >
-        + Add entitlement
+        Add entitlement
       </button>
+      {!definitions.length && (
+        <p className="text-sm text-muted-foreground">
+          Create active entitlement definitions in Entitlements & plans before adding grants.
+        </p>
+      )}
     </div>
   );
 }
 
 export function ErrorNote(props: { message: string }) {
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-      {props.message}
-    </div>
+    <Alert variant="destructive" className="border-destructive/25 bg-destructive/5">
+      <AlertDescription>{props.message}</AlertDescription>
+    </Alert>
   );
 }
 

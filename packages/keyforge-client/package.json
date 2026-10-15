@@ -1,0 +1,44 @@
+{
+  "name": "@keyforge/client",
+  "version": "0.1.0",
+  "description": "Typed KeyForge installation client and signed offline authorization verifier",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "skill"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./windows": {
+      "types": "./dist/windows.d.ts",
+      "import": "./dist/windows.js"
+    },
+    "./linux": {
+      "types": "./dist/linux.d.ts",
+      "import": "./dist/linux.js"
+    },
+    "./macos": {
+      "types": "./dist/macos.d.ts",
+      "import": "./dist/macos.js"
+    },
+    "./device-signals": {
+      "types": "./dist/device-signals.d.ts",
+      "import": "./dist/device-signals.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

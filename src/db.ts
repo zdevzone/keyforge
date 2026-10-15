@@ -9,8 +9,23 @@ import {
   type DatabaseHandle,
   type Engine,
 } from "./database.js";
+import {
+  newSupportReference,
+  normalizeSignals,
+  pickMatch,
+  trialVerdict,
+  MAX_GROUPS_PER_HASH,
+  type MachineSignal,
+  type SignalKind,
+} from "./machines.js";
 import { migrateToLatest } from "./migrations.js";
 import type { Database } from "./schema.js";
+import {
+  newSupportRequestId,
+  type NormalizedSupportRequest,
+  type SupportCategory,
+  type SupportUrgency,
+} from "./support.js";
 
 /**
  * The vendor's ledger: which keys exist, what they entitle, where each one is
@@ -47,6 +62,50 @@ export interface ActivationRow {
   installationId: string;
   activatedAt: string;
   deactivatedAt: string | null;
+}
+
+export interface SupportRequestRow {
+  id: string;
+  clientRequestId: string;
+  licenseId: string;
+  installationId: string;
+  category: SupportCategory;
+  urgency: SupportUrgency;
+  subject: string;
+  message: string;
+  reporterName: string | null;
+  appVersion: string | null;
+  platform: string | null;
+  status: "queued";
+  clientCreatedAt: string;
+  receivedAt: string;
+  updatedAt: string;
+}
+
+/** Inbox rows deliberately omit the message; it is fetched only on detail. */
+export type SupportRequestSummary = Omit<SupportRequestRow, "message">;
+
+export interface SupportRequestQuery {
+  category?: SupportCategory;
+  urgency?: SupportUrgency;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SupportRequestPage {
+  requests: SupportRequestSummary[];
+  total: number;
+}
+
+export type IngestSupportRequestResult =
+  | { outcome: "created" | "replayed"; request: SupportRequestRow }
+  | { outcome: "conflict" }
+  | { outcome: "rate_limited"; retryAfter: number };
+
+class SupportQuotaExceeded extends Error {
+  constructor(readonly retryAfter: number) {
+    super("Support request quota exceeded.");
+  }
 }
 
 /**
@@ -171,6 +230,49 @@ export interface EntitlementCatalog {
   licensesScanned: number;
 }
 
+/** One machine in the trial ledger, as the support console shows it. */
+export interface MachineGroupRow {
+  id: string;
+  supportReference: string;
+  firstRegisteredAt: string;
+  lastRegisteredAt: string;
+  registrationCount: number;
+  recheckCount: number;
+  trialSpentReported: boolean;
+  clearedAt: string | null;
+  /**
+   * What a registration matching this group would be told *right now*.
+   *
+   * Derived, not stored — the verdict only exists at registration time. The
+   * console needs it because an operator who has just cleared a machine has no
+   * other way to see that the clear landed, or that the customer has since used
+   * it up.
+   */
+  trialState: "fresh" | "spent";
+  installationIds: string[];
+  signalKinds: SignalKind[];
+}
+
+export interface MachineQuery {
+  /** Substring match against support reference, group id, or installation id. */
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MachinePage {
+  machines: MachineGroupRow[];
+  total: number;
+}
+
+/** What a registration learned about the machine that made it. */
+export interface TrialRegistration {
+  group: MachineGroupRow;
+  verdict: "fresh" | "spent";
+  /** False when the group was created by this very call. */
+  matched: boolean;
+}
+
 function parseJson<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
   try {
@@ -185,6 +287,60 @@ function parseJson<T>(raw: string | null, fallback: T): T {
 /** Postgres returns bigint counts as strings; SQLite returns numbers. */
 function toCount(value: unknown): number {
   return Number(value ?? 0);
+}
+
+function mapSupportRequest(row: Database["support_requests"]): SupportRequestRow {
+  return {
+    id: row.id,
+    clientRequestId: row.client_request_id,
+    licenseId: row.license_id,
+    installationId: row.installation_id,
+    category: row.category as SupportCategory,
+    urgency: row.urgency as SupportUrgency,
+    subject: row.subject,
+    message: row.message,
+    reporterName: row.reporter_name,
+    appVersion: row.app_version,
+    platform: row.platform,
+    status: "queued",
+    clientCreatedAt: row.client_created_at,
+    receivedAt: row.received_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapSupportRequestSummary(
+  row: Omit<Database["support_requests"], "message">,
+): SupportRequestSummary {
+  return {
+    id: row.id,
+    clientRequestId: row.client_request_id,
+    licenseId: row.license_id,
+    installationId: row.installation_id,
+    category: row.category as SupportCategory,
+    urgency: row.urgency as SupportUrgency,
+    subject: row.subject,
+    reporterName: row.reporter_name,
+    appVersion: row.app_version,
+    platform: row.platform,
+    status: "queued",
+    clientCreatedAt: row.client_created_at,
+    receivedAt: row.received_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function sameSupportContent(row: SupportRequestRow, request: NormalizedSupportRequest): boolean {
+  return (
+    row.category === request.category &&
+    row.urgency === request.urgency &&
+    row.subject === request.subject &&
+    row.message === request.message &&
+    row.reporterName === request.reporterName &&
+    row.appVersion === request.appVersion &&
+    row.platform === request.platform &&
+    row.clientCreatedAt === request.clientCreatedAt
+  );
 }
 
 /**
@@ -216,6 +372,10 @@ export class LicenseDatabase {
 
   get db(): Kysely<Database> {
     return this.handle.db;
+  }
+
+  get sqlitePath(): string | null {
+    return this.handle.sqlitePath;
   }
 
   get engine(): Engine {
@@ -437,6 +597,161 @@ export class LicenseDatabase {
       activatedAt: row.activated_at,
       deactivatedAt: row.deactivated_at,
     };
+  }
+
+  /**
+   * Insert one support request and charge its fixed-window quota atomically.
+   * Exact or conflicting duplicates never touch the quota, including when two
+   * instances race on the same client UUID.
+   */
+  async ingestSupportRequest(input: {
+    licenseId: string;
+    installationId: string;
+    request: NormalizedSupportRequest;
+    now: Date;
+    maxRequests: number;
+    windowMs: number;
+  }): Promise<IngestSupportRequestResult> {
+    const windowStart = new Date(Math.floor(input.now.getTime() / input.windowMs) * input.windowMs);
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((windowStart.getTime() + input.windowMs - input.now.getTime()) / 1_000),
+    );
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.db.transaction().execute(async (trx) => {
+          const findExisting = async () => {
+            const row = await trx
+              .selectFrom("support_requests")
+              .selectAll()
+              .where("license_id", "=", input.licenseId)
+              .where("installation_id", "=", input.installationId)
+              .where("client_request_id", "=", input.request.clientRequestId)
+              .executeTakeFirst();
+            return row ? mapSupportRequest(row) : null;
+          };
+
+          const receivedAt = input.now.toISOString();
+          const inserted = await trx
+            .insertInto("support_requests")
+            .values({
+              id: newSupportRequestId(input.now.getTime()),
+              client_request_id: input.request.clientRequestId,
+              license_id: input.licenseId,
+              installation_id: input.installationId,
+              category: input.request.category,
+              urgency: input.request.urgency,
+              subject: input.request.subject,
+              message: input.request.message,
+              reporter_name: input.request.reporterName,
+              app_version: input.request.appVersion,
+              platform: input.request.platform,
+              status: "queued",
+              client_created_at: input.request.clientCreatedAt,
+              received_at: receivedAt,
+              updated_at: receivedAt,
+            })
+            .onConflict((conflict) =>
+              conflict.columns(["license_id", "installation_id", "client_request_id"]).doNothing(),
+            )
+            .returningAll()
+            .executeTakeFirst();
+
+          if (!inserted) {
+            const raced = await findExisting();
+            if (!raced || !sameSupportContent(raced, input.request)) {
+              return { outcome: "conflict" as const };
+            }
+            return { outcome: "replayed" as const, request: raced };
+          }
+
+          const bucket = await sql<{ request_count: number | string }>`
+          INSERT INTO support_rate_limit_buckets
+            (license_id, installation_id, window_start, request_count)
+          VALUES (
+            ${input.licenseId}, ${input.installationId},
+            ${windowStart.toISOString()}, 1
+          )
+          ON CONFLICT (license_id, installation_id, window_start)
+          DO UPDATE SET request_count = support_rate_limit_buckets.request_count + 1
+          WHERE support_rate_limit_buckets.request_count < ${input.maxRequests}
+          RETURNING request_count
+        `.execute(trx);
+          if (bucket.rows.length === 0) throw new SupportQuotaExceeded(retryAfter);
+          return { outcome: "created" as const, request: mapSupportRequest(inserted) };
+        });
+      } catch (error) {
+        if (error instanceof SupportQuotaExceeded) {
+          return { outcome: "rate_limited", retryAfter: error.retryAfter };
+        }
+        const code =
+          typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+        if (this.engine === "sqlite" && code === "SQLITE_BUSY" && attempt < 2) {
+          // Two processes can begin deferred SQLite transactions together and
+          // deadlock while upgrading to the writer lock. One rolls back; a
+          // short whole-transaction retry then observes the committed row.
+          await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("Support ingestion retry budget exhausted.");
+  }
+
+  /** Operator inbox. Message bodies stay out of list reads and list responses. */
+  async listSupportRequests(query: SupportRequestQuery = {}): Promise<SupportRequestPage> {
+    const filters = (qb: any) => {
+      let filtered = qb;
+      if (query.category) filtered = filtered.where("category", "=", query.category);
+      if (query.urgency) filtered = filtered.where("urgency", "=", query.urgency);
+      return filtered;
+    };
+
+    const totalQuery = filters(
+      this.db.selectFrom("support_requests").select((eb) => eb.fn.countAll().as("n")),
+    );
+    const total = toCount((await totalQuery.executeTakeFirst())?.n);
+
+    let rowsQuery = filters(
+      this.db
+        .selectFrom("support_requests")
+        .select([
+          "id",
+          "client_request_id",
+          "license_id",
+          "installation_id",
+          "category",
+          "urgency",
+          "subject",
+          "reporter_name",
+          "app_version",
+          "platform",
+          "status",
+          "client_created_at",
+          "received_at",
+          "updated_at",
+        ]),
+    ).orderBy("received_at", "desc");
+    if (query.limit !== undefined) {
+      rowsQuery = rowsQuery.limit(query.limit).offset(query.offset ?? 0);
+    }
+    const rows = await rowsQuery.execute();
+    return {
+      requests: rows.map((row: Omit<Database["support_requests"], "message">) =>
+        mapSupportRequestSummary(row),
+      ),
+      total,
+    };
+  }
+
+  async getSupportRequest(id: string): Promise<SupportRequestRow | null> {
+    const row = await this.db
+      .selectFrom("support_requests")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+    return row ? mapSupportRequest(row) : null;
   }
 
   /** Insert a fresh binding, or clear the deactivation on a returning one. */
@@ -767,6 +1082,339 @@ export class LicenseDatabase {
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
     return { catalog, licensesScanned: rows.length };
+  }
+
+  // ------------------------------------------------------------ trial ledger --
+
+  /**
+   * Record a registration and say whether this machine's trial is already gone.
+   *
+   * The verdict is read from the ledger's state *before* this call is counted,
+   * so the first registration of a machine is always `fresh` and the second is
+   * `spent`. Everything else here is bookkeeping for the support console.
+   */
+  async recordTrialRegistration(input: {
+    installationId: string;
+    machineSignals?: unknown;
+    trialSpent?: boolean;
+    recheck?: boolean;
+    now?: Date;
+  }): Promise<TrialRegistration> {
+    const nowIso = (input.now ?? new Date()).toISOString();
+    const signals = normalizeSignals(input.machineSignals);
+
+    const matchedId = signals.length
+      ? await this.findMatchingGroup(signals)
+      : await this.findGroupByInstallation(input.installationId);
+    // A group reached through the installation id is a filing cabinet, not a
+    // match: signal-less registrations are always fresh, because the client
+    // told us nothing that could identify the machine.
+    const matched = signals.length > 0 && matchedId !== null;
+
+    const existing = matchedId ? await this.readGroupState(matchedId) : null;
+    const verdict = trialVerdict(matched ? existing : null);
+
+    const groupId = matchedId ?? (await this.createGroup(nowIso));
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable("machine_groups")
+        .set({
+          last_registered_at: nowIso,
+          registration_count: sql`registration_count + 1` as never,
+          ...(input.recheck === true ? { recheck_count: sql`recheck_count + 1` as never } : {}),
+          // Sticky: a client that once reported a spent trial is evidence
+          // forever, and a later registration that omits the flag is not a
+          // retraction. Support evidence only — never read for the verdict.
+          ...(input.trialSpent === true ? { trial_spent_reported: 1 } : {}),
+        })
+        .where("id", "=", groupId)
+        .execute();
+
+      for (const signal of signals) {
+        await trx
+          .insertInto("machine_signals")
+          .values({
+            group_id: groupId,
+            kind: signal.kind,
+            hash: signal.hash,
+            first_seen_at: nowIso,
+            last_seen_at: nowIso,
+          })
+          .onConflict((oc) =>
+            oc.columns(["group_id", "kind", "hash"]).doUpdateSet({ last_seen_at: nowIso }),
+          )
+          .execute();
+      }
+
+      if (input.installationId) {
+        await trx
+          .insertInto("machine_installations")
+          .values({
+            group_id: groupId,
+            installation_id: input.installationId,
+            first_seen_at: nowIso,
+          })
+          .onConflict((oc) => oc.columns(["group_id", "installation_id"]).doNothing())
+          .execute();
+      }
+    });
+
+    const group = await this.getMachine(groupId);
+    if (!group) throw new Error("Machine group did not persist");
+    return { group, verdict, matched };
+  }
+
+  /**
+   * The group these signals belong to, or null.
+   *
+   * Two passes on purpose. The first counts how many distinct groups each hash
+   * appears in and drops the ones over MAX_GROUPS_PER_HASH — an identifier
+   * shared by a cloned VM image or an OEM batch is not evidence of anything,
+   * and left in it would fuse every install that has it into one machine. The
+   * second scores what survives by distinct *kind*, which is what
+   * src/machines.ts decides on.
+   */
+  private async findMatchingGroup(signals: MachineSignal[]): Promise<string | null> {
+    const hashes = [...new Set(signals.map((signal) => signal.hash))];
+    const rows = await this.db
+      .selectFrom("machine_signals")
+      .select(["group_id", "kind", "hash"])
+      .where("hash", "in", hashes)
+      .execute();
+
+    const groupsPerHash = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const seen = groupsPerHash.get(row.hash) ?? new Set<string>();
+      seen.add(row.group_id);
+      groupsPerHash.set(row.hash, seen);
+    }
+
+    // Only an exact (kind, hash) pair counts. The same hash arriving under a
+    // different kind is a client bug or a probe, not corroboration.
+    const wanted = new Set(signals.map((signal) => `${signal.kind}:${signal.hash}`));
+    const kindsByGroup = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if ((groupsPerHash.get(row.hash)?.size ?? 0) > MAX_GROUPS_PER_HASH) continue;
+      if (!wanted.has(`${row.kind}:${row.hash}`)) continue;
+      const kinds = kindsByGroup.get(row.group_id) ?? new Set<string>();
+      kinds.add(row.kind);
+      kindsByGroup.set(row.group_id, kinds);
+    }
+    if (kindsByGroup.size === 0) return null;
+
+    const ages = await this.db
+      .selectFrom("machine_groups")
+      .select(["id", "first_registered_at"])
+      .where("id", "in", [...kindsByGroup.keys()])
+      .execute();
+
+    return (
+      pickMatch(
+        ages.map((row) => ({
+          groupId: row.id,
+          matchingKinds: kindsByGroup.get(row.id)?.size ?? 0,
+          firstRegisteredAt: row.first_registered_at,
+        })),
+      )?.groupId ?? null
+    );
+  }
+
+  /**
+   * Where a signal-less registration files itself.
+   *
+   * Not a match — it never changes the verdict — but without it every
+   * registration from an installation that reports no signals would mint
+   * another group, and the support console would fill with single-use rows.
+   */
+  private async findGroupByInstallation(installationId: string): Promise<string | null> {
+    if (!installationId) return null;
+    const row = await this.db
+      .selectFrom("machine_installations")
+      .select("group_id")
+      .where("installation_id", "=", installationId)
+      .orderBy("first_seen_at", "asc")
+      .executeTakeFirst();
+    return row?.group_id ?? null;
+  }
+
+  private async readGroupState(
+    id: string,
+  ): Promise<{ clearedAtCount: number | null; registrationCount: number } | null> {
+    const row = await this.db
+      .selectFrom("machine_groups")
+      .select(["cleared_at_count", "registration_count"])
+      .where("id", "=", id)
+      .executeTakeFirst();
+    if (!row) return null;
+    return {
+      clearedAtCount: row.cleared_at_count === null ? null : Number(row.cleared_at_count),
+      registrationCount: Number(row.registration_count),
+    };
+  }
+
+  /**
+   * A new machine, with a reference short enough to read down a phone line.
+   *
+   * Six characters collide about as often as never, but "about as often as
+   * never" times every install is not zero, and the column is UNIQUE — so the
+   * insert is retried rather than trusted.
+   */
+  private async createGroup(nowIso: string): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const id = `grp_${randomBytes(6).toString("hex")}`;
+      try {
+        await this.db
+          .insertInto("machine_groups")
+          .values({
+            id,
+            support_reference: newSupportReference(),
+            first_registered_at: nowIso,
+            last_registered_at: nowIso,
+            registration_count: 0,
+            recheck_count: 0,
+            trial_spent_reported: 0,
+            cleared_at: null,
+            cleared_at_count: null,
+          })
+          .execute();
+        return id;
+      } catch (error) {
+        if (attempt === 4) throw error;
+      }
+    }
+    throw new Error("Could not allocate a machine support reference");
+  }
+
+  async getMachine(id: string): Promise<MachineGroupRow | null> {
+    const row = await this.db
+      .selectFrom("machine_groups")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+    if (!row) return null;
+    return (await this.decorateMachines([row]))[0];
+  }
+
+  /**
+   * Support's way in. `q` matches the reference the customer reads out, the
+   * group id an operator copied from a previous answer, or an installation id
+   * out of a log — whichever of the three they happen to be holding.
+   */
+  async listMachines(query: MachineQuery = {}): Promise<MachinePage> {
+    const needle = query.q?.trim() || null;
+    let ids: string[] | null = null;
+    if (needle) {
+      const hits = await this.db
+        .selectFrom("machine_installations")
+        .select("group_id")
+        .where((eb) => matches(eb, "installation_id", needle))
+        .execute();
+      ids = [...new Set(hits.map((hit) => hit.group_id))];
+    }
+    const search = (eb: any) =>
+      eb.or([
+        matches(eb, "support_reference", needle as string),
+        matches(eb, "id", needle as string),
+        ...(ids && ids.length ? [eb("id", "in", ids)] : []),
+      ]);
+
+    let totalQuery = this.db
+      .selectFrom("machine_groups")
+      .select((eb) => eb.fn.countAll().as("n")) as any;
+    if (needle) totalQuery = totalQuery.where(search);
+    const total = toCount((await totalQuery.executeTakeFirst())?.n);
+
+    let rowsQuery = this.db.selectFrom("machine_groups").selectAll() as any;
+    if (needle) rowsQuery = rowsQuery.where(search);
+    rowsQuery = rowsQuery.orderBy("first_registered_at", "desc");
+    if (query.limit !== undefined) {
+      rowsQuery = rowsQuery.limit(query.limit).offset(query.offset ?? 0);
+    }
+    return { machines: await this.decorateMachines(await rowsQuery.execute()), total };
+  }
+
+  /**
+   * Attach each group's installation ids and signal kinds.
+   *
+   * Two extra queries for the whole page rather than an aggregate in SQL:
+   * string_agg and group_concat are spelled differently on the two engines, and
+   * a support listing is not the place to spend a portability exception.
+   */
+  private async decorateMachines(
+    rows: {
+      id: string;
+      support_reference: string;
+      first_registered_at: string;
+      last_registered_at: string;
+      registration_count: number;
+      recheck_count: number;
+      trial_spent_reported: number;
+      cleared_at: string | null;
+      cleared_at_count: number | null;
+    }[],
+  ): Promise<MachineGroupRow[]> {
+    if (rows.length === 0) return [];
+    const ids = rows.map((row) => row.id);
+    const [installations, signals] = await Promise.all([
+      this.db
+        .selectFrom("machine_installations")
+        .select(["group_id", "installation_id"])
+        .where("group_id", "in", ids)
+        .orderBy("first_seen_at", "asc")
+        .execute(),
+      this.db
+        .selectFrom("machine_signals")
+        .select(["group_id", "kind"])
+        .where("group_id", "in", ids)
+        .execute(),
+    ]);
+
+    const byGroup = new Map<string, { installationIds: string[]; kinds: Set<string> }>();
+    for (const id of ids) byGroup.set(id, { installationIds: [], kinds: new Set() });
+    for (const row of installations)
+      byGroup.get(row.group_id)?.installationIds.push(row.installation_id);
+    for (const row of signals) byGroup.get(row.group_id)?.kinds.add(row.kind);
+
+    return rows.map((row) => ({
+      id: row.id,
+      supportReference: row.support_reference,
+      firstRegisteredAt: row.first_registered_at,
+      lastRegisteredAt: row.last_registered_at,
+      registrationCount: Number(row.registration_count),
+      recheckCount: Number(row.recheck_count),
+      // SQLite hands back 0/1 and Postgres hands back 0/1 too, since the column
+      // is an integer on both — but the API says boolean, so it is one here.
+      trialSpentReported: Number(row.trial_spent_reported) !== 0,
+      clearedAt: row.cleared_at,
+      // A group with no signals was recorded from a registration that reported
+      // none, so nothing can ever match it — its trial is perpetually fresh,
+      // and saying "spent" would send support looking for a problem.
+      trialState:
+        (byGroup.get(row.id)?.kinds.size ?? 0) === 0
+          ? "fresh"
+          : trialVerdict({
+              clearedAtCount: row.cleared_at_count === null ? null : Number(row.cleared_at_count),
+              registrationCount: Number(row.registration_count),
+            }),
+      installationIds: byGroup.get(row.id)?.installationIds ?? [],
+      signalKinds: [...(byGroup.get(row.id)?.kinds ?? [])].sort() as SignalKind[],
+    }));
+  }
+
+  /**
+   * Give a machine its trial back. The next registration from it reads `fresh`;
+   * the one after that is `spent` again — a clear is one more trial, not a
+   * permanent exemption.
+   */
+  async clearMachine(id: string, now: Date = new Date()): Promise<MachineGroupRow | null> {
+    const existing = await this.getMachine(id);
+    if (!existing) return null;
+    await this.db
+      .updateTable("machine_groups")
+      .set({ cleared_at: now.toISOString(), cleared_at_count: existing.registrationCount })
+      .where("id", "=", id)
+      .execute();
+    return this.getMachine(id);
   }
 
   /**

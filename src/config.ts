@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { z } from "zod";
 
+import { durationMs } from "./duration.js";
+
 /**
  * Deployment configuration. Everything that used to be a hardcoded policy —
  * key format, grace windows, rate limits, plan presets, which features are
@@ -20,7 +22,12 @@ export const entitlementsSchema = z.record(z.string().min(1).max(64), entitlemen
 
 const rateLimitSchema = z.object({
   max: z.number().int().positive(),
-  timeWindow: z.string().min(1),
+  timeWindow: z
+    .string()
+    .refine(
+      (value) => Number.isFinite(durationMs(value)) && durationMs(value) > 0,
+      "Use a positive duration such as 1 minute or 1 hour.",
+    ),
 });
 
 const planPresetSchema = z.object({
@@ -51,6 +58,31 @@ export const configSchema = z.object({
       groups: z.number().int().min(2).max(8).default(4),
     })
     .prefault({}),
+  signingKeys: z
+    .object({
+      /**
+       * Public halves of keys this service no longer signs with.
+       *
+       * Tokens carry a `kid`, and a verifier selects its key by that id — so a
+       * key that has been rotated away from still needs to be *findable* for as
+       * long as tokens it signed are in the field. Listed here (public material,
+       * hence config rather than the environment) and served from GET /v1/keys
+       * for tooling. The active key comes from LICENSE_SIGNING_KEY; it is never
+       * described here, because its private half must not be.
+       */
+      retired: z
+        .array(
+          z.object({
+            kid: z
+              .string()
+              .regex(/^[A-Za-z0-9._-]{1,64}$/, "kid must be 1-64 of A-Z a-z 0-9 . _ -"),
+            publicKeyPem: z.string().min(1),
+            retiredAt: z.string().min(1),
+          }),
+        )
+        .prefault([]),
+    })
+    .prefault({}),
   tokens: z
     .object({
       /** How long an issued token keeps working offline before revalidation. */
@@ -63,6 +95,7 @@ export const configSchema = z.object({
       activate: rateLimitSchema.prefault({ max: 20, timeWindow: "1 minute" }),
       validate: rateLimitSchema.prefault({ max: 20, timeWindow: "1 minute" }),
       register: rateLimitSchema.prefault({ max: 30, timeWindow: "1 minute" }),
+      support: rateLimitSchema.prefault({ max: 10, timeWindow: "1 hour" }),
     })
     .prefault({}),
   licenses: z

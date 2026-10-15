@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import { configSchema } from "../src/config.js";
 import { connectDatabase, createPostgresPool } from "../src/database.js";
 import { LicenseDatabase } from "../src/db.js";
 import {
+  LEDGER_TABLES,
   copyLedger,
   describeTarget,
   resolveTarget,
@@ -36,7 +37,19 @@ const ADMIN = "test-admin-token";
 const { privateKey } = generateSigningKeyPair();
 const auth = { authorization: `Bearer ${ADMIN}` };
 
-const LEDGER = ["licenses", "installations", "activations", "audit_log"] as const;
+const LEDGER = [
+  "platform_records",
+  "platform_lock",
+  "licenses",
+  "installations",
+  "activations",
+  "machine_groups",
+  "machine_signals",
+  "machine_installations",
+  "audit_log",
+  "support_requests",
+  "support_rate_limit_buckets",
+] as const;
 
 function tempDir(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), "keyforge-replica-"));
@@ -47,57 +60,90 @@ function tempDir(t: TestContext): string {
 /** A ledger with something in every table, produced the way a vendor would. */
 async function seed(sqlitePath: string): Promise<void> {
   const database = await LicenseDatabase.open({ sqlitePath });
+  // Historical tables must survive upgrades and database copies too.
+  const first = await database.createLicense({
+    plan: "standard",
+    activationLimit: 2,
+    entitlements: { seats: 3 },
+  });
+  for (const installationId of ["machine-1", "machine-2"]) {
+    await database.registerInstallation({ installationId, appVersion: "1.4.0", platform: "linux" });
+    await database.recordTrialRegistration({
+      installationId,
+      machineSignals: [
+        {
+          kind: "machine-guid",
+          hash: createHash("sha256")
+            .update("guid-" + installationId)
+            .digest("hex"),
+        },
+        {
+          kind: "smbios-uuid",
+          hash: createHash("sha256")
+            .update("bios-" + installationId)
+            .digest("hex"),
+        },
+      ],
+    });
+    await database.bindActivation(first.license.id, installationId);
+    await database.linkInstallationToLicense(installationId, first.license.id);
+  }
+  await database.ingestSupportRequest({
+    licenseId: first.license.id,
+    installationId: "machine-1",
+    request: {
+      clientRequestId: randomUUID(),
+      category: "technical",
+      urgency: "normal",
+      subject: "Historical support",
+      message: "Retain this request across a database copy.",
+      reporterName: null,
+      appVersion: null,
+      platform: null,
+      clientCreatedAt: new Date().toISOString(),
+    },
+    now: new Date(),
+    maxRequests: 5,
+    windowMs: 3600000,
+  });
+  await database.appendAudit({
+    actor: "fixture",
+    action: "legacy.seed",
+    licenseId: first.license.id,
+  });
   const app = await buildLicenseApp({
     database,
     privateKey,
     adminToken: ADMIN,
+    keyring: { active: "test", keys: { test: "ab".repeat(32) } },
     config: configSchema.parse({ limits: { enabled: false } }),
   });
-
-  const issue = async (issuedTo: string) => {
+  try {
+    const saved = (await app.inject({ url: "/admin/products/default/catalog", headers: auth }))
+      .json()
+      .plans.find((p: any) => p.id === "standard");
+    await app.inject({
+      method: "PUT",
+      url: "/admin/products/default/plans/standard",
+      headers: auth,
+      payload: { ...saved, price: 12000, activationLimit: 2 },
+    });
     const response = await app.inject({
       method: "POST",
-      url: "/admin/licenses",
+      url: "/admin/products/default/licenses",
       headers: auth,
-      payload: { issuedTo, activationLimit: 2, entitlements: { seats: 3 } },
+      payload: {
+        requestId: randomUUID(),
+        issuedTo: "Ada Lovelace",
+        plan: "standard",
+      },
     });
-    assert.equal(response.statusCode, 201);
-    return response.json() as { license: { id: string }; key: string };
-  };
-  const post = async (url: string, payload: Record<string, unknown>, headers = {}) => {
-    const response = await app.inject({ method: "POST", url, payload, headers });
-    assert.ok(response.statusCode < 400, `${url} answered ${response.statusCode}`);
-    return response;
-  };
-
-  const first = await issue("Ada Lovelace");
-  const second = await issue("Grace Hopper");
-  const third = await issue("Katherine Johnson");
-
-  for (const installationId of ["machine-1", "machine-2"]) {
-    await post("/v1/register", {
-      installationId,
-      appVersion: "1.4.0",
-      platform: "linux",
-      userName: "Operator",
-      userEmail: "ops@example.com",
-    });
+    assert.equal(response.statusCode, 201, response.body);
+  } finally {
+    await app.close();
+    await database.close();
   }
-
-  await post("/v1/activate", { key: first.key, installationId: "machine-1" });
-  await post("/v1/activate", { key: first.key, installationId: "machine-2" });
-  await post("/v1/activate", { key: second.key, installationId: "machine-1" });
-  await post(`/admin/licenses/${third.license.id}/revoke`, {}, auth);
-  await post(
-    `/admin/licenses/${first.license.id}/deactivate`,
-    { installationId: "machine-2" },
-    auth,
-  );
-
-  await app.close();
-  await database.close();
 }
-
 /**
  * Every ledger row, engine-neutral. Values are stringified because Postgres
  * hands back `bigint` columns as strings and SQLite as numbers; rows are
@@ -154,10 +200,9 @@ async function roundTrip(t: TestContext, second: string): Promise<void> {
   const origin = join(dir, "licenses.sqlite");
   await seed(origin);
   const expected = await dump(origin);
-  assert.ok(
-    expected.licenses.length === 3 && expected.audit_log.length > 0,
-    "fixture is populated",
-  );
+  for (const table of LEDGER) {
+    assert.ok(expected[table].length > 0, `fixture should populate ${table}`);
+  }
 
   await copyLedger({ from: resolveTarget(origin), to: resolveTarget(second) });
   assert.deepEqual(await dump(second), expected, "the copy should hold every row");
@@ -332,6 +377,52 @@ test("verify names what differs instead of just failing", async (t) => {
 });
 
 /** Output lands in cron mail and CI logs; the password must not travel with it. */
+/**
+ * The failure this guards against is silent in both directions: a table missing
+ * from LEDGER_TABLES is not copied, and `verify` — which iterates the same
+ * list — then calls the incomplete mirror a match. Nothing reports an error;
+ * the data is simply gone, and a promoted standby hands every customer whose
+ * trial lived in that table a fresh one.
+ */
+test("every table in the ledger is one the replica knows how to carry", async (t) => {
+  const dir = tempDir(t);
+  const path = join(dir, "licenses.sqlite");
+  const database = await LicenseDatabase.open({ sqlitePath: path });
+  const tables = await sql<{ name: string }>`
+    SELECT name FROM sqlite_master WHERE type = 'table'
+  `.execute(database.db);
+  await database.close();
+
+  const actual = tables.rows
+    .map((row) => row.name)
+    .filter((name) => !name.startsWith("sqlite_") && name !== "schema_migrations")
+    .sort();
+  const carried = LEDGER_TABLES.map((table) => table.name).sort();
+  assert.deepEqual(actual, carried, "add the new table to LEDGER_TABLES in src/replica.ts");
+});
+
+/**
+ * Column lists are written by hand, so a column added in a later migration is
+ * dropped by the copy without anything failing — the row arrives with that
+ * field null and looks like an ordinary row.
+ */
+test("every column of every ledger table is carried too", async (t) => {
+  const dir = tempDir(t);
+  const path = join(dir, "licenses.sqlite");
+  const database = await LicenseDatabase.open({ sqlitePath: path });
+  for (const table of LEDGER_TABLES) {
+    const info = await sql<{ name: string }>`
+      SELECT name FROM pragma_table_info(${table.name})
+    `.execute(database.db);
+    assert.deepEqual(
+      info.rows.map((row) => row.name).sort(),
+      [...table.columns].sort(),
+      `${table.name}: column list in src/replica.ts is out of date`,
+    );
+  }
+  await database.close();
+});
+
 test("a Postgres target is described without its password", () => {
   const target = resolveTarget(
     "postgres://ledger_owner:not-a-real-password@db.example.invalid/ledger?sslmode=require",

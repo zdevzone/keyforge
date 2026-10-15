@@ -82,6 +82,26 @@ test("LICENSE_SERVER_URL must be a URL, not a hostname", () => {
   );
 });
 
+test("Render supplies the public console URL unless a custom origin overrides it", () => {
+  const render = "https://keyforge-example.onrender.com";
+  assert.equal(parseEnv({ RENDER_EXTERNAL_URL: render }).LICENSE_SERVER_URL, render);
+  assert.equal(
+    parseEnv({ LICENSE_SERVER_URL: "", RENDER_EXTERNAL_URL: render }).LICENSE_SERVER_URL,
+    render,
+  );
+  assert.equal(
+    parseEnv({ LICENSE_SERVER_URL: "https://licenses.example.com", RENDER_EXTERNAL_URL: render })
+      .LICENSE_SERVER_URL,
+    "https://licenses.example.com",
+  );
+  assert.equal(parseEnv({}).LICENSE_SERVER_URL, undefined);
+  assert.throws(() => parseEnv({ RENDER_EXTERNAL_URL: "invalid" }), /LICENSE_SERVER_URL/);
+  assert.throws(
+    () => parseEnv({ LICENSE_SERVER_URL: "invalid", RENDER_EXTERNAL_URL: render }),
+    /LICENSE_SERVER_URL/,
+  );
+});
+
 test("a seed address that is not an address is caught before it fails to seed", () => {
   assert.throws(() => parseEnv({ LICENSE_SEED_ADMIN_EMAIL: "nope" }), /LICENSE_SEED_ADMIN_EMAIL/);
   assert.equal(

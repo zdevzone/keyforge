@@ -1,4 +1,4 @@
-import { adminClient } from "better-auth/client/plugins";
+import { adminClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 import { ac, roles } from "./permissions";
@@ -11,7 +11,16 @@ import { ac, roles } from "./permissions";
 // server reports (/admin/config → viewer.role), and the server refuses
 // anything it should not allow regardless of what the browser believes.
 export const authClient = createAuthClient({
-  plugins: [adminClient({ ac, roles })],
+  plugins: [
+    adminClient({ ac, roles }),
+    inferAdditionalFields({
+      user: {
+        phone: { type: "string" },
+        jobTitle: { type: "string" },
+        timezone: { type: "string" },
+      },
+    }),
+  ],
 });
 
 export const { useSession, signIn, signOut, changePassword } = authClient;

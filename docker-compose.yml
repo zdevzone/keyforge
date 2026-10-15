@@ -24,7 +24,8 @@ services:
   #   docker compose --profile postgres up
   #   DATABASE_URL=postgres://keyforge:keyforge@postgres:5432/keyforge
   postgres:
-    image: postgres:16
+    # Keep the existing data-directory major; upgrading to 18 requires pg_upgrade.
+    image: ${POSTGRES_IMAGE:-postgres:16.15}
     profiles: ["postgres"]
     environment:
       POSTGRES_USER: keyforge

@@ -9,7 +9,11 @@ export type Entitlements = Record<string, EntitlementValue>;
 
 export interface License {
   id: string;
-  keyHash: string;
+  keyHash?: string;
+  keyReference: string;
+  keyStored: boolean;
+  revision: number;
+  productId: string;
   plan: string;
   /** Vendor-defined key/value entitlements; the app consuming tokens interprets them. */
   entitlements: Entitlements;
@@ -34,6 +38,10 @@ export interface PlanPreset {
   entitlements: Entitlements;
   durationDays?: number;
   activationLimit?: number;
+  revision?: number;
+  price: number | null;
+  currency: "ETB";
+  description?: string;
 }
 
 export type OperatorRole = "admin" | "support";
@@ -60,11 +68,33 @@ export interface AdminConfig {
     planPresets: Record<string, PlanPreset>;
   };
   /** The public half of the signing key. The private key never leaves the server. */
-  signingKey: { keyType: string; fingerprint: string; publicKeyPem: string };
+  signingKeys: {
+    kid: string;
+    keyType: string;
+    fingerprint: string;
+    publicKeyPem: string;
+    retiredAt: string | null;
+  }[];
 }
 
 export function fetchAdminConfig(): Promise<AdminConfig> {
-  return get("/admin/config");
+  return Promise.all([get<AdminConfig>("/admin/config"), get<any>(productPath("/catalog"))]).then(
+    ([config, catalog]) => ({
+      ...config,
+      signingKeys: catalog.product.keys.map((k: any) => ({
+        ...k,
+        keyType: "ed25519",
+        fingerprint: k.kid,
+      })),
+      licenses: {
+        ...config.licenses,
+        defaultPlan: catalog.plans.find((p: any) => !p.archived)?.id ?? "",
+        planPresets: Object.fromEntries(
+          catalog.plans.filter((p: any) => !p.archived).map((p: any) => [p.id, p]),
+        ),
+      },
+    }),
+  );
 }
 
 /** One entitlement key as it actually appears across the ledger. */
@@ -85,10 +115,19 @@ export interface EntitlementCatalog {
 }
 
 export function fetchEntitlementCatalog(): Promise<EntitlementCatalog> {
-  return get("/admin/entitlements");
+  return get(productPath("/catalog")).then((c: any) => ({
+    catalog: c.usage.map((u: any) => ({ ...u, values: [], moreValues: 0 })),
+    licensesScanned: c.licensesScanned,
+  }));
 }
 
-export interface Activation {
+export interface DeviceSummary {
+  machineGroups: { id: string; supportReference: string }[];
+  signalKinds: string[];
+  signalAvailability: "Available" | "Partial" | "Unavailable";
+  signalsUpdatedAt?: string;
+}
+export interface Activation extends DeviceSummary {
   licenseId: string;
   installationId: string;
   activatedAt: string;
@@ -114,11 +153,15 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+export async function request<T>(
+  path: string,
+  init?: { method?: string; body?: unknown; headers?: Record<string, string> },
+): Promise<T> {
   const response = await fetch(path, {
     method: init?.method ?? "GET",
     headers: {
       accept: "application/json",
+      ...init?.headers,
       ...(init?.body !== undefined ? { "content-type": "application/json" } : {}),
     },
     ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
@@ -158,10 +201,17 @@ export function fetchLicenses(params: LicenseListParams = {}): Promise<LicensePa
   if (params.status) search.set("status", params.status);
   search.set("limit", String(pageSize));
   search.set("offset", String((params.page ?? 0) * pageSize));
-  return get(`/admin/licenses?${search.toString()}`);
+  return get(`${productPath("/licenses")}?${search.toString()}`);
 }
 
-export interface Installation {
+export interface Installation extends DeviceSummary {
+  activeLicense: boolean;
+  licenses: {
+    licenseId: string;
+    keyReference: string;
+    status: string;
+    deactivatedAt: string | null;
+  }[];
   installationId: string;
   registeredAt: string;
   lastSeenAt: string;
@@ -187,7 +237,114 @@ export function fetchInstallations(
   if (params.licensed !== undefined) search.set("licensed", params.licensed ? "yes" : "no");
   search.set("limit", String(pageSize));
   search.set("offset", String((params.page ?? 0) * pageSize));
-  return get(`/admin/installations?${search.toString()}`);
+  return get(`${productPath("/installations")}?${search.toString()}`);
+}
+
+/**
+ * One machine in the trial ledger, as /admin/machines returns it.
+ *
+ * A reported group is a recognition hint, not a verified physical computer.
+ */
+export interface Machine {
+  id: string;
+  /** Short and quotable; what the customer reads out to support. */
+  supportReference: string;
+  firstRegisteredAt: string;
+  lastRegisteredAt: string;
+  registrationCount: number;
+  /** Registrations an operator asked for, so repeats are distinguishable. */
+  recheckCount: number;
+  /** The client's own claim that its trial is gone. Evidence, never a verdict. */
+  trialSpentReported: boolean;
+  clearedAt: string | null;
+  /**
+   * What a registration matching this machine would be told right now.
+   * Derived server-side — it is how an operator sees that a clear landed.
+   */
+  trialState: "fresh" | "spent";
+  installationIds: string[];
+  signalKinds: string[];
+  signalAvailability: DeviceSummary["signalAvailability"];
+  signalsUpdatedAt?: string;
+}
+
+export interface MachinePage {
+  machines: Machine[];
+  total: number;
+}
+
+export function fetchMachines(
+  params: { q?: string; page?: number; pageSize?: number } = {},
+): Promise<MachinePage> {
+  const pageSize = params.pageSize ?? 25;
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  search.set("limit", String(pageSize));
+  search.set("offset", String((params.page ?? 0) * pageSize));
+  return get(`${productPath("/machines")}?${search.toString()}`);
+}
+
+/** Grants exactly one more trial — the next registration is fresh, the one after is not. */
+export function clearMachine(id: string): Promise<{
+  machine: { id: string; clearedAt: string };
+}> {
+  return request(`${productPath("/machines")}/${encodeURIComponent(id)}/clear`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export type SupportCategory = "technical" | "licensing" | "billing" | "feature_request" | "other";
+export type SupportUrgency = "low" | "normal" | "high" | "critical";
+
+export interface SupportRequestSummary {
+  id: string;
+  clientRequestId: string;
+  licenseId: string;
+  installationId: string;
+  category: SupportCategory;
+  urgency: SupportUrgency;
+  subject: string;
+  reporterName: string | null;
+  appVersion: string | null;
+  platform: string | null;
+  status: "queued" | "in_progress" | "waiting_customer" | "resolved" | "closed";
+  assignedTo: string | null;
+  revision: number;
+  messages: { id: string; author: string; body: string; internal: boolean; createdAt: string }[];
+  clientCreatedAt: string;
+  receivedAt: string;
+  updatedAt: string;
+}
+
+export interface SupportRequest extends SupportRequestSummary {
+  message: string;
+}
+
+export interface SupportRequestPage {
+  requests: SupportRequestSummary[];
+  total: number;
+}
+
+export function fetchSupportRequests(
+  params: {
+    category?: SupportCategory;
+    urgency?: SupportUrgency;
+    page?: number;
+    pageSize?: number;
+  } = {},
+): Promise<SupportRequestPage> {
+  const pageSize = params.pageSize ?? 25;
+  const search = new URLSearchParams();
+  if (params.category) search.set("category", params.category);
+  if (params.urgency) search.set("urgency", params.urgency);
+  search.set("limit", String(pageSize));
+  search.set("offset", String((params.page ?? 0) * pageSize));
+  return get(`${productPath("/support")}?${search.toString()}`);
+}
+
+export function fetchSupportRequest(id: string): Promise<{ request: SupportRequest }> {
+  return get(`${productPath("/support")}/${encodeURIComponent(id)}`);
 }
 
 export interface AuditEntry {
@@ -211,42 +368,66 @@ export function fetchAudit(options: { before?: number; licenseId?: string } = {}
 }
 
 export function fetchLicense(id: string): Promise<{ license: License }> {
-  return get(`/admin/licenses/${encodeURIComponent(id)}`);
+  return get(`${productPath("/licenses")}/${encodeURIComponent(id)}`);
 }
 
 export function fetchActivations(id: string): Promise<{ activations: Activation[] }> {
-  return get(`/admin/licenses/${encodeURIComponent(id)}/activations`);
+  return get(`${productPath("/licenses")}/${encodeURIComponent(id)}/activations`);
 }
 
 export interface IssueLicenseInput {
+  requestId: string;
+  subjectKind?: "installation" | "service";
   plan: string;
-  entitlements: Entitlements;
+  planRevision?: number;
+  expectedPrice: number;
   issuedTo: string;
-  activationLimit: number;
-  expiresAt: string | null;
+  installationId?: string;
+  licenseRequestId?: string;
+  payment?: { date: string; method: string; reference: string };
 }
-
-/** The returned key exists only in this response — the server stores its hash. */
-export function issueLicense(input: IssueLicenseInput): Promise<{ license: License; key: string }> {
-  return request("/admin/licenses", { method: "POST", body: input });
+export interface IssuedLicense {
+  license: License;
+  key: string;
+  sale: { id: string; amount: number; currency: string; status: string };
+  delivery: { status: string; error: string | null };
+}
+export function issueLicense(input: IssueLicenseInput): Promise<IssuedLicense> {
+  return request(productPath("/licenses"), { method: "POST", body: input });
 }
 
 export function updateLicense(
   id: string,
   input: Partial<
-    Pick<IssueLicenseInput, "issuedTo" | "activationLimit" | "expiresAt" | "entitlements">
+    Pick<License, "issuedTo" | "activationLimit" | "expiresAt" | "entitlements"> & {
+      revision: number;
+    }
   >,
 ): Promise<{ license: License }> {
-  return request(`/admin/licenses/${encodeURIComponent(id)}`, { method: "PATCH", body: input });
+  return request(`${productPath("/licenses")}/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: input,
+  });
 }
 
 export function revokeLicense(id: string): Promise<{ license: License }> {
-  return request(`/admin/licenses/${encodeURIComponent(id)}/revoke`, { method: "POST", body: {} });
+  return request(`${productPath("/licenses")}/${encodeURIComponent(id)}/revoke`, {
+    method: "POST",
+    body: {},
+  });
 }
 
 export function releaseActivation(id: string, installationId: string): Promise<{ ok: boolean }> {
-  return request(`/admin/licenses/${encodeURIComponent(id)}/deactivate`, {
+  return request(`${productPath("/licenses")}/${encodeURIComponent(id)}/deactivate`, {
     method: "POST",
     body: { installationId },
   });
+}
+
+export function productPath(path: string) {
+  return (
+    "/admin/products/" +
+    encodeURIComponent(localStorage.getItem("keyforge-product") || "default") +
+    path
+  );
 }

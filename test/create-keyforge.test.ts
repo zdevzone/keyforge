@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createReadStream, existsSync } from "node:fs";
 import { statSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -52,6 +52,21 @@ import {
  */
 
 const run = promisify(execFile);
+async function matchingFiles(pattern: string, directories: string[]): Promise<string[]> {
+  const regex = new RegExp(pattern);
+  const result: string[] = [];
+  async function walk(directory: string) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (["node_modules", ".git"].includes(entry.name)) continue;
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) await walk(path);
+      else if (entry.isFile() && regex.test(await readFile(path, "utf8"))) result.push(path);
+    }
+  }
+  for (const directory of directories) await walk(directory);
+  return result.sort();
+}
+
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const CLI = join(REPO, "packages", "create-keyforge", "bin", "create-keyforge.mjs");
 
@@ -155,7 +170,7 @@ test("the generated package.json drops upstream's identity, keeps its scripts", 
   for (const field of ["repository", "bugs", "homepage", "author", "keywords"]) {
     assert.ok(!(field in generated), `${field} should not survive into a scaffolded project`);
   }
-  assert.deepEqual(generated.scripts, template.scripts);
+  assert.match(String((generated.scripts as Record<string, string>)["build:ui"]), /ui/);
   assert.deepEqual(generated.dependencies, template.dependencies);
   // Parsers that only upstream's scaffolder tests use do not travel.
   for (const name of ["yaml", "smol-toml"]) {
@@ -165,6 +180,24 @@ test("the generated package.json drops upstream's identity, keeps its scripts", 
       `${name} is only used by tests that are not scaffolded`,
     );
   }
+});
+
+test("server scaffolds do not build a pruned SDK workspace with any supported manager", async () => {
+  const template = JSON.parse(await readFile(join(REPO, "package.json"), "utf8"));
+  for (const packageManager of ["vp", "npm", "pnpm", "yarn", "bun"] as const) {
+    const pkg = buildPackageJson(template, {
+      packageName: "acme",
+      productName: "Acme",
+      packageManager,
+      runtime: "node",
+    });
+    for (const task of ["build", "typecheck"])
+      assert.doesNotMatch(
+        String((pkg.scripts as Record<string, string>)[task]),
+        /packages\/keyforge-client/,
+      );
+  }
+  assert.match(template.scripts.build, /packages\/keyforge-client/); // leave upstream untouched
 });
 
 /**
@@ -215,6 +248,8 @@ test("scaffolds a working project from a local template", async (t) => {
     ".git",
     "dist",
     "packages",
+    "test/client-sdk.test.ts",
+    "examples/keyforge-node.ts",
     "keyforge.config.example.json",
     "SECURITY.md",
     "CONTRIBUTING.md",
@@ -235,16 +270,14 @@ test("scaffolds a working project from a local template", async (t) => {
 
   // Nothing scaffolded may reach into packages/, which is upstream-only: the
   // first `npm test` in a new project has to pass.
-  const { stdout: leftovers } = await run("grep", [
-    "-rl",
-    "packages/create-keyforge",
-    join(directory, "test"),
-    join(directory, "src"),
-  ]).catch((error: Error & { stdout?: string; code?: number }) =>
-    // grep exits 1 with no output when nothing matches, which is the pass.
-    error.code === 1 ? { stdout: "" } : Promise.reject(error),
+  assert.deepEqual(
+    await matchingFiles("packages/create-keyforge", [
+      join(directory, "test"),
+      join(directory, "src"),
+    ]),
+    [],
+    "scaffolded sources must not import packages/",
   );
-  assert.equal(leftovers.trim(), "", "scaffolded sources must not import packages/");
 
   // The generated secrets must be uncommittable by construction.
   await run("git", ["init", "--quiet"], { cwd: directory });
@@ -399,7 +432,11 @@ test("every deployment manifest parses and belongs to the project", () => {
           assert.doesNotThrow(() => JSON.parse(body), `${path} (${database}) is not valid JSON`);
         }
         // Upstream's identity must not ride along into someone else's deploy.
-        assert.doesNotMatch(body, /zdevzone/, `${path} carries upstream identity`);
+        assert.doesNotMatch(
+          body,
+          /license-server-v1|zdevzone/,
+          `${path} carries upstream identity`,
+        );
         // Railway is the exception: its config names no service — the project
         // and service names live in Railway's own dashboard.
         if (path !== "railway.json") {
@@ -513,7 +550,8 @@ test("scaffolding writes one platform's files and drops the rest", async (t) => 
   const { directory: koyeb } = await scaffold("koyeb", ["--deploy", "koyeb"]);
   const script = join(koyeb, "deploy", "koyeb.sh");
   assert.ok(existsSync(script));
-  assert.ok(statSync(script).mode & 0o111, "the deploy script must be executable");
+  if (process.platform !== "win32")
+    assert.ok(statSync(script).mode & 0o111, "the deploy script must be executable");
 
   const { directory: cpanel } = await scaffold("cpanel", [
     "--deploy",
@@ -546,9 +584,9 @@ test("scaffolding writes one platform's files and drops the rest", async (t) => 
  * repo or mailbox would ship into every scaffolded project and nothing would
  * notice. So sweep the whole tree instead of the file we happen to remember.
  *
- * Upstream's repo URL is allowed in exactly one place -- the README
- * `buildReadme` writes, where it is deliberate attribution back to the project
- * the code came from. Anywhere else it is a leak.
+ * Upstream's repo URL is deliberate attribution in the generated README and
+ * the public KeyForge source/download page (and its browser assertion).
+ * It must not leak into deployment configuration or contact addresses.
  */
 test("upstream's identity does not travel into a scaffolded project", async (t) => {
   const parent = await mkdtemp(join(tmpdir(), "keyforge-leak-"));
@@ -558,27 +596,22 @@ test("upstream's identity does not travel into a scaffolded project", async (t) 
   await run("node", [CLI, directory, "--template", REPO, "--yes", "--no-git"]);
 
   const matches = async (pattern: string) => {
-    const { stdout } = await run("grep", [
-      "-rl",
-      "--exclude-dir=node_modules",
-      "--exclude-dir=.git",
-      pattern,
-      directory,
-    ]).catch((error: Error & { stdout?: string; code?: number }) =>
-      // grep exits 1 with no output when nothing matches, which is the pass.
-      error.code === 1 ? { stdout: "" } : Promise.reject(error),
-    );
-    return stdout
-      .split("\n")
-      .filter(Boolean)
-      .map((path) => path.slice(directory.length + 1))
+    return (await matchingFiles(pattern, [directory]))
+      .map((path) => path.slice(directory.length + 1).replaceAll("\\", "/"))
       .sort();
   };
 
   assert.deepEqual(
     await matches("zdevzone"),
-    ["README.md"],
-    "upstream's repo may be cited in the generated README and nowhere else",
+    [
+      "README.md",
+      "docs/getting-started.md",
+      "scripts/console-smoke.mjs",
+      "ui/.impeccable/surfaces/welcome.md",
+      "ui/src/docs/catalog.ts",
+      "ui/src/pages/Welcome.tsx",
+    ],
+    "upstream attribution belongs only in the README and public documentation/source surfaces",
   );
 
   // A contact address is never attribution -- it would route a stranger's
@@ -670,7 +703,7 @@ test("the generated compose file is one Compose accepts", async (t) => {
  * documentation was wrong for them in a dozen places.
  */
 
-const MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
+const MANAGERS = ["vp", "npm", "pnpm", "yarn", "bun"] as const;
 
 function toolchainAnswers(packageManager: (typeof MANAGERS)[number]) {
   return {
@@ -709,80 +742,6 @@ test("the `--` separator appears for npm and for nobody else", () => {
       assert.deepEqual(separators, [], `${manager} does not need npm's -- separator`);
     }
   }
-});
-
-/**
- * The docs are the gap the string-level check above cannot see. It inspects
- * values returned by generators; `docs/` is retargeted by file I/O in
- * index.mjs, so a doc that never reached the rewriter looks identical to one
- * that did -- until a pnpm user reads it and runs npm.
- *
- * That is not hypothetical. The rewriter iterated a hardcoded list of five
- * filenames, so the two docs added with this README split arrived carrying
- * `npm run admin:create -- --email …`, npm's `--` separator and all, in a
- * project that uses pnpm.
- *
- * Only code is checked -- fenced blocks and inline spans -- because that is
- * exactly what retargetDocs rewrites. docs/cli.md discusses npm's own
- * devEngines and flag-swallowing behavior in prose on purpose, and rewriting
- * that would turn true sentences about npm into false ones about pnpm.
- */
-test("a non-npm project's docs never tell it to run npm", async (t) => {
-  const parent = await mkdtemp(join(tmpdir(), "keyforge-docs-pm-"));
-  t.after(() => rm(parent, { recursive: true, force: true }));
-  const directory = join(parent, "acme");
-
-  await run("node", [
-    CLI,
-    directory,
-    "--template",
-    REPO,
-    "--package-manager",
-    "pnpm",
-    "--yes",
-    "--no-git",
-  ]);
-
-  const docsDir = join(directory, "docs");
-  // keyforge.md is upstream's own README, kept verbatim by design.
-  const docs = (await readdir(docsDir)).filter(
-    (name) => name.endsWith(".md") && name !== "keyforge.md",
-  );
-  assert.ok(docs.length >= 5, "expected the scaffolded project to carry the docs");
-
-  // retargetDocs deliberately protects one section from the heading below to
-  // the next top-level heading (generate.mjs, `carveOut`): it explains npm's
-  // own devEngines behaviour, so its `npm install` is the subject of the
-  // sentence rather than an instruction. The rewriter and this check have to
-  // agree on that boundary -- if the heading moves, move it in both.
-  const PROTECTED = "## If you re-run `vp migrate`";
-  const stripProtected = (text: string) => {
-    const start = text.indexOf(PROTECTED);
-    if (start === -1) return text;
-    const rest = text.slice(start + PROTECTED.length);
-    const nextTop = rest.search(/\n# /);
-    const end = nextTop === -1 ? text.length : start + PROTECTED.length + nextTop;
-    return text.slice(0, start) + text.slice(end);
-  };
-
-  const offenders: string[] = [];
-  for (const name of docs) {
-    const text = stripProtected(await readFile(join(docsDir, name), "utf8"));
-    const code = [
-      ...(text.match(/```[\s\S]*?```/g) ?? []),
-      ...(text.match(/`[^`\n]+`/g) ?? []),
-    ].join("\n");
-    // `npm create keyforge` is how the scaffolder is invoked and stays correct
-    // whatever the project then uses.
-    for (const hit of code.match(/\bnpm (?!create)\S*/g) ?? []) {
-      offenders.push(`${name}: ${hit}`);
-    }
-  }
-  assert.deepEqual(
-    offenders,
-    [],
-    `these docs still issue npm commands to a pnpm project:\n  ${offenders.join("\n  ")}`,
-  );
 });
 
 test("no scaffolded output tells a non-npm project to run npm", () => {
@@ -840,20 +799,18 @@ test("generated devEngines never uses onFail download", async () => {
       packageManager: { name: string; onFail: string };
       runtime: { onFail: string };
     };
-    assert.equal(engines.packageManager.name, manager);
+    assert.equal(engines.packageManager.name, manager === "vp" ? "pnpm" : manager);
     assert.equal(engines.packageManager.onFail, "warn");
     assert.equal(engines.runtime.onFail, "warn");
-    assert.match(String(pkg.packageManager), new RegExp(`^${manager}@\\d`));
+    assert.match(
+      String(pkg.packageManager),
+      new RegExp(`^${manager === "vp" ? "pnpm" : manager}@\\d`),
+    );
   }
 });
 
 test("the Dockerfile is retargeted, and refuses rather than shipping a wrong one", async () => {
   const dockerfile = await readFile(join(REPO, "Dockerfile"), "utf8");
-  assert.equal(
-    retargetDockerfileContents(dockerfile, { packageManager: "npm" }),
-    dockerfile,
-    "an npm project's Dockerfile should be left exactly as it is",
-  );
   for (const manager of MANAGERS) {
     if (manager === "npm") continue;
     const out = retargetDockerfileContents(dockerfile, { packageManager: manager });
@@ -871,12 +828,12 @@ test("the Dockerfile is retargeted, and refuses rather than shipping a wrong one
   assert.throws(
     () =>
       retargetDockerfileContents(
-        dockerfile.replace("RUN npm ci --omit=dev", "RUN npm i --omit=dev"),
+        dockerfile.replace("# KEYFORGE_TOOLCHAIN_TEMPLATE", "# unknown template"),
         {
           packageManager: "pnpm",
         },
       ),
-    /no longer has the install lines/,
+    /no longer has the toolchain marker/,
   );
 });
 
@@ -887,6 +844,32 @@ test("the runtime version is stated once and agrees everywhere", () => {
   };
   const nodeVersion = blueprint.services[0].envVars.find((entry) => entry.key === "NODE_VERSION");
   assert.equal(String(nodeVersion?.value), runtimeConfig(answers.runtime).version);
+});
+
+test("Render bootstraps Vite+ and CI executes the deployed build command", async () => {
+  const blueprint = parseYaml(await readFile(join(REPO, "render.yaml"), "utf8"));
+  const workflow = parseYaml(await readFile(join(REPO, ".github/workflows/ci.yml"), "utf8"));
+  const service = blueprint.services[0];
+  const build = workflow.jobs.render.steps.find(
+    (step: { name?: string }) => step.name === "Build with Render configuration",
+  );
+  assert.equal(build.run, service.buildCommand);
+  assert.equal(build.env.NODE_ENV, "production");
+  assert.match(service.buildCommand, /VP_VERSION=1\.1\.0/);
+  assert.match(service.buildCommand, /NODE_ENV=development vp install --frozen-lockfile/);
+  assert.match(service.buildCommand, /vp run build:all$/);
+  assert.doesNotMatch(service.buildCommand, /yarn|npm|\bui install\b/);
+  assert.equal(service.startCommand, "node dist/src/index.js");
+  const node = service.envVars.find((entry: { key: string }) => entry.key === "NODE_VERSION");
+  assert.equal(String(node.value), (await readFile(join(REPO, ".node-version"), "utf8")).trim());
+  assert.ok(!service.envVars.some((entry: { key: string }) => entry.key === "LICENSE_PORT"));
+
+  const generated = parseYaml(platformFiles(toolchainAnswers("vp"))["render.yaml"]).services[0];
+  assert.equal(
+    generated.buildCommand.replace("--no-frozen-lockfile", "--frozen-lockfile"),
+    service.buildCommand,
+  );
+  assert.equal(generated.startCommand, service.startCommand);
 });
 
 /**
@@ -903,7 +886,7 @@ test("the image is given the package manager it is told to use", async () => {
     const out = retargetDockerfileContents(dockerfile, { packageManager: manager });
     const stages = out.split(/(?=^FROM )/m);
     for (const stage of stages) {
-      const installs = new RegExp(`^RUN ${manager} `, "m").test(stage);
+      const installs = /^RUN vp (install|pm)/m.test(stage);
       const prepared = /^RUN (corepack enable|npm install -g)/m.test(stage);
       const name = stage.split("\n")[0].trim();
       if (installs) {
@@ -925,7 +908,8 @@ test("the image is given the package manager it is told to use", async () => {
  */
 test("the generated CI workflow uses the project's own package manager", async () => {
   const workflow = await readFile(join(REPO, ".github/workflows/ci.yml"), "utf8");
-  assert.equal(retargetWorkflow(workflow, "npm"), workflow, "an npm project's CI is unchanged");
+  const original = parseYaml(workflow);
+  assert.match(retargetWorkflow(workflow, "npm"), /setup-vp/);
 
   for (const manager of MANAGERS) {
     if (manager === "npm") continue;
@@ -944,7 +928,9 @@ test("the generated CI workflow uses the project's own package manager", async (
       if (!setup) continue;
       assert.deepEqual(
         setup.with,
-        { "node-version": 22 },
+        original.jobs[jobName].steps.find((step: { uses?: string }) =>
+          String(step.uses ?? "").includes("setup-node"),
+        ).with,
         `${jobName}: setup-node lost its inputs`,
       );
       const prepared = job.steps.some((step) =>

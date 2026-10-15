@@ -1,152 +1,249 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
-import { fetchAdminConfig, issueLicense, type License } from "./api";
 import {
-  Button,
-  EntitlementsEditor,
-  ErrorNote,
-  Modal,
-  TextField,
-  entitlementsToRows,
-  rowsToEntitlements,
-  type EntitlementRow,
-} from "./components";
+  fetchAdminConfig,
+  issueLicense,
+  productPath,
+  request,
+  type IssuedLicense,
+  type AdminConfig,
+} from "./api";
+import { Button, ErrorNote, Modal, TextField, Spinner } from "./components";
+import { Checkbox } from "./components/Checkbox";
+import { Choice } from "./components/Choice";
+import { PaymentFields } from "./components/PaymentFields";
+import { birr } from "./pages/Finance";
 
-/**
- * Issue flow in two modals: the form, then the one-time key reveal. The key is
- * in this response and nowhere else, ever — the server keeps only its hash —
- * so the reveal step is deliberately loud and requires an explicit dismissal.
- *
- * Plan presets come from the deployment config; picking one fills the
- * entitlements, seat count and expiry, all still editable per license.
- */
-export default function IssueLicense(props: { onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const { data: config } = useQuery({ queryKey: ["admin-config"], queryFn: fetchAdminConfig });
-  const [issuedTo, setIssuedTo] = useState("");
-  const [plan, setPlan] = useState<string | null>(null);
-  const [rows, setRows] = useState<EntitlementRow[] | null>(null);
-  const [activationLimit, setActivationLimit] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState("");
-  const [issued, setIssued] = useState<{ license: License; key: string } | null>(null);
-
-  const defaultPlan = config?.licenses.defaultPlan ?? "standard";
-  const effectivePlan = plan ?? defaultPlan;
-  const presets = config?.licenses.planPresets ?? {};
-  const preset = presets[effectivePlan];
-  const effectiveRows = rows ?? entitlementsToRows(preset?.entitlements ?? {});
-  const effectiveLimit =
-    activationLimit ??
-    String(preset?.activationLimit ?? config?.licenses.defaultActivationLimit ?? 1);
-
-  function applyPlan(name: string) {
-    setPlan(name);
-    const next = presets[name];
-    // Switching plans re-seeds the editable fields from the preset.
-    setRows(entitlementsToRows(next?.entitlements ?? {}));
-    setActivationLimit(
-      String(next?.activationLimit ?? config?.licenses.defaultActivationLimit ?? 1),
+type Recipients = {
+  requests: { id: string; name: string; email: string; plan: string }[];
+  installations: { id: string; name: string; email: string }[];
+};
+export default function IssueLicense({
+  onClose,
+  initialRequestId,
+}: {
+  onClose: () => void;
+  initialRequestId?: string;
+}) {
+  const config = useQuery({ queryKey: ["admin-config"], queryFn: fetchAdminConfig });
+  const recipients = useQuery({
+    queryKey: ["license-recipients"],
+    queryFn: () => request<Recipients>(productPath("/license-recipients")),
+  });
+  if (!config.data || !recipients.data)
+    return (
+      <Modal title="Issue a license" onClose={onClose}>
+        {config.error || recipients.error ? (
+          <ErrorNote message={(config.error || recipients.error)!.message} />
+        ) : (
+          <Spinner label="Loading plans and customers…" />
+        )}
+      </Modal>
     );
-    if (next?.durationDays) {
-      // applyPlan runs from the plan button's onClick, never during render.
-      // The purity rule cannot see that: it flags any impure call inside a
-      // function declared in the component body. Restructuring correct code
-      // to satisfy it would be worse than saying so here.
-      // oxlint-disable-next-line react/purity
-      const expires = new Date(Date.now() + next.durationDays * 24 * 60 * 60 * 1000);
-      setExpiresAt(expires.toISOString().slice(0, 10));
-    }
-  }
-
+  return (
+    <IssueForm
+      config={config.data}
+      recipients={recipients.data}
+      initialRequestId={initialRequestId}
+      onClose={onClose}
+    />
+  );
+}
+function IssueForm({
+  config,
+  recipients,
+  initialRequestId,
+  onClose,
+}: {
+  config: AdminConfig;
+  recipients: Recipients;
+  initialRequestId?: string;
+  onClose: () => void;
+}) {
+  const cache = useQueryClient();
+  const [recipient, setRecipient] = useState(initialRequestId ? "request:" + initialRequestId : "");
+  const [customer, setCustomer] = useState("");
+  const [subjectKind, setSubjectKind] = useState<"installation" | "service">("installation");
+  const [plan, setPlan] = useState(
+    recipients.requests.find((v) => v.id === initialRequestId)?.plan || config.licenses.defaultPlan,
+  );
+  const [paid, setPaid] = useState(false),
+    [method, setMethod] = useState("Bank transfer"),
+    [reference, setReference] = useState("");
+  const [requestId] = useState(() => crypto.randomUUID());
+  const [paymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [issued, setIssued] = useState<IssuedLicense | null>(null);
+  const selected = config.licenses.planPresets[plan];
   const mutation = useMutation({
     mutationFn: issueLicense,
     onSuccess: (result) => {
       setIssued(result);
-      void queryClient.invalidateQueries({ queryKey: ["licenses"] });
+      for (const key of [
+        "licenses",
+        "finance",
+        "financial-report",
+        "license-requests",
+        "license-recipients",
+        "reports",
+      ])
+        void cache.invalidateQueries({ queryKey: [key] });
     },
   });
-
-  function onSubmit(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault();
+    if (mutation.isPending || !selected || selected.price == null) return;
     mutation.mutate({
-      issuedTo: issuedTo.trim(),
-      plan: effectivePlan.trim() || defaultPlan,
-      entitlements: rowsToEntitlements(effectiveRows),
-      activationLimit: Number(effectiveLimit),
-      expiresAt: expiresAt ? new Date(`${expiresAt}T23:59:59Z`).toISOString() : null,
+      requestId,
+      plan,
+      subjectKind,
+      expectedPrice: selected.price,
+      planRevision: selected.revision,
+      issuedTo: customer.trim(),
+      ...(recipient.startsWith("request:")
+        ? { licenseRequestId: recipient.slice(8) }
+        : recipient.startsWith("installation:")
+          ? { installationId: recipient.slice(13) }
+          : {}),
+      ...(paid ? { payment: { date: paymentDate, method, reference } } : {}),
     });
   }
-
-  if (issued) {
-    return <KeyReveal license={issued.license} licenseKey={issued.key} onClose={props.onClose} />;
-  }
-
-  const planNames = Object.keys(presets);
-
+  if (issued) return <KeyReveal result={issued} onClose={onClose} />;
   return (
-    <Modal title="Issue a license" onClose={props.onClose}>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <TextField
-          label="Customer"
-          value={issuedTo}
-          onChange={setIssuedTo}
-          placeholder="Customer name"
+    <Modal title="Issue a license" onClose={() => !mutation.isPending && onClose()}>
+      <form onSubmit={submit} className="flex flex-col gap-5">
+        <Choice
+          label="Customer / delivery"
+          value={recipient}
+          onChange={(value) => {
+            setRecipient(value);
+            const r = recipients.requests.find((v) => "request:" + v.id === value);
+            if (r && config.licenses.planPresets[r.plan]) setPlan(r.plan);
+          }}
+          required
+          options={[
+            ...recipients.requests.map((v) => ({
+              value: "request:" + v.id,
+              label: v.name + " · " + v.email + " · License request",
+            })),
+            ...recipients.installations.map((v) => ({
+              value: "installation:" + v.id,
+              label: (v.name || v.email || v.id) + " · " + v.id,
+            })),
+            { value: "manual", label: "Manual delivery / service customer" },
+          ]}
         />
-        <label className="block text-sm">
-          <span className="font-medium text-slate-700">Plan</span>
-          {planNames.length > 0 ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {planNames.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => applyPlan(name)}
-                  className={`rounded-lg px-3 py-1.5 text-sm ${
-                    effectivePlan === name
-                      ? "bg-slate-900 text-white"
-                      : "border border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {name}
-                </button>
+        {recipient === "manual" && (
+          <>
+            <TextField label="Customer name" value={customer} onChange={setCustomer} required />
+            <p className="text-sm text-muted-foreground">
+              Copy and share the key yourself, or ask the customer to use the public license request
+              page.
+            </p>
+          </>
+        )}
+        <Choice
+          label="License subject"
+          value={subjectKind}
+          onChange={(v) => setSubjectKind(v as typeof subjectKind)}
+          options={[
+            { value: "installation", label: "Application installation" },
+            { value: "service", label: "Service deployment" },
+          ]}
+        />
+        <Choice
+          label="Plan"
+          value={plan}
+          onChange={(value) => {
+            setPlan(value);
+            setPaid(false);
+          }}
+          required
+          options={Object.keys(config.licenses.planPresets).map((value) => ({
+            value,
+            label: value,
+          }))}
+        />
+        {selected ? (
+          <section aria-label="Selected plan terms" className="rounded-md bg-muted p-4">
+            <p className="font-medium break-words">
+              {plan} · {selected.price == null ? "Price not configured" : birr(selected.price)}
+            </p>
+            {selected.description && (
+              <p className="mt-1 text-sm text-muted-foreground">{selected.description}</p>
+            )}
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Activation seats</dt>
+                <dd>{selected.activationLimit}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Duration</dt>
+                <dd>{selected.durationDays ? selected.durationDays + " days" : "Perpetual"}</dd>
+              </div>
+            </dl>
+            <h3 className="mt-3 text-sm font-medium">Entitlements</h3>
+            {!Object.keys(selected.entitlements).length && (
+              <p className="mt-1 text-sm text-muted-foreground">No additional entitlements.</p>
+            )}
+            <ul className="mt-1 flex flex-col gap-1 text-sm break-words">
+              {Object.entries(selected.entitlements).map(([key, value]) => (
+                <li key={key}>
+                  {key}: {String(value)}
+                </li>
               ))}
-              <input
-                value={effectivePlan}
-                onChange={(event) => setPlan(event.target.value)}
-                className="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-              />
-            </div>
-          ) : (
-            <input
-              value={effectivePlan}
-              onChange={(event) => setPlan(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-slate-500 focus:outline-none"
-            />
-          )}
-        </label>
-        <EntitlementsEditor rows={effectiveRows} onChange={setRows} />
-        <div className="grid grid-cols-2 gap-4">
-          <TextField
-            label="Activation limit"
-            type="number"
-            required
-            value={effectiveLimit}
-            onChange={setActivationLimit}
-          />
-          <TextField
-            label="Expires (optional)"
-            type="date"
-            value={expiresAt}
-            onChange={setExpiresAt}
+            </ul>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Terms and price are copied from this plan. Payment does not control license
+              validation.
+            </p>
+          </section>
+        ) : (
+          <p>
+            No active plans.{" "}
+            <Link className="text-primary underline" to="/entitlements" onClick={onClose}>
+              Create a plan
+            </Link>{" "}
+            first.
+          </p>
+        )}
+        {selected?.price == null && (
+          <ErrorNote message="Configure a price in Plans before issuing. Use 0 for a complimentary license." />
+        )}
+        <div className="arc-theme">
+          <Checkbox
+            label="Already paid"
+            checked={paid}
+            disabled={!selected?.price}
+            onCheckedChange={(v) => setPaid(v === true)}
+            description={
+              selected?.price === 0
+                ? "Complimentary license; no payment required."
+                : paid
+                  ? "A receipt for the full plan price will be recorded."
+                  : "Leave unchecked to record an unpaid sale."
+            }
           />
         </div>
-        {mutation.error && <ErrorNote message={(mutation.error as Error).message} />}
+        {paid && (
+          <PaymentFields
+            method={method}
+            reference={reference}
+            date={paymentDate}
+            onMethod={setMethod}
+            onReference={setReference}
+          />
+        )}
+        {mutation.error && <ErrorNote message={mutation.error.message} />}
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={props.onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
             Cancel
           </Button>
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button
+            type="submit"
+            disabled={mutation.isPending || !recipient || selected?.price == null}
+          >
             {mutation.isPending ? "Issuing…" : "Issue license"}
           </Button>
         </div>
@@ -154,40 +251,55 @@ export default function IssueLicense(props: { onClose: () => void }) {
     </Modal>
   );
 }
-
-function KeyReveal(props: { license: License; licenseKey: string; onClose: () => void }) {
+function KeyReveal({ result, onClose }: { result: IssuedLicense; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(props.licenseKey);
-      setCopied(true);
-    } catch {
-      // Clipboard can be unavailable (permissions, http) — the key stays
-      // selectable below either way.
-    }
-  }
-
   return (
-    <Modal title="Product key issued">
-      <p className="text-sm text-slate-600">
-        License for <span className="font-medium">{props.license.issuedTo || "(unnamed)"}</span>{" "}
-        created.
-      </p>
-      <div className="mt-4 flex items-center gap-2">
-        <code className="flex-1 select-all rounded-lg bg-slate-100 px-3 py-2 font-mono text-sm">
-          {props.licenseKey}
-        </code>
-        <Button variant="secondary" onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
-      <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-        This key is shown <strong>only once</strong> — the server stores just a hash. Save it before
-        closing.
-      </p>
-      <div className="mt-4 flex justify-end">
-        <Button onClick={props.onClose}>I saved the key</Button>
+    <Modal title="License issued" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <p>
+          License created for <strong>{result.license.issuedTo}</strong>.
+        </p>
+        <p>
+          {birr(result.sale.amount)} ·{" "}
+          {result.sale.status === "complimentary"
+            ? "Complimentary"
+            : result.sale.status === "paid"
+              ? "Paid"
+              : "Unpaid"}{" "}
+          ·{" "}
+          <Link className="text-primary underline" to="/sales" onClick={onClose}>
+            View sale
+          </Link>
+        </p>
+        <output className="block text-sm text-muted-foreground">
+          {result.delivery.status === "manual"
+            ? "Manual delivery: copy and share this key with the customer."
+            : "Delivery: key available to the selected customer. Awaiting retrieval through their private request link or dependent app."}
+        </output>
+        {result.delivery.error && <ErrorNote message={result.delivery.error} />}
+        <div className="flex flex-wrap gap-2">
+          <code className="min-w-0 flex-1 select-all break-all rounded-md bg-muted p-3">
+            {result.key}
+          </code>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(result.key)
+                .then(() => setCopied(true))
+                .catch(() => setCopied(false));
+            }}
+          >
+            {copied ? "Copied" : "Copy key"}
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          The key is stored encrypted. Customers must activate it normally; delivery does not
+          consume an activation seat.
+        </p>
+        <div className="flex justify-end">
+          <Button onClick={onClose}>Done</Button>
+        </div>
       </div>
     </Modal>
   );

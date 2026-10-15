@@ -18,7 +18,7 @@ Create a valid cPanel deployment file for shared hosting, especially for Node.js
 
 2. Confirm the runtime and build step.
    - If the project uses TypeScript or another build step, build it locally or in CI before deployment.
-   - Never run `npm install` or `npm run build` inside the cPanel task script unless the hosting environment explicitly supports it.
+   - Never run `vp install` or `vp run build` inside the cPanel task script unless the hosting environment explicitly supports it.
 
 3. Design the deployment structure.
    - Keep the app in a dedicated project folder.

@@ -1,23 +1,21 @@
 node_modules/
 dist/
-
-# Build output is not tracked. `npm run build:all` regenerates it, and the
-# console bundle is content-hashed -- committing it would add a new ~350 KB
-# blob on every UI change and conflict between any two contributors who
-# touch ui/.
-#
-# Deploying to a host that cannot build (cPanel) does mean committing dist/
-# in *your* project. docs/deploy.md covers that; it is a property of that
-# deployment, not of this repository.
-
+packages/keyforge-client/dist/
+# Build with vp run build:all. cPanel deployment projects must explicitly
+# include their prebuilt dist/; generated output is not tracked upstream.
 db/
 database/
 license-signing.key
 *.pem
-
+*.sqlite
+*.sqlite-*
 .env
 .env.*
 !.env.example
-
-# Both lockfiles ARE tracked, so CI, image builds and deploys resolve the
-# same dependency tree every time.
+secrets/
+backups/
+*.keyring.json
+.artifacts/
+.impeccable/review/
+# One authoritative pnpm-lock.yaml is tracked for Vite+ and all workspaces.
+package-lock.json

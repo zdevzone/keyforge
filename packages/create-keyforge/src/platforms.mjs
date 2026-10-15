@@ -88,6 +88,10 @@ const RENDER = {
 function renderYaml(answers) {
   const name = answers.packageName;
   const run = commands(answers.packageManager);
+  const build =
+    answers.packageManager === "vp"
+      ? 'set -o pipefail && curl -fsSL https://vite.plus | VP_HOME="$HOME/.vite-plus" VP_VERSION=1.1.0 VP_NODE_MANAGER=no bash && export PATH="$HOME/.vite-plus/bin:$PATH" && NODE_ENV=development vp install --no-frozen-lockfile && vp run build:all'
+      : `${run.install} && ${run.run("build")} && ${run.installIn("ui")} && ${run.runIn("ui", "build")}`;
   const lines = [
     `# Render blueprint for ${answers.productName}.`,
     "# Dashboard > New > Blueprint, pointed at this repository.",
@@ -101,16 +105,14 @@ function renderYaml(answers) {
     // may not have committed its lockfile yet, and a first deploy that fails on
     // a missing lockfile is a bad introduction. Switch to the frozen form once
     // the lockfile is in the repository.
-    `    buildCommand: ${run.install} && ${run.run("build")} && ${run.installIn("ui")} && ${run.runIn("ui", "build")}`,
-    `    startCommand: ${run.run("start")}`,
+    `    buildCommand: ${build}`,
+    `    startCommand: ${runtimeConfig(answers.runtime).startCommand}`,
     "    healthCheckPath: /healthz",
     "    envVars:",
     "      - key: NODE_VERSION",
     `        value: ${runtimeConfig(answers.runtime).version}`,
     "      - key: LICENSE_HOST",
     "        value: 0.0.0.0",
-    "      - key: LICENSE_PORT",
-    "        value: 10000",
   ];
   if (answers.database === "postgres") {
     lines.push(
@@ -373,13 +375,13 @@ function composeYaml(answers) {
       "        condition: service_healthy",
       "",
       "  postgres:",
-      "    image: postgres:16",
+      "    image: postgres:18.6",
       "    environment:",
       "      POSTGRES_USER: keyforge",
       "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keyforge}",
       "      POSTGRES_DB: keyforge",
       "    volumes:",
-      `      - ${name}-pgdata:/var/lib/postgresql/data`,
+      `      - ${name}-pgdata:/var/lib/postgresql`,
       "    healthcheck:",
       '      test: ["CMD-SHELL", "pg_isready -U keyforge"]',
       "      interval: 10s",
@@ -437,7 +439,8 @@ deployment:
 
       # 2. Only the runtime artifacts: compiled server, console, CLI.
       /bin/cp -R dist "$APP_DIR/"
-      /bin/cp package.json "$APP_DIR/"
+      /bin/cp dist/runtime-package.json "$APP_DIR/package.json"
+      /bin/cp dist/runtime-pnpm-workspace.yaml "$APP_DIR/pnpm-workspace.yaml"
       /bin/cp -R scripts "$APP_DIR/"
       /bin/cp keyforge.config.json "$APP_DIR/" 2>/dev/null || true
 

@@ -1,308 +1,502 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
+import { useState } from "react";
 
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+import { fetchAdminConfig, productPath, request } from "../api";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
 import {
-  fetchAdminConfig,
-  fetchEntitlementCatalog,
-  type EntitlementUsage,
-  type PlanPreset,
-} from "../api";
-import { Card, ErrorNote, Spinner } from "../components";
-
-/**
- * What the ledger actually contains, as opposed to what anyone intended.
- *
- * Entitlements are free-form key/value pairs typed by hand on the issue form
- * and the license editor. Nothing rejects `seat` where every other license says
- * `seats`, and nothing rejects the string "12" where the rest hold the number
- * 12. Both are invisible per-license — a customer's app checks `seats`, finds
- * nothing, and quietly withholds what was paid for.
- *
- * This page is read-only on purpose: presets belong in keyforge.config.json,
- * where they are reviewable and survive a redeploy, and a bulk edit across
- * every customer's entitlements is not something to offer behind one click.
- */
+  Button,
+  Modal,
+  Card,
+  TextField,
+  Spinner,
+  ErrorNote,
+  EntitlementsEditor,
+  entitlementsToRows,
+  rowsToEntitlements,
+  type EntitlementRow,
+} from "../components";
+import { ActionButton } from "../components/ActionButton";
+import { Choice } from "../components/Choice";
+import { useListPage, ListPagination } from "../components/ListPagination";
+import { useAction, Feedback, Select } from "../platform-ui";
+import { birr, minor } from "./Finance";
 export default function Entitlements() {
-  const catalogQuery = useQuery({
-    queryKey: ["entitlement-catalog"],
-    queryFn: fetchEntitlementCatalog,
+  const cache = useQueryClient();
+  const query = useQuery({
+    queryKey: ["catalog"],
+    queryFn: () => request<any>(productPath("/catalog")),
   });
-  const { data: config } = useQuery({
-    queryKey: ["admin-config"],
-    queryFn: fetchAdminConfig,
-    staleTime: Infinity,
-  });
-
-  if (catalogQuery.isPending) return <Spinner label="Reading the ledger" />;
-  if (catalogQuery.isError) {
-    return <ErrorNote message={(catalogQuery.error as Error).message} />;
-  }
-
-  const { catalog, licensesScanned } = catalogQuery.data;
-  const presets = config?.licenses.planPresets ?? {};
-  const suspects = findNearDuplicates(catalog.map((entry) => entry.name));
-  const declared = new Set(
-    Object.values(presets).flatMap((preset) => Object.keys(preset.entitlements ?? {})),
-  );
-  const inUse = new Set(catalog.map((entry) => entry.name));
-  const undeclared = [...inUse].filter((name) => !declared.has(name)).sort();
-  const unused = [...declared].filter((name) => !inUse.has(name)).sort();
-
+  const config = useQuery({ queryKey: ["admin-config"], queryFn: fetchAdminConfig });
+  const [tab, setTab] = useState("definitions"),
+    [editing, setEditing] = useState<any>(null);
+  const refresh = () => {
+    void cache.invalidateQueries({ queryKey: ["catalog"] });
+    void cache.invalidateQueries({ queryKey: ["admin-config"] });
+  };
+  const list = useListPage<any>(query.data?.[tab] ?? [], tab);
+  if (query.isPending) return <Spinner label="Loading product catalog…" />;
+  if (query.error) return <ErrorNote message={(query.error as Error).message} />;
+  const c = query.data,
+    admin = config.data?.viewer.role === "admin";
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Entitlements</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Every entitlement key across {licensesScanned.toLocaleString()}{" "}
-          {licensesScanned === 1 ? "license" : "licenses"}, and the plan presets that seed them.
-          Entitlements are free-form, so this is the only place a typo becomes visible.
+        <h1 className="text-xl font-semibold">Entitlements & plans</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Define what your product grants, build plans, and see where they are used.
         </p>
       </div>
-
-      {(suspects.length > 0 || catalog.some(hasMixedTypes)) && (
-        <Problems catalog={catalog} suspects={suspects} />
-      )}
-
-      <Card className="p-5">
-        <h2 className="text-base font-semibold">Keys in use</h2>
-        {catalog.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">
-            No license carries an entitlement yet. Add them when issuing, or set them as a plan
-            preset in <code className="font-mono">keyforge.config.json</code>.
-          </p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
-                  <th className="pb-2 pr-4 font-medium">Key</th>
-                  <th className="pb-2 pr-4 font-medium">Type</th>
-                  <th className="pb-2 pr-4 font-medium">Licenses</th>
-                  <th className="pb-2 pr-4 font-medium">Active</th>
-                  <th className="pb-2 pr-4 font-medium">Values</th>
-                  <th className="pb-2 font-medium">Plans</th>
-                </tr>
-              </thead>
-              <tbody>
-                {catalog.map((entry) => (
-                  <tr key={entry.name} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2 pr-4 font-mono">{entry.name}</td>
-                    <td className="py-2 pr-4">
-                      {hasMixedTypes(entry) ? (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                          {entry.types.join(" + ")}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">{entry.types.join("") || "—"}</span>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          setTab(value);
+          setEditing(null);
+        }}
+      >
+        <TabsList aria-label="Catalog sections">
+          <TabsTrigger value="definitions">Definitions</TabsTrigger>
+          <TabsTrigger value="plans">Plans</TabsTrigger>
+          <TabsTrigger value="usage">Usage</TabsTrigger>
+        </TabsList>
+        <TabsContent value={tab} className="grid gap-6">
+          {tab === "usage" ? (
+            <Card className="overflow-x-auto p-5">
+              <h2 className="font-semibold">Entitlement adoption</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Definition usage across {c.licensesScanned} licenses. This is not consumption; open
+                Metering for consumed units.
+              </p>
+              <Table className="mt-5 w-full text-left text-sm">
+                <TableHeader>
+                  <TableRow>
+                    {["Entitlement", "Types", "Licenses", "Active", "Plans"].map((h) => (
+                      <TableHead key={h} className="py-3 pr-4">
+                        {h}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {list.rows.map((u: any) => (
+                    <TableRow key={u.name} className="border-t border-slate-200">
+                      <TableCell className="py-3 pr-4 font-mono">{u.name}</TableCell>
+                      <TableCell className="pr-4">{u.types.join(", ") || "Unused"}</TableCell>
+                      <TableCell className="pr-4">{u.licenseCount}</TableCell>
+                      <TableCell className="pr-4">{u.activeLicenseCount}</TableCell>
+                      <TableCell>{u.plans.join(", ") || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <ListPagination {...list} />
+              {!c.usage.length && (
+                <p className="py-6 text-sm text-muted-foreground">
+                  Add definitions and issue a license to see usage.
+                </p>
+              )}
+            </Card>
+          ) : (
+            <>
+              <Card className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-semibold">
+                    {tab === "definitions" ? "Defined entitlements" : "Plans"}
+                  </h2>
+                  {admin && (
+                    <Button onClick={() => setEditing({})}>
+                      Add {tab === "definitions" ? "entitlement" : "plan"}
+                    </Button>
+                  )}
+                </div>
+                <div className="mt-4 divide-y divide-slate-200">
+                  {list.rows.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-wrap items-center justify-between gap-4 py-4"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {item.id}{" "}
+                          {item.archived && (
+                            <span className="text-xs text-muted-foreground">Archived</span>
+                          )}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {item.description || "No description"}
+                          {tab === "definitions"
+                            ? " · " + item.type
+                            : " · " +
+                              item.activationLimit +
+                              " activation seats · " +
+                              (c.planUsage.find((u: any) => u.id === item.id)?.licenseCount || 0) +
+                              " licenses" +
+                              (admin
+                                ? " · " +
+                                  (item.price == null ? "Price not configured" : birr(item.price))
+                                : "")}
+                        </p>
+                      </div>
+                      {admin && (
+                        <ActionButton icon={Pencil} label="Edit" onClick={() => setEditing(item)} />
                       )}
-                    </td>
-                    <td className="py-2 pr-4 tabular-nums">{entry.licenseCount}</td>
-                    <td className="py-2 pr-4 tabular-nums text-slate-500">
-                      {entry.activeLicenseCount}
-                    </td>
-                    <td className="py-2 pr-4 text-slate-500">
-                      {entry.values.map((value) => `${value.value} (${value.count})`).join(", ")}
-                      {entry.moreValues > 0 && ` +${entry.moreValues} more`}
-                    </td>
-                    <td className="py-2 text-slate-500">{entry.plans.join(", ")}</td>
-                  </tr>
+                    </div>
+                  ))}
+                </div>
+                <ListPagination {...list} />
+                {!c[tab].length && (
+                  <p className="py-6 text-sm text-muted-foreground">
+                    {tab === "definitions"
+                      ? "Define your first feature or quota."
+                      : "Create a plan to issue licenses from consistent defaults."}
+                  </p>
+                )}
+              </Card>
+              {editing &&
+                admin &&
+                (tab === "definitions" ? (
+                  <DefinitionEditor
+                    key={editing.id || "new"}
+                    value={editing}
+                    done={() => {
+                      setEditing(null);
+                      refresh();
+                    }}
+                  />
+                ) : (
+                  <PlanEditor
+                    key={editing.id || "new"}
+                    value={editing}
+                    done={() => {
+                      setEditing(null);
+                      refresh();
+                    }}
+                  />
                 ))}
-              </tbody>
-            </table>
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
+      {admin && <CatalogImport refresh={refresh} />}
+    </div>
+  );
+}
+function DefinitionEditor({ value, done }: { value: any; done: () => void }) {
+  const [id, setId] = useState(value.id || ""),
+    [description, setDescription] = useState(value.description || ""),
+    [type, setType] = useState(value.type === "mixed" ? "number" : value.type || "number"),
+    [defaultValue, setDefault] = useState(
+      value.defaultValue === undefined ? "" : String(value.defaultValue),
+    ),
+    [minimum, setMin] = useState(value.minimum === undefined ? "" : String(value.minimum)),
+    [maximum, setMax] = useState(value.maximum === undefined ? "" : String(value.maximum)),
+    [archived, setArchived] = useState(value.archived || false);
+  const action = useAction(done);
+  return (
+    <Modal title={value.id ? "Edit definition" : "Add entitlement"} onClose={done}>
+      <form
+        className="mt-4 max-w-xl space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void action.run(() =>
+            request(productPath("/definitions/" + encodeURIComponent(id)), {
+              method: "PUT",
+              body: {
+                id,
+                description,
+                type,
+                archived,
+                ...(defaultValue !== ""
+                  ? {
+                      defaultValue:
+                        type === "number"
+                          ? Number(defaultValue)
+                          : type === "boolean"
+                            ? defaultValue === "true"
+                            : defaultValue,
+                    }
+                  : {}),
+                ...(minimum !== "" ? { minimum: Number(minimum) } : {}),
+                ...(maximum !== "" ? { maximum: Number(maximum) } : {}),
+                ...(value.revision ? { revision: value.revision } : {}),
+              },
+            }),
+          );
+        }}
+      >
+        <label htmlFor="definition-key" className="block text-sm font-medium">
+          Permanent key
+          <Input
+            id="definition-key"
+            required
+            disabled={Boolean(value.id)}
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+          />
+        </label>
+        <TextField label="Description" value={description} onChange={setDescription} />
+        <Select
+          label="Value type"
+          value={type}
+          onChange={setType}
+          options={["number", "string", "boolean"].map((v) => ({ value: v, label: v }))}
+        />
+        {type === "boolean" ? (
+          <Select
+            label="Default (optional)"
+            value={defaultValue}
+            onChange={setDefault}
+            options={[
+              { value: "", label: "No default" },
+              { value: "true", label: "Enabled" },
+              { value: "false", label: "Disabled" },
+            ]}
+          />
+        ) : (
+          <TextField
+            label="Default value (optional)"
+            type={type === "number" ? "number" : "text"}
+            value={defaultValue}
+            onChange={setDefault}
+          />
+        )}
+        {type === "number" && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField label="Minimum (optional)" type="number" value={minimum} onChange={setMin} />
+            <TextField label="Maximum (optional)" type="number" value={maximum} onChange={setMax} />
           </div>
         )}
-      </Card>
-
-      <Card className="p-5">
-        <h2 className="text-base font-semibold">Plan presets</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          What the issue form starts from. Presets are defaults, not enforcement — every value stays
-          editable per license. Change them in{" "}
-          <code className="font-mono">keyforge.config.json</code>; they apply at restart.
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => setArchived(e.target.checked)}
+          />
+          Archive definition
+        </label>
+        <p className="text-sm text-muted-foreground">
+          A used key cannot be renamed or silently change type. Existing license grants remain
+          snapshots.
         </p>
-        <div className="mt-3 space-y-3">
-          {Object.entries(presets).map(([plan, preset]) => (
-            <PresetRow
-              key={plan}
-              plan={plan}
-              preset={preset}
-              isDefault={plan === config?.licenses.defaultPlan}
-            />
-          ))}
-          {Object.keys(presets).length === 0 && (
-            <p className="text-sm text-slate-500">No plan presets are configured.</p>
-          )}
+        <div className="flex gap-3">
+          <Button type="submit" disabled={action.busy}>
+            Save entitlement
+          </Button>
+          <Button variant="secondary" onClick={done}>
+            Cancel
+          </Button>
         </div>
-      </Card>
-
-      {(undeclared.length > 0 || unused.length > 0) && (
-        <Card className="p-5">
-          <h2 className="text-base font-semibold">Presets and reality</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Drift between what the presets declare and what licenses actually carry. Neither list is
-            necessarily wrong — per-license additions are a normal thing to do.
+        <Feedback action={action} />
+      </form>
+    </Modal>
+  );
+}
+function PlanEditor({ value, done }: { value: any; done: () => void }) {
+  const [id, setId] = useState(value.id || ""),
+    [description, setDescription] = useState(value.description || ""),
+    [rows, setRows] = useState<EntitlementRow[]>(entitlementsToRows(value.entitlements || {})),
+    [days, setDays] = useState(
+      value.durationDays === null || value.durationDays === undefined
+        ? ""
+        : String(value.durationDays),
+    ),
+    [price, setPrice] = useState(value.price == null ? "" : String(value.price / 100)),
+    [limit, setLimit] = useState(String(value.activationLimit || 1)),
+    [archived, setArchived] = useState(value.archived || false);
+  const action = useAction(done);
+  return (
+    <Modal title={value.id ? "Edit plan" : "Add plan"} onClose={done}>
+      <form
+        className="mt-4 space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void action.run(() =>
+            request(productPath("/plans/" + encodeURIComponent(id)), {
+              method: "PUT",
+              body: {
+                id,
+                description,
+                entitlements: rowsToEntitlements(rows),
+                durationDays: days === "" ? null : Number(days),
+                activationLimit: Number(limit),
+                archived,
+                price: minor(price),
+                currency: "ETB",
+                ...(value.revision ? { revision: value.revision } : {}),
+              },
+            }),
+          );
+        }}
+      >
+        <label htmlFor="plan-id" className="block text-sm font-medium">
+          Permanent plan ID
+          <Input
+            id="plan-id"
+            required
+            disabled={Boolean(value.id)}
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+          />
+        </label>
+        <TextField label="Description" value={description} onChange={setDescription} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Price (ETB)" value={price} onChange={setPrice} required />
+          <Choice
+            label="Currency"
+            value="ETB"
+            onChange={() => {}}
+            options={[{ value: "ETB", label: "ETB · Ethiopian birr" }]}
+          />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Use 0 for a complimentary license. Existing sale amounts never change.
+        </p>
+        <EntitlementsEditor rows={rows} onChange={setRows} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Duration days (empty for perpetual)"
+            type="number"
+            value={days}
+            onChange={setDays}
+          />
+          <TextField label="Activation seats" type="number" value={limit} onChange={setLimit} />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => setArchived(e.target.checked)}
+          />
+          Archive plan
+        </label>
+        <p className="text-sm text-muted-foreground">
+          Changes affect newly issued licenses. Existing licenses keep their entitlement, expiry and
+          seat snapshots.
+        </p>
+        <div className="flex gap-3">
+          <Button type="submit" disabled={action.busy}>
+            Save plan
+          </Button>
+          <Button variant="secondary" onClick={done}>
+            Cancel
+          </Button>
+        </div>
+        <Feedback action={action} />
+      </form>
+    </Modal>
+  );
+}
+function CatalogImport({ refresh }: { refresh: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(""),
+    [preview, setPreview] = useState<any>(null);
+  const action = useAction(refresh);
+  async function exportCatalog() {
+    const value = await request<any>(productPath("/catalog/export"));
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "product-catalog.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return (
+    <>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        Import or export catalog
+      </Button>
+      {open && (
+        <Modal title="Import or export catalog" onClose={() => setOpen(false)}>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Configuration transfer includes definitions and plans, never secrets. Preview changes
+            before applying them.
           </p>
-          {undeclared.length > 0 && (
-            <div className="mt-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">
-                In use, declared by no preset
-              </div>
-              <div className="mt-1 font-mono text-sm">{undeclared.join(", ")}</div>
-            </div>
-          )}
-          {unused.length > 0 && (
-            <div className="mt-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">
-                Declared by a preset, on no license
-              </div>
-              <div className="mt-1 font-mono text-sm">{unused.join(", ")}</div>
-            </div>
-          )}
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function PresetRow(props: { plan: string; preset: PlanPreset; isDefault: boolean }) {
-  const entries = Object.entries(props.preset.entitlements ?? {});
-  const extras = [
-    props.preset.durationDays ? `expires after ${props.preset.durationDays} days` : null,
-    props.preset.activationLimit ? `${props.preset.activationLimit} activations` : null,
-  ].filter(Boolean);
-  return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <div className="flex items-center gap-2">
-        <span className="font-medium">{props.plan}</span>
-        {props.isDefault && (
-          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">default</span>
-        )}
-      </div>
-      <div className="mt-1 font-mono text-sm text-slate-600">
-        {entries.length > 0
-          ? entries.map(([name, value]) => `${name}=${String(value)}`).join(" · ")
-          : "no preset entitlements"}
-      </div>
-      {extras.length > 0 && <div className="mt-1 text-xs text-slate-500">{extras.join(" · ")}</div>}
-    </div>
-  );
-}
-
-/** The two problems this page exists to surface, stated plainly and up front. */
-function Problems(props: { catalog: EntitlementUsage[]; suspects: string[][] }) {
-  const mixed = props.catalog.filter(hasMixedTypes);
-  return (
-    <Card className="border-amber-200 bg-amber-50 p-5">
-      <h2 className="text-base font-semibold text-amber-900">Worth a look</h2>
-      {mixed.length > 0 && (
-        <div className="mt-2">
-          <div className="text-sm text-amber-900">
-            <span className="font-medium">Mixed types.</span> The same key holds different types on
-            different licenses. An app doing <code className="font-mono">typeof</code> or a numeric
-            comparison will handle some and silently ignore the rest.
+          <div className="mt-4 flex gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => void action.run(exportCatalog, "Catalog exported.")}
+            >
+              Export JSON
+            </Button>
+            <label htmlFor="catalog-upload" className="text-sm">
+              Load JSON
+              <Input
+                id="catalog-upload"
+                aria-label="Load catalog JSON"
+                className="mt-1 block"
+                type="file"
+                accept=".json"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f)
+                    void f.text().then((t) => {
+                      setText(t);
+                      setPreview(null);
+                    });
+                }}
+              />
+            </label>
           </div>
-          <ul className="mt-1 space-y-0.5 text-sm text-amber-800">
-            {mixed.map((entry) => (
-              <li key={entry.name}>
-                <span className="font-mono">{entry.name}</span> — {entry.types.join(" and ")} across{" "}
-                {entry.licenseCount} licenses
-              </li>
-            ))}
-          </ul>
-        </div>
+          {text && (
+            <>
+              <Button
+                className="mt-4"
+                disabled={action.busy}
+                onClick={() =>
+                  void action.run(
+                    async () =>
+                      setPreview(
+                        await request(productPath("/catalog/import"), {
+                          method: "POST",
+                          body: { catalog: JSON.parse(text), preview: true },
+                        }),
+                      ),
+                    "Preview ready.",
+                  )
+                }
+              >
+                Preview import
+              </Button>
+              {preview && (
+                <div className="mt-4">
+                  <p className="text-sm">
+                    {preview.definitions} definitions and {preview.plans} plans will be created or
+                    updated. Existing licenses stay unchanged.
+                  </p>
+                  <Button
+                    className="mt-3"
+                    disabled={action.busy}
+                    onClick={() =>
+                      void action.run(
+                        () =>
+                          request(productPath("/catalog/import"), {
+                            method: "POST",
+                            body: {
+                              catalog: JSON.parse(text),
+                              preview: false,
+                              fingerprint: preview.fingerprint,
+                            },
+                          }),
+                        "Catalog imported.",
+                      )
+                    }
+                  >
+                    Apply previewed changes
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+          <Feedback action={action} />
+        </Modal>
       )}
-      {props.suspects.length > 0 && (
-        <div className="mt-3">
-          <div className="text-sm text-amber-900">
-            <span className="font-medium">Near-duplicate keys.</span> These differ only in case,
-            punctuation, or a character. If one is a typo, those licenses carry an entitlement
-            nothing in your app reads.
-          </div>
-          <ul className="mt-1 space-y-0.5 text-sm text-amber-800">
-            {props.suspects.map((group) => (
-              <li key={group.join("|")} className="font-mono">
-                {group.join("  ·  ")}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </Card>
+    </>
   );
-}
-
-function hasMixedTypes(entry: EntitlementUsage): boolean {
-  return entry.types.length > 1;
-}
-
-/** Case, separators and pluralisation ignored — how these typos actually look. */
-function normalizeKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-/**
- * Group keys that are probably the same key typed two ways.
- *
- * Exact match after normalising catches `Seats`/`seats`/`seat_count`; an edit
- * distance of one catches `seats`/`seat`, which is the common one and which
- * normalising alone misses. Reported, never corrected — only the vendor knows
- * whether `seat` and `seats` are one concept or two.
- */
-export function findNearDuplicates(names: string[]): string[][] {
-  const groups: string[][] = [];
-  const claimed = new Set<string>();
-
-  for (let i = 0; i < names.length; i += 1) {
-    if (claimed.has(names[i])) continue;
-    const group = [names[i]];
-    for (let j = i + 1; j < names.length; j += 1) {
-      if (claimed.has(names[j])) continue;
-      const a = normalizeKey(names[i]);
-      const b = normalizeKey(names[j]);
-      if (a === b || withinOneEdit(a, b)) group.push(names[j]);
-    }
-    if (group.length > 1) {
-      group.forEach((name) => claimed.add(name));
-      groups.push(group);
-    }
-  }
-  return groups;
-}
-
-/**
- * True when one insert, delete or substitution turns a into b.
- *
- * The two edit kinds are not equally suspicious, so they have different length
- * floors. An inserted or deleted character is usually a plural
- * (`seat`/`seats`) and is worth flagging even on short keys. A substitution on
- * a short key is usually two unrelated keys — `api` and `abi` are one edit
- * apart and have nothing to do with each other — so it takes a longer key
- * before that is evidence of anything.
- */
-const MIN_LENGTH_FOR_INDEL = 3;
-const MIN_LENGTH_FOR_SUBSTITUTION = 5;
-
-function withinOneEdit(a: string, b: string): boolean {
-  if (Math.abs(a.length - b.length) > 1) return false;
-  if (a === b) return true;
-  const sameLength = a.length === b.length;
-  const floor = sameLength ? MIN_LENGTH_FOR_SUBSTITUTION : MIN_LENGTH_FOR_INDEL;
-  if (Math.min(a.length, b.length) < floor) return false;
-
-  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
-  let short = 0;
-  let long = 0;
-  let edited = false;
-  while (short < shorter.length && long < longer.length) {
-    if (shorter[short] === longer[long]) {
-      short += 1;
-      long += 1;
-      continue;
-    }
-    if (edited) return false;
-    edited = true;
-    // Same length means a substitution; otherwise skip the extra character.
-    if (shorter.length === longer.length) short += 1;
-    long += 1;
-  }
-  return true;
 }

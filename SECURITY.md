@@ -31,3 +31,13 @@ appreciated; credit is given unless you prefer otherwise.
   out of build logs; rotate the admin token if it ever leaks.
 - Back up the license database; treat backups as secrets (they contain the
   ledger and, for the auth database, password hashes).
+
+## Product and recovery boundaries
+
+Installation credentials authenticate device identity; hardware hashes are only trial abuse hints.
+Keep admin tokens and trusted metering credentials off end-user devices.
+Product keys and generated private signing keys are encrypted with the external data ring.
+Archive encryption uses a separate external ring; retain recovery copies and historical ring entries.
+Key reveal is admin-only, rate limited and audited, with password reauthentication for console sessions.
+Offline authorization cannot learn revocation until refresh or its signed deadline.
+The current deployment is one workspace; multi-vendor tenant isolation is not implemented.

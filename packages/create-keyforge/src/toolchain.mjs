@@ -11,10 +11,11 @@
  * string appears in exactly one place per manager.
  */
 
-/** @typedef {"npm" | "pnpm" | "yarn" | "bun"} PackageManagerId */
+/** @typedef {"vp" | "npm" | "pnpm" | "yarn" | "bun"} PackageManagerId */
 /** @typedef {"node"} RuntimeId */
 
 export const PACKAGE_MANAGERS = [
+  { id: "vp", title: "Vite+", description: "Unified workflow with managed Node and pnpm." },
   {
     id: "npm",
     title: "npm",
@@ -68,6 +69,18 @@ export const RUNTIMES = [
  */
 export function commands(id) {
   const table = {
+    vp: {
+      install: "vp install",
+      frozenInstall: "vp install --frozen-lockfile",
+      run: (script) => "vp run " + script,
+      runWithFlags: (script, flags) => "vp run " + script + " " + flags,
+      exec: (binary) => "vp dlx " + binary,
+      installIn: (dir) => "vp -C " + dir + " install",
+      frozenInstallIn: (dir) => "vp -C " + dir + " install --frozen-lockfile",
+      runIn: (dir, script) => "vp -C " + dir + " run " + script,
+      lockfile: "pnpm-lock.yaml",
+      corepack: false,
+    },
     npm: {
       install: "npm install",
       frozenInstall: "npm ci",
@@ -130,17 +143,18 @@ export function commands(id) {
  * machine agree; `npm@latest` would defeat it.
  */
 const PINNED_VERSIONS = {
-  npm: "10.9.7",
-  pnpm: "9.15.4",
-  yarn: "4.6.0",
-  bun: "1.1.45",
+  vp: "12.11.2",
+  npm: "12.2.0",
+  pnpm: "12.11.2",
+  yarn: "4.18.1",
+  bun: "1.4.3",
 };
 
 /** @param {PackageManagerId} id */
 export function packageManagerField(id) {
   const version = PINNED_VERSIONS[id];
   if (!version) throw new Error(`Unknown package manager: ${id}`);
-  return `${id}@${version}`;
+  return `${id === "vp" ? "pnpm" : id}@${version}`;
 }
 
 /** @param {RuntimeId} id */
@@ -148,9 +162,9 @@ export function runtimeConfig(id) {
   const table = {
     node: {
       // Matches what CI and the Dockerfile are tested against upstream.
-      version: "22",
-      dockerImage: "node:22",
-      dockerSlimImage: "node:22-slim",
+      version: "24.21.0",
+      dockerImage: "node:24.21.0-bookworm",
+      dockerSlimImage: "node:24.21.0-bookworm-slim",
       startCommand: "node dist/src/index.js",
     },
   };
@@ -176,7 +190,7 @@ export function devEngines(packageManager, runtime) {
   return {
     runtime: { name: runtime, version: `>=${runtimeConfig(runtime).version}`, onFail: "warn" },
     packageManager: {
-      name: packageManager,
+      name: packageManager === "vp" ? "pnpm" : packageManager,
       version: PINNED_VERSIONS[packageManager],
       onFail: "warn",
     },
@@ -193,5 +207,5 @@ export function isRuntime(value) {
   return RUNTIMES.some((entry) => entry.id === value);
 }
 
-export const DEFAULT_PACKAGE_MANAGER = "npm";
+export const DEFAULT_PACKAGE_MANAGER = "vp";
 export const DEFAULT_RUNTIME = "node";

@@ -6,7 +6,7 @@
 
 import type { Choice } from "./generate.d.mts";
 
-export type PackageManagerId = "npm" | "pnpm" | "yarn" | "bun";
+export type PackageManagerId = "vp" | "npm" | "pnpm" | "yarn" | "bun";
 export type RuntimeId = "node";
 
 export const PACKAGE_MANAGERS: Choice<PackageManagerId>[];

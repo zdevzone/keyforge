@@ -1,0 +1,194 @@
+/* UI Arc registry components use scoped aliases of the console's design tokens. */
+.arc-theme {
+  --surface: var(--card);
+  --surface-raised: var(--card);
+  --surface-muted: var(--muted);
+  --text-muted: var(--muted-foreground);
+  --text-secondary: var(--muted-foreground);
+  --border-subtle: var(--border);
+  --border-strong: var(--input);
+  --accent: var(--primary);
+  --accent-strong: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+  --control-on: var(--primary);
+  --control-glyph: var(--primary-foreground);
+  --control-height-md: 40px;
+  --control-height-sm: 38px;
+  --shadow-resting: none;
+  --focus-ring: rgb(21 112 239 / 18%);
+  --focus-outline: var(--ring);
+  --focus-outline-width: 2px;
+  --font-body: var(--font-sans);
+  --text-xl: 20px;
+  --text-lg: 18px;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --leading-body: 1.5;
+  --tracking-body: normal;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --shadow-floating: 0 8px 24px rgb(56 62 73 / 12%);
+  --duration-fast: 120ms;
+  --duration-standard: 180ms;
+  --duration-instant: 0ms;
+  --ease-enter: ease-out;
+  --duration-spring: 220ms;
+  --ease-standard: ease-out;
+  --ease-spring: ease-out;
+  min-width: 0;
+}
+.console-icon-action {
+  min-width: 36px;
+  min-height: 36px;
+  padding-inline: 8px;
+}
+.report-print {
+  display: none;
+}
+@media print {
+  body:has(.report-page) [data-slot="sidebar-container"],
+  body:has(.report-page) [data-slot="sidebar-gap"],
+  body:has(.report-page) .console-header,
+  body:has(.report-page) .skip-link,
+  .report-controls,
+  .report-screen {
+    display: none !important;
+  }
+  body:has(.report-page) .console-content {
+    padding: 0;
+  }
+  .report-print {
+    display: block;
+  }
+  .report-print [data-slot="table-container"] {
+    overflow: visible;
+  }
+  .report-print table {
+    width: 100%;
+    font-size: 10pt;
+  }
+  .report-print tr {
+    break-inside: avoid;
+  }
+  .report-print td {
+    overflow-wrap: anywhere;
+  }
+  .report-print thead {
+    display: table-header-group;
+  }
+}
+.console-choice {
+  min-width: 160px;
+}
+.console-choice-compact > div > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.console-choice-compact > div {
+  gap: 0;
+}
+.console-product .console-choice {
+  width: 100%;
+}
+.console-choice input {
+  font-family: inherit;
+}
+.console-choice:has([aria-expanded="true"]) {
+  position: relative;
+  z-index: 30;
+}
+.console-choice-menu {
+  position: relative !important;
+  top: auto !important;
+  width: var(--radix-popover-trigger-width);
+  max-height: var(--radix-popover-content-available-height);
+  overflow-y: auto;
+}
+/* In a scrolling dialog the calendar expands in flow, so it cannot be clipped. */
+.console-date [role="dialog"] {
+  position: relative;
+  top: auto;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 320px;
+  padding: 12px;
+  box-shadow: none;
+}
+.console-global-command {
+  flex: 1;
+  max-width: 440px;
+  min-width: 160px;
+}
+.console-command-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--muted-foreground);
+  background: var(--card);
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+}
+.console-command-trigger svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.console-command-trigger kbd {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.console-palette > div {
+  border: 0;
+  box-shadow: none;
+}
+.console-palette svg {
+  width: 18px;
+  height: 18px;
+}
+.console-product-table [data-slot="button"] {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+@media (max-width: 767px) {
+  .console-global-command {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .console-header .console-product {
+    flex: 1;
+    margin-left: 0;
+    max-width: none;
+  }
+  .console-command-trigger kbd {
+    display: none;
+  }
+  .console-choice input {
+    font-size: 16px;
+  }
+}
+
+.conversation-thread {
+  height: 320px;
+  min-height: 280px;
+  max-height: 65vh;
+}

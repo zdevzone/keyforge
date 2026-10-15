@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { cp, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve, relative as relativePath } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
@@ -16,6 +16,10 @@ export const DEFAULT_TEMPLATE = "zdevzone/keyforge#main";
  * builds its own `dist/` and answers to its own maintainers.
  */
 const PRUNE = [
+  ".artifacts",
+  ".impeccable/review",
+  "secrets",
+  "backups",
   ".git",
   ".github/FUNDING.yml",
   "node_modules",
@@ -31,6 +35,8 @@ const PRUNE = [
   // Upstream's test for the scaffolder itself, which imports packages/ — it
   // would fail on the first `npm test` in a project that has no packages/.
   "test/create-keyforge.test.ts",
+  "test/client-sdk.test.ts",
+  "examples/keyforge-node.ts",
   // Upstream's own community files. They name Keyforge's maintainer, its
   // security mailbox and its advisory URL, none of which belong in someone
   // else's project.
@@ -44,6 +50,11 @@ const PRUNE = [
 
 /** Never copied out of a local template directory in the first place. */
 const SKIP_COPY = new Set([
+  "packages",
+  ".artifacts",
+  ".impeccable/review",
+  "secrets",
+  "backups",
   ".git",
   "node_modules",
   "dist",
@@ -108,10 +119,14 @@ async function copyDirectory(from, to) {
   await cp(from, to, {
     recursive: true,
     filter: (source) => {
-      const relative = source.slice(from.length + 1);
+      const relative = relativePath(from, source).replaceAll("\\", "/");
       if (!relative) return true;
-      const [head] = relative.split(/[\\/]/);
-      return !SKIP_COPY.has(head) && !SKIP_COPY.has(relative);
+      const [head] = relative.split("/");
+      return (
+        !SKIP_COPY.has(head) &&
+        !SKIP_COPY.has(relative) &&
+        !/\.(?:key|pem|keyring\.json)$/i.test(relative)
+      );
     },
   });
 }

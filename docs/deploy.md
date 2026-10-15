@@ -1,244 +1,79 @@
-# Deploying Keyforge
+# Deploy Keyforge
 
-One Node process, a database, and four secrets. Anywhere that runs a container
-or a Node app will run this; what actually differs between hosts is **what they
-keep** and **what they cost**.
+Use Node 24 LTS, Vite+ 1.1.0, persistent storage and HTTPS. Current pinned development/deployment versions are Node 24.21.0 and pnpm 12.11.2, selected through Vite+. Install Vite+ using its [official installer](https://viteplus.dev/guide/install).
 
-Scaffolding a project picks a target and writes only that host's manifest:
+## Prepare
 
-```bash
-npm create keyforge@latest my-license-server -- --deploy render
+```sh
+vp install --frozen-lockfile
+vp run check
+vp run test
+vp run build:all
 ```
 
-`--deploy` takes `local` (the default), `docker`, `render`, `fly`, `railway`,
-`koyeb`, or `cpanel`. The manifest is written with *your* project's name, and
-the other hosts' files are left out — a repository should describe one
-deployment.
+Configure exactly one valid Ed25519 private key source, the public LICENSE_SERVER_URL (or Render's automatic RENDER_EXTERNAL_URL), console LICENSE_AUTH_SECRET and data/backup ring files. Provision secrets on the host; never put them in manifests. LICENSE_ADMIN_TOKEN is optional automation access. See [configuration](configuration.md) for the full variable table, database precedence and ring recovery.
 
-## Choosing
+The entry is dist/src/index.js; the UI is dist/public. The build also writes dist/runtime-package.json containing resolved production dependency versions and ESM metadata for standalone deployments. The signing key is required at startup. In production, console auth also requires the public origin. Health is GET /healthz.
 
-| Target | Cost | Keeps data? |
-| --- | --- | --- |
-| `local` | — | Yes, on your disk |
-| `docker` | Whatever the box costs | Yes, named volumes |
-| `render` | Free web service tier | **No** on free — no persistent disk |
-| `fly` | Trial credit, then pay-as-you-go | Yes, with a volume |
-| `railway` | Trial credit, then ~$5/mo | Only with a volume |
-| `koyeb` | One free instance per org | **No** — no persistent volume |
-| `cpanel` | Hosting you already pay for | Yes |
+LICENSE_PORT overrides the host's PORT; otherwise 4100. Leave LICENSE_PORT unset on hosts that assign PORT. Seed the first admin with LICENSE_SEED_ADMIN_EMAIL/PASSWORD, or run vp run admin:create on a shell-enabled host. Boot seeding never resets existing operators.
 
-Two of these deserve the bold type. **On a host with no persistent disk, a
-SQLite ledger is empty again after every deploy** — licenses, activations,
-installations, the audit log, and your operator accounts. That is a fine trade
-while you are trying Keyforge out, and a catastrophe the first time you sell
-something. The fix is either a disk (usually paid) or `DATABASE_URL` pointing
-at managed Postgres.
+## Docker
 
-Free-tier terms move. Fly ended its permanent free allowance in 2024; Railway's
-free plan is credit, not capacity; Render's free Postgres expires. Check the
-host's current pricing page before you rely on any of it.
+The Dockerfile builds with Vite+, installs only production dependencies into the runtime, includes compatible Postgres dump/restore tools, and starts the compiled Node server. Keep secrets outside the image. Build via docker build -t keyforge . or use docker compose up --build. Ports, volumes and secret mounts are infrastructure commands, not package-manager commands.
 
-## Every target needs
+The existing repository compose file keeps Postgres 16 on its latest supported patch to preserve existing major-version data compatibility. POSTGRES_IMAGE can override it only after a deliberate database upgrade. New scaffolds use a supported pinned major. Never switch a populated Postgres volume to another major image without pg_upgrade or dump/restore.
 
-| Variable | Why |
-| --- | --- |
-| `LICENSE_SIGNING_KEY` | The trust root. PEM text from `npm run license keygen`. Without it the service refuses to start. |
-| `LICENSE_AUTH_SECRET` | Session cookies for the console. Unset = console disabled. |
-| `LICENSE_ADMIN_TOKEN` | Bearer token for the CLI. Unset = CLI admin disabled. |
-| `LICENSE_SEED_ADMIN_EMAIL` / `_PASSWORD` | Creates the first operator at boot. The only practical way in on a host with no shell. |
+For SQLite, mount the ledger/auth directory, secrets and backup directory persistently. For Postgres, provide DATABASE_URL and a durable external database; local database paths are ignored. Mount key-ring files persistently in either case. Backup providers can run concurrently; configure S3, R2 and UploadThing credentials through server secrets, and custom upload URLs in the console. Keep LICENSE_BACKUP_DIR persistent (shared across replicas for custom-endpoint downloads). Each provider has an independent daily UTC schedule; see [backups](backups.md).
 
-Set them in the host's dashboard or secret store. They are never written into a
-manifest, and `.env.local` is gitignored precisely so they cannot be committed.
+## Local or VPS
 
-The console's login works on whatever hostname the platform assigns — Better
-Auth trusts the requested host — but set `LICENSE_SERVER_URL` anyway so the
-CLI has a target.
+Use the prepare commands above, vp run start and a process supervisor/reverse proxy. Persist database files, encryption rings, startup signing keys and local archives outside replacement release folders. Graceful shutdown closes database/auth handles. Size Postgres pools per process so total instances stay within the provider's limit.
 
-### Everything the service reads
+## Render
 
-Validated at boot, before a file is opened or a port is claimed. **Absence is
-fine almost everywhere** — an unset variable means a documented default, not an
-error. A variable that is *present but malformed* stops the boot and names
-itself.
+Use the repository's `render.yaml` with a Blueprint, or update an existing service under **Settings → Build & Deploy**. An existing dashboard-managed service keeps its saved commands when the repository changes.
 
-| Variable | Default when unset | Checked as |
-| --- | --- | --- |
-| `DATABASE_URL` | SQLite | must start `postgres://` or `postgresql://` |
-| `LICENSE_DB_PATH` | `licenses.sqlite` | non-empty |
-| `LICENSE_DB_POOL_MAX` | 5 | integer 1–100 |
-| `LICENSE_SIGNING_KEY` / `_FILE` | — *(one is required)* | full Ed25519 check, see below |
-| `LICENSE_ADMIN_TOKEN` | admin API answers 503 | at least 16 characters |
-| `LICENSE_AUTH_SECRET` | console disabled | at least 16 characters |
-| `LICENSE_AUTH_DB_PATH` | `auth.sqlite` beside the ledger | non-empty |
-| `LICENSE_SEED_ADMIN_EMAIL` | no seeding | an email address |
-| `LICENSE_SEED_ADMIN_PASSWORD` | no seeding | non-empty |
-| `LICENSE_SERVER_URL` | `http://localhost:<port>` | a URL, with scheme |
-| `LICENSE_HOST` | `0.0.0.0` | non-empty |
-| `LICENSE_PORT` / `PORT` | 4100 | port number; `LICENSE_PORT` wins |
-| `LICENSE_CONFIG` | `keyforge.config.json` | non-empty |
+- **Root Directory:** repository root (leave blank).
+- **Build Command:** copy the `buildCommand` value from `render.yaml`:
 
-Two of these are worth explaining, because both used to fail quietly:
+  ```sh
+  set -o pipefail && curl -fsSL https://vite.plus | VP_HOME="$HOME/.vite-plus" VP_VERSION=1.1.0 VP_NODE_MANAGER=no bash && export PATH="$HOME/.vite-plus/bin:$PATH" && NODE_ENV=development vp install --frozen-lockfile && vp run build:all
+  ```
 
-- **`DATABASE_URL` is the engine switch.** Anything not matching `postgres://`
-  falls through to SQLite, so a typo'd scheme would have run the service on a
-  local file while you believed your managed database was in use. It is now
-  refused rather than ignored.
-- **`LICENSE_DB_POOL_MAX=ten`** parsed to `NaN`, failed an internal guard, and
-  left the deployment on the default pool size with no complaint. Wrong but
-  plausible is worse than broken — nobody investigates a service that appears
-  to work.
+- **Start Command:** `node dist/src/index.js`.
+- **Node version:** use `.node-version`; remove an old `NODE_VERSION` override or set it to the same version.
+- **Health Check Path:** `/healthz`.
 
-A variable cleared to an empty string in a dashboard counts as unset, which is
-what clearing a field is meant to mean.
+Render supplies `RENDER_EXTERNAL_URL` automatically. KeyForge uses that URL for console authentication when `LICENSE_SERVER_URL` is unset or empty. To use a custom domain, set `LICENSE_SERVER_URL` to its HTTPS origin; the explicit value always wins. This fallback uses platform environment configuration, never request headers. Other production hosts still need an explicit URL when the console is enabled.
 
-The signing key gets a check of its own beyond presence: it must parse, be
-Ed25519, and survive a sign/verify round trip. `npm run license -- keycheck`
-runs the same check offline, and prints the public half and its fingerprint.
+The build installs the pinned Vite+ CLI into a user-writable directory, adds it to this build's PATH, installs all workspaces from the lockfile (including build dependencies even when `NODE_ENV=production`), and compiles both server and console. Startup calls Node directly and does not depend on the build shell's PATH. The `packageManager` field correctly names pnpm, which Vite+ manages; do not switch it to Yarn to match an outdated dashboard command. After replacing the old build command, use **Manual Deploy → Clear build cache & deploy** once to discard the old package-manager cache.
 
-## The targets
+New Vite+ scaffolds bootstrap the same toolchain but allow generating a lockfile on their first build. Commit the generated lockfile and switch to `--frozen-lockfile` for subsequent deployments.
 
-### local
+Select Postgres or attach a persistent disk for SQLite. Ephemeral/free instances cannot retain a local ledger, generated signing keys or encryption rings. Store all required keys in provider secrets or durable mounts. Leave `LICENSE_PORT` unset to use Render's assigned `PORT`.
 
-No manifest. `npm run build:all && npm run start`, console on
-`http://localhost:4100/`. Pick a real target later by scaffolding again, or
-copy a manifest from below.
+## Fly.io
 
-### docker
+Use the generated fly.toml and Dockerfile. SQLite requires a persistent volume and a single active writer deployment model. Multi-instance deployments should use Postgres plus object-storage archives and a shared/persistent backup cache. Configure secrets through the provider and leave the platform port wiring intact.
 
-`docker compose up --build`. The generated compose file names its service and
-volumes after your project; with `--db postgres` it runs Postgres alongside and
-waits for its health check before starting the service. Secrets come from a
-`.env` file beside the compose file.
+## Railway
 
-The image builds the server and console and runs `dist/src/index.js`. It sets
-no `LICENSE_PORT`, so a host that assigns `PORT` is obeyed and a local run
-defaults to 4100.
+Use the generated railway.json/Dockerfile, set DATABASE_URL when attaching Postgres, and provide durable secrets. Do not rely on an ephemeral image filesystem for SQLite or encryption-ring persistence.
 
-### render
+## Koyeb
 
-Push to GitHub, then **New > Blueprint** in the dashboard; Render reads
-`render.yaml`. The blueprint declares the build, the `/healthz` check, and every
-secret as `sync: false` so the dashboard prompts for it.
+Use the generated Koyeb deployment script and Dockerfile. Managed Postgres is appropriate for ephemeral instances. The script deploys infrastructure; review its project/region values before running it.
 
-With `--db postgres` the blueprint also provisions a free Postgres and wires
-`DATABASE_URL` through `fromDatabase` — the combination worth choosing, since
-free web services have no disk. Free services also sleep when idle; the first
-request after a sleep is slow, which is harmless for license checks and
-surprising in a demo.
+## cPanel
 
-### fly
+Read [the cPanel guide](cpanel-guide.md) and the repository cPanel skill before editing .cpanel.yml. cPanel's Git deployment is outside the application's Node environment: never install or build in that task.
 
-```bash
-fly launch --no-deploy --copy-config
-fly volumes create <project>_data --size 1     # SQLite only
-fly secrets set LICENSE_SIGNING_KEY=… LICENSE_ADMIN_TOKEN=… LICENSE_AUTH_SECRET=…
-fly deploy
-```
+Build locally or in CI. Deploy dist/ and copy dist/runtime-package.json to the application root as package.json. Provision production modules separately using the host's Node environment and vp install --prod, or its supported equivalent installation control. Do not deploy the workspace development manifest, node_modules, Git history, databases or secret rings. Passenger uses dist/src/index.js through the configured entry and reloads after touch tmp/restart.txt.
 
-`fly.toml` builds from the Dockerfile, serves on 8080, health-checks `/healthz`,
-and mounts a volume at `/data` when the ledger is SQLite. A Fly volume belongs
-to a single machine: on SQLite, keep this app at one machine, or move to
-Postgres and scale freely.
+The deployment task only copies prebuilt artifacts and touches the restart file. Runtime install happens separately, not inside .cpanel.yml. If the host cannot provide a compatible Node/native SQLite build, use Postgres and a suitable supported runtime deployment.
 
-### railway
+## Backup and upgrade
 
-`railway.json` selects the Dockerfile builder and the `/healthz` check.
-Railway injects `PORT`, which this service reads when `LICENSE_PORT` is unset.
-Add a volume for a SQLite ledger, or `railway add --database postgres` and let
-`DATABASE_URL` arrive on its own.
+Disable writers before database copies/restores. Verify archives on isolated targets. Restore matching signing/data rings before restarting. Do not treat /healthz alone as proof of operator login, licensing and quota enforcement. Review [limitations and future architecture](integration-review.md) before planning multi-vendor hosting.
 
-### koyeb
-
-Koyeb has no repository manifest — services are declared with CLI flags — so
-the scaffolder writes `deploy/koyeb.sh` holding the real `koyeb service create`
-command: free instance, port 8000, `/healthz` check, and every secret
-referenced as `{{secret.NAME}}`. Create the secrets once with `koyeb secrets
-create`, edit the repository URL at the top of the script, and run it. Keep the
-script in version control and edit it rather than clicking through the
-dashboard.
-
-### cpanel
-
-Shared hosting with Passenger. cPanel should never build: run `npm run
-build:all` locally or in CI, commit `dist/`, then pull from cPanel's Git Version
-Control page. `.cpanel.yml` copies `dist/`, `scripts/`, `package.json` and the
-config into the app directory, creates the SQLite file only when it is absent —
-never overwriting a live ledger — and touches `tmp/restart.txt` to restart
-Passenger.
-
-## Bring your own Postgres
-
-`DATABASE_URL` is the whole switch. Set it to any Postgres and the ledger *and*
-the operator accounts live there; leave it unset and the service uses SQLite,
-which stays the default. Migrations run at boot on either engine, so moving
-from one to the other is a config change rather than a code change.
-
-```
-DATABASE_URL=postgres://user:password@host/dbname?sslmode=verify-full
-```
-
-**Say `sslmode` out loud.** A URL with no `sslmode` against a remote host gets
-verified TLS here anyway, and `sslmode=require` — what most providers hand you
-— is also treated as verified rather than left to the driver's default, which
-has changed meaning between versions. `sslmode=no-verify` (or `disable` on a
-private network) is honoured if you mean it. This database holds operator
-password hashes, so the default leans strict.
-
-`LICENSE_DB_POOL_MAX` bounds each pool (default 5). The process opens two —
-one for the ledger, one for operator accounts — so a value of 5 means at most
-10 connections per instance.
-
-Switching an existing deployment is not a data loss event: `npm run db -- copy
---from ./licenses.sqlite --to "$DATABASE_URL"` moves the whole ledger across,
-and the same tool keeps a standby in step afterwards. See
-[backups.md](backups.md).
-
-### Neon
-
-Neon's free plan is a real free tier, with one property that matters here:
-**the compute suspends after 5 minutes of inactivity and that is not
-configurable on Free**. A licensing service is idle most of the time, so this
-is the normal case, not an edge case:
-
-- Suspending closes idle connections. The pool logs the drop and opens a fresh
-  connection on the next query. (Before this was handled, an unhandled pool
-  error would have taken the process down — on a quiet night, unprompted.)
-- The first request after a suspend pays the wake-up, a few hundred
-  milliseconds. Harmless for license checks; noticeable in a demo.
-
-Neon gives two hostnames for the same database:
-
-| Endpoint | Hostname | Use it for |
-| --- | --- | --- |
-| Pooled | `ep-name-pooler.region.aws.neon.tech` (note the `-pooler`) | The service. PgBouncer in transaction mode, thousands of client connections. |
-| Direct | `ep-name.region.aws.neon.tech` | `pg_dump`, and anything else that needs session state. |
-
-The pooled endpoint does not support session-level advisory locks, `SET`, or
-`LISTEN`/`NOTIFY`. This service's boot migrations take a **transaction-scoped**
-advisory lock (`pg_advisory_xact_lock`) precisely so they stay correct through
-a transaction pooler — two instances starting together serialize instead of
-both trying to create the same tables. Backups are the exception: `pg_dump`
-relies on `SET`, so point it at the direct endpoint.
-
-Storage on Free is 0.5 GB per project, which a license ledger will not trouble.
-
-Neon's console appends `channel_binding=require` to the connection strings it
-hands out. node-postgres does not implement SCRAM channel binding, so that
-parameter has no effect here — the connection is still TLS-verified, but do not
-read it as a guarantee the driver is enforcing.
-
-Set the URL where that host keeps secrets — Render's dashboard, `fly secrets
-set`, `railway variables`, `koyeb secrets` — never in a manifest.
-
-### Other providers
-
-Supabase, Render Postgres, and any self-managed Postgres work the same way:
-one `DATABASE_URL`. Render's own free Postgres expires after a while, so check
-the current term before relying on it; a Neon or Supabase free database
-outlives it.
-
-## Backups
-
-Different by engine, not by host: SQLite deployments download consistent
-snapshots from the console's Settings page; Postgres uses `pg_dump`. See
-[backups.md](backups.md).
+For standalone Vite+/pnpm runtime installs, also deploy dist/runtime-pnpm-workspace.yaml as pnpm-workspace.yaml. It allows the required native SQLite build while omitting development workspace catalogs. Keep the runtime packageManager pin.

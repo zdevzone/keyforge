@@ -3,6 +3,16 @@
   "branding": { "name": "Acme Licensing" },
   "key": { "prefix": "ACME", "groupLength": 5, "groups": 4 },
   "tokens": { "offlineGraceDays": 14 },
+  "signingKeys": {
+    "$comment": "Public halves of keys this service no longer signs with. Tokens carry a kid, so a rotated-away key must stay findable while tokens it signed are still in the field. The active key comes from LICENSE_SIGNING_KEY and is named by LICENSE_SIGNING_KID.",
+    "retired": [
+      {
+        "kid": "2025-11",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
+        "retiredAt": "2026-08-01T00:00:00.000Z"
+      }
+    ]
+  },
   "limits": {
     "enabled": true,
     "activate": { "max": 20, "timeWindow": "1 minute" },
@@ -13,9 +23,9 @@
     "defaultPlan": "standard",
     "defaultActivationLimit": 1,
     "planPresets": {
-      "standard": { "entitlements": { "allowance": 200000 } },
-      "pro": { "entitlements": { "allowance": 1000000, "pro": true }, "activationLimit": 3 },
-      "trial": { "entitlements": { "allowance": 500, "trial": true }, "durationDays": 14 },
+      "standard": { "entitlements": { "imports": 200000 } },
+      "pro": { "entitlements": { "imports": 1000000, "pro": true }, "activationLimit": 3 },
+      "trial": { "entitlements": { "imports": 500, "trial": true }, "durationDays": 14 },
       "subscription-yearly": { "entitlements": { "tier": "full" }, "durationDays": 365 }
     }
   },

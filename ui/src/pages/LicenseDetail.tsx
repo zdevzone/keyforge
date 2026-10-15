@@ -1,17 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Pencil } from "lucide-react";
+import { Unplug } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import {
   fetchActivations,
   fetchAdminConfig,
   fetchLicense,
+  productPath,
+  request,
   liveStatus,
   releaseActivation,
   revokeLicense,
   updateLicense,
   type License,
 } from "../api";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
 import {
   Button,
   Card,
@@ -28,12 +35,16 @@ import {
   rowsToEntitlements,
   type EntitlementRow,
 } from "../components";
+import { DeviceIdentity } from "../components/DeviceIdentity";
+import { useListPage, ListPagination } from "../components/ListPagination";
+import ProductKey from "../components/ProductKey";
+import { expiryDate, expiryFromDate } from "../lib/expiry";
 
 function Field(props: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{props.label}</dt>
-      <dd className="mt-1 text-sm">{props.children}</dd>
+    <div className="detail-field">
+      <dt>{props.label}</dt>
+      <dd>{props.children}</dd>
     </div>
   );
 }
@@ -58,6 +69,11 @@ export default function LicenseDetail() {
   const licenseQuery = useQuery({
     queryKey: ["licenses", id],
     queryFn: () => fetchLicense(id),
+  });
+  const deliveryQuery = useQuery({
+    queryKey: ["license-delivery", id],
+    queryFn: () => request<any>(productPath("/licenses/" + id + "/delivery")),
+    refetchInterval: 15000,
   });
   const activationsQuery = useQuery({
     queryKey: ["licenses", id, "activations"],
@@ -84,6 +100,7 @@ export default function LicenseDetail() {
     },
   });
 
+  const activationPage = useListPage(activationsQuery.data?.activations ?? [], id);
   if (licenseQuery.isPending) return <Spinner label="Loading license…" />;
   if (licenseQuery.error) return <ErrorNote message={(licenseQuery.error as Error).message} />;
 
@@ -94,112 +111,206 @@ export default function LicenseDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <Link to="/" className="text-sm text-slate-500 hover:text-slate-900">
-            ← All licenses
-          </Link>
-          <div className="mt-2 flex items-center gap-3">
-            <h1 className="text-xl font-semibold">
-              {license.issuedTo || <span className="text-slate-400">(unnamed)</span>}
-            </h1>
-            <StatusBadge status={status} />
-          </div>
-          <div className="mt-1 font-mono text-xs text-slate-400">{license.id}</div>
-        </div>
-        {canManage && (
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            {license.status !== "revoked" && (
-              <Button variant="danger" onClick={() => setConfirmingRevoke(true)}>
-                Revoke
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-
-      <Card className="p-5">
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
-          <Field label="Plan">{license.plan}</Field>
-          <Field label="Entitlements">{entitlementsSummary(license.entitlements) || "—"}</Field>
-          <Field label="Seats">
-            {activeSeats} / {license.activationLimit} in use
-          </Field>
-          <Field label="Issued">{formatDate(license.issuedAt)}</Field>
-          <Field label="Expires">{formatDate(license.expiresAt)}</Field>
-          {license.revokedAt && <Field label="Revoked">{formatDateTime(license.revokedAt)}</Field>}
-        </dl>
-      </Card>
-
-      <Card>
-        <div className="border-b border-slate-200 px-5 py-4 text-sm font-medium">Activations</div>
-        {activationsQuery.isPending ? (
-          <Spinner label="Loading activations…" />
-        ) : activationsQuery.error ? (
-          <div className="p-5">
-            <ErrorNote message={(activationsQuery.error as Error).message} />
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-3 font-medium">Installation</th>
-                <th className="px-5 py-3 font-medium">Activated</th>
-                <th className="px-5 py-3 font-medium">State</th>
-                <th className="px-5 py-3">
-                  {/* The actions column. Named for screen readers, which
-                      otherwise announce nothing at all for this column. */}
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {activations.map((activation) => (
-                <tr
-                  key={activation.installationId}
-                  className={activation.deactivatedAt ? "text-slate-400" : ""}
-                >
-                  <td className="px-5 py-3 font-mono text-xs">{activation.installationId}</td>
-                  <td className="px-5 py-3 whitespace-nowrap">
-                    {formatDateTime(activation.activatedAt)}
-                  </td>
-                  <td className="px-5 py-3 whitespace-nowrap">
-                    {activation.deactivatedAt
-                      ? `released ${formatDateTime(activation.deactivatedAt)}`
-                      : "active"}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    {!activation.deactivatedAt && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => setReleasing(activation.installationId)}
-                      >
-                        Release
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {activations.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-slate-400">
-                    Never activated.
-                  </td>
-                </tr>
+      <Card className="detail-sheet">
+        <div className="detail-heading">
+          <div>
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"
+            >
+              <ArrowLeft className="size-4" /> All licenses
+            </Link>
+            <div className="mt-2 flex items-center gap-3">
+              <h1 className="text-xl font-semibold">
+                {license.issuedTo || <span className="text-muted-foreground">(unnamed)</span>}
+              </h1>
+              {canManage && (
+                <Link className="text-primary underline" to={"/sales?license=" + id}>
+                  Sales & payments
+                </Link>
               )}
-            </tbody>
-          </table>
+              <StatusBadge status={status} />
+            </div>
+            <div className="mt-1 font-mono text-xs text-muted-foreground">{license.id}</div>
+          </div>
+          {canManage && (
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil data-icon="inline-start" />
+                Edit
+              </Button>
+              {license.status !== "revoked" && (
+                <Button variant="danger" onClick={() => setConfirmingRevoke(true)}>
+                  Revoke
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {deliveryQuery.data?.delivery && (
+          <section className="px-6 pb-4 text-sm" aria-label="License delivery" aria-live="polite">
+            <span className="font-medium">Delivery: </span>
+            {
+              (
+                {
+                  available: "Available to customer · awaiting retrieval",
+                  retrieved: "Retrieved by customer",
+                  manual: "Manual sharing required",
+                  failed: "Key retrieval failed · customer can retry",
+                } as Record<string, string>
+              )[deliveryQuery.data.delivery.status]
+            }
+            {deliveryQuery.data.delivery.error && (
+              <ErrorNote message={deliveryQuery.data.delivery.error} />
+            )}
+          </section>
         )}
+        <Tabs defaultValue="overview" className="detail-tabs">
+          <TabsList variant="line" className="gap-8" aria-label="License details">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="activations">Activations</TabsTrigger>
+            {canManage && <TabsTrigger value="key">Product key</TabsTrigger>}
+          </TabsList>
+          <TabsContent value="overview">
+            <div className="detail-overview">
+              <section>
+                <h2>Primary details</h2>
+                <dl className="detail-fields">
+                  <Field label="Customer">{license.issuedTo || "(unnamed)"}</Field>
+                  <Field label="License ID">
+                    <span className="font-mono text-xs">{license.id}</span>
+                  </Field>
+                  <Field label="Plan">{license.plan}</Field>
+                  <Field label="Entitlements">
+                    {entitlementsSummary(license.entitlements) || "—"}
+                  </Field>
+                  <Field label="Issued">{formatDate(license.issuedAt)}</Field>
+                  <Field label="Expires">{formatDate(license.expiresAt)}</Field>
+                  {license.revokedAt && (
+                    <Field label="Revoked">{formatDateTime(license.revokedAt)}</Field>
+                  )}
+                </dl>
+              </section>
+              <aside className="detail-aside">
+                <h2>Activation seats</h2>
+                {activationsQuery.isPending ? (
+                  <Spinner label="Loading seats…" />
+                ) : activationsQuery.error ? (
+                  <ErrorNote message={(activationsQuery.error as Error).message} />
+                ) : (
+                  <dl>
+                    <div>
+                      <dt>Seat limit</dt>
+                      <dd>{license.activationLimit}</dd>
+                    </div>
+                    <div>
+                      <dt>In use</dt>
+                      <dd>{activeSeats}</dd>
+                    </div>
+                    <div>
+                      <dt>Available</dt>
+                      <dd>{Math.max(0, license.activationLimit - activeSeats)}</dd>
+                    </div>
+                    <div>
+                      <dt>License status</dt>
+                      <dd>
+                        <StatusBadge status={status} />
+                      </dd>
+                    </div>
+                  </dl>
+                )}
+              </aside>
+            </div>
+          </TabsContent>
+          {canManage && (
+            <TabsContent value="key">
+              <ProductKey license={license} />
+            </TabsContent>
+          )}
+          <TabsContent value="activations">
+            <div className="border-b border-slate-200 px-5 py-4 text-sm font-medium">
+              Activation history · {activeSeats} active installation{activeSeats === 1 ? "" : "s"}
+            </div>
+            {activationsQuery.isPending ? (
+              <Spinner label="Loading activations…" />
+            ) : activationsQuery.error ? (
+              <div className="p-5">
+                <ErrorNote message={(activationsQuery.error as Error).message} />
+              </div>
+            ) : (
+              <Table className="w-full text-sm">
+                <TableHeader>
+                  <TableRow className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <TableHead className="px-5 py-3 font-medium">Installation</TableHead>
+                    <TableHead className="px-5 py-3 font-medium">Reported machine group</TableHead>
+                    <TableHead className="px-5 py-3 font-medium">Activated</TableHead>
+                    <TableHead className="px-5 py-3 font-medium">State</TableHead>
+                    <TableHead className="px-5 py-3 text-right">
+                      {/* The actions column. Named for screen readers, which
+                      otherwise announce nothing at all for this column. */}
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-slate-100">
+                  {activationPage.rows.map((activation) => (
+                    <TableRow
+                      key={activation.installationId}
+                      className={activation.deactivatedAt ? "text-muted-foreground" : ""}
+                    >
+                      <TableCell className="px-5 py-3 font-mono text-xs">
+                        {activation.installationId}
+                      </TableCell>
+                      <TableCell className="px-5 py-3 whitespace-nowrap">
+                        <DeviceIdentity device={activation} />
+                      </TableCell>
+                      <TableCell className="px-5 py-3 whitespace-nowrap">
+                        {formatDateTime(activation.activatedAt)}
+                      </TableCell>
+                      <TableCell className="px-5 py-3 whitespace-nowrap">
+                        {activation.deactivatedAt
+                          ? `released ${formatDateTime(activation.deactivatedAt)}`
+                          : "active"}
+                      </TableCell>
+                      <TableCell className="px-5 py-3 text-right">
+                        {!activation.deactivatedAt && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => setReleasing(activation.installationId)}
+                          >
+                            <Unplug aria-hidden="true" />
+                            Release
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {activations.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="px-5 py-10 text-center text-muted-foreground"
+                      >
+                        Never activated.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+            <ListPagination {...activationPage} />
+          </TabsContent>
+        </Tabs>
       </Card>
 
-      {editing && <EditLicense license={license} onClose={() => setEditing(false)} />}
+      {editing && (
+        <EditLicense key={license.id} license={license} onClose={() => setEditing(false)} />
+      )}
 
       {confirmingRevoke && (
         <Modal title="Revoke this license?" onClose={() => setConfirmingRevoke(false)}>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             Revocation is permanent — there is no un-revoke. Installations learn of it on their next
             refresh and imports stop there.
           </p>
@@ -225,7 +336,7 @@ export default function LicenseDetail() {
 
       {releasing && (
         <Modal title="Release this activation?" onClose={() => setReleasing(null)}>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             Frees the seat held by <code className="font-mono text-xs">{releasing}</code> so the key
             can activate on another installation (transfer).
           </p>
@@ -253,22 +364,22 @@ export default function LicenseDetail() {
 
 function EditLicense(props: { license: License; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const [baseLicense] = useState(props.license);
   const [issuedTo, setIssuedTo] = useState(props.license.issuedTo);
   const [rows, setRows] = useState<EntitlementRow[]>(
     entitlementsToRows(props.license.entitlements),
   );
   const [activationLimit, setActivationLimit] = useState(String(props.license.activationLimit));
-  const [expiresAt, setExpiresAt] = useState(
-    props.license.expiresAt ? props.license.expiresAt.slice(0, 10) : "",
-  );
+  const [expiresAt, setExpiresAt] = useState(expiryDate(baseLicense.expiresAt));
 
   const mutation = useMutation({
     mutationFn: () =>
-      updateLicense(props.license.id, {
+      updateLicense(baseLicense.id, {
+        revision: baseLicense.revision,
         issuedTo: issuedTo.trim(),
         entitlements: rowsToEntitlements(rows),
         activationLimit: Number(activationLimit),
-        expiresAt: expiresAt ? new Date(`${expiresAt}T23:59:59Z`).toISOString() : null,
+        expiresAt: expiryFromDate(expiresAt, baseLicense.expiresAt),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["licenses"] });
@@ -286,7 +397,7 @@ function EditLicense(props: { license: License; onClose: () => void }) {
       <form onSubmit={onSubmit} className="space-y-4">
         <TextField label="Customer" value={issuedTo} onChange={setIssuedTo} />
         <EntitlementsEditor rows={rows} onChange={setRows} />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid items-start gap-4 sm:grid-cols-2">
           <TextField
             label="Activation limit"
             type="number"
@@ -295,7 +406,7 @@ function EditLicense(props: { license: License; onClose: () => void }) {
             onChange={setActivationLimit}
           />
           <TextField
-            label="Expires (empty = never)"
+            label="Expires (UTC date; empty = never)"
             type="date"
             value={expiresAt}
             onChange={setExpiresAt}

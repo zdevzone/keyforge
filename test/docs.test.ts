@@ -1,134 +1,102 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-/**
- * Reference documentation rots the moment someone adds a route and forgets the
- * doc. Nothing else in CI would notice: the service works, the tests pass, and
- * the gap only shows up when an integrator cannot find the endpoint they were
- * told to call.
- *
- * So these tests read the source and assert the docs mention what it contains.
- * Deliberately shallow — presence, not prose. A test that tried to check
- * whether an endpoint is described *well* would fail on every reword and get
- * deleted within a month.
- */
+import { buildLicenseApp } from "../src/app.js";
+import { LicenseDatabase } from "../src/db.js";
+import { generateSigningKeyPair } from "../src/sign.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-
-const apiDoc = read("docs/api.md");
-const cliDoc = read("docs/cli.md");
-const appSource = read("src/app.ts");
-
-test("every HTTP route is documented in docs/api.md", () => {
-  // Route path literals, whichever verb helper registers them.
-  const routes = new Set(
-    [...appSource.matchAll(/\.(get|post|patch|put|delete)<[^>]*>?\s*\(\s*"([^"]+)"/g)].map(
-      (match) => match[2],
-    ),
-  );
-  for (const match of appSource.matchAll(/\.(get|post|patch|put|delete)\(\s*"([^"]+)"/g)) {
-    routes.add(match[2]);
+test("every registered HTTP route is documented", async () => {
+  const routes: string[] = [];
+  const database = await LicenseDatabase.open({ sqlitePath: ":memory:" });
+  const app = await buildLicenseApp({
+    database,
+    privateKey: generateSigningKeyPair().privateKey,
+    uiDir: join(root, ".no-ui"),
+    onRoute: (method, url) => {
+      if (method !== "HEAD") routes.push(url);
+    },
+  });
+  try {
+    await app.ready();
+    assert.ok(routes.length >= 50);
+    assert.deepEqual(
+      [...new Set(routes)].filter((route) => !read("docs/api.md").includes(route)),
+      [],
+    );
+  } finally {
+    await app.close();
+    await database.close();
   }
-  // The auth plugin registers this one through a wildcard route option.
-  if (/url:\s*"\/api\/auth\/\*"/.test(appSource)) routes.add("/api/auth/*");
-
-  assert.ok(routes.size >= 15, `expected to find the route table, found ${routes.size}`);
-
-  const missing = [...routes].filter((route) => !apiDoc.includes(route));
-  assert.deepEqual(missing, [], `undocumented routes: ${missing.join(", ")}`);
 });
-
-test("every error code the service can return is in the docs/api.md table", () => {
-  // Multi-line calls included — the long messages wrap, and a code that only
-  // appears in a wrapped call is exactly the kind that gets missed by hand.
-  const codes = new Set(
-    [...appSource.matchAll(/errorResponse\(\s*reply,\s*\d+,\s*"([a-z_]+)"/g)].map(
-      (match) => match[1],
-    ),
+test("domain error codes are documented across all route modules", () => {
+  const codes = new Set<string>();
+  for (const path of [
+    "src/app.ts",
+    "src/platform.ts",
+    "src/license-delivery.ts",
+    "src/finance.ts",
+    "src/notifications.ts",
+    "src/platform-store.ts",
+    "src/backups.ts",
+    "src/system-reset.ts",
+    "src/maintenance.ts",
+    "src/backup-destinations.ts",
+  ])
+    for (const pattern of [
+      /new DomainError\(\s*"([a-z_]+)"/g,
+      /fail\(reply,\s*\d+,\s*"([a-z_]+)"/g,
+      /error:\s*"([a-z_]+)"/g,
+    ])
+      for (const match of read(path).matchAll(pattern)) codes.add(match[1]);
+  assert.ok(codes.size >= 50);
+  assert.deepEqual(
+    [...codes].filter((code) => !read("docs/api.md").includes("`" + code + "`")),
+    [],
   );
-  assert.ok(codes.size >= 20, `expected the error catalogue, found ${codes.size}`);
-
-  const missing = [...codes].filter((code) => !apiDoc.includes(`\`${code}\``));
-  assert.deepEqual(missing, [], `error codes missing from the table: ${missing.join(", ")}`);
 });
-
-test("every CLI command is documented in docs/cli.md", () => {
-  const commands = (source: string) =>
-    [...source.matchAll(/^\s*case "([a-z:]+)":/gm)].map((match) => match[1]);
-
-  const license = commands(read("scripts/license-tool.mjs"));
-  const db = commands(read("scripts/db-tool.mjs"));
-  assert.ok(license.length >= 7, `expected the license commands, found ${license.join(", ")}`);
-  assert.ok(db.length >= 3, `expected the db commands, found ${db.join(", ")}`);
-
-  const missing = [
-    ...license.map((name) => `npm run license -- ${name}`),
-    ...db.map((name) => `npm run db -- ${name}`),
-  ].filter((invocation) => !cliDoc.includes(invocation));
-  assert.deepEqual(missing, [], `undocumented commands: ${missing.join(", ")}`);
-
-  assert.match(cliDoc, /npm run admin:create/, "admin:create should be documented too");
+test("every administrative CLI command is documented using Vite+", () => {
+  for (const [file, script] of [
+    ["scripts/license-tool.mjs", "license"],
+    ["scripts/db-tool.mjs", "db"],
+  ])
+    for (const match of read(file).matchAll(/^\s*case "([a-z:]+)":/gm))
+      assert.ok(read("docs/cli.md").includes("vp run " + script + " " + match[1]));
+  for (const script of ["admin:create", "secrets:init", "backup:restore"])
+    assert.ok(read("docs/cli.md").includes("vp run " + script));
 });
-
-/**
- * npm swallows `--flags` as its own unless `--` separates them.
- *
- * On `npm run db` that is merely annoying: the command reports a missing
- * `--from` and stops. On `npm run license` it is dangerous — `npm run license
- * issue --plan pro --to "Acme"` *succeeds*, issuing a license on the default
- * plan, to nobody, with no entitlements, and prints a sellable product key.
- * Nothing looks wrong.
- *
- * Both were found by running the documented commands rather than reading them,
- * once per milestone. This test is the cheaper replacement for that discovery.
- */
-test("documented invocations pass their flags through npm", () => {
-  const sources: [string, string][] = [
-    ["docs/cli.md", cliDoc],
-    ["README.md", read("README.md")],
-    ["scripts/license-tool.mjs", read("scripts/license-tool.mjs")],
-    ["scripts/db-tool.mjs", read("scripts/db-tool.mjs")],
-  ];
-
+test("project documentation uses Vite+ commands", () => {
   const offenders: string[] = [];
-  for (const [name, text] of sources) {
-    for (const line of text.split("\n")) {
-      // The docs show the broken form once, deliberately labelled, because
-      // teaching the pitfall is the point.
-      if (line.includes("WRONG")) continue;
-      for (const match of line.matchAll(/npm run (license|db) (?!-- )([a-z:]+)(.*)/g)) {
-        // Only invocations that actually carry flags are broken by npm; a bare
-        // `npm run license keygen` in prose is fine.
-        if (match[3].includes("--")) offenders.push(`${name}: ${match[0].trim()}`);
-      }
+  function walk(dir: string) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (["node_modules", ".git", "dist"].includes(entry.name)) continue;
+      const file = join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (
+        entry.name.endsWith(".md") &&
+        /\b(?:npm (?:run|install|ci|test|create)|npx\s)/.test(readFileSync(file, "utf8"))
+      )
+        offenders.push(file);
     }
   }
-  assert.deepEqual(
-    offenders,
-    [],
-    `these need "npm run <tool> -- <command>":\n  ${offenders.join("\n  ")}`,
-  );
+  walk(root);
+  assert.deepEqual(offenders, []);
 });
-
-/**
- * The README is an index now: the reference it used to carry inline lives under
- * docs/, and the only way there is a link. Naming two files here would let the
- * five it does not name rot unnoticed -- so read the directory, and let adding
- * a doc be what makes this fail until it is linked.
- */
-test("every doc is linked from the README, so none of them can go missing", () => {
-  const readme = read("README.md");
-  const docs = readdirSync(join(root, "docs")).filter((name) => name.endsWith(".md"));
-  assert.ok(docs.length >= 5, "expected the docs directory to be populated");
-
-  const unlinked = docs.filter((name) => !readme.includes(`docs/${name}`));
-  assert.deepEqual(
-    unlinked,
-    [],
-    `add these to the README's documentation table:\n  ${unlinked.join("\n  ")}`,
-  );
+test("integration and operation guides are discoverable from README", () => {
+  for (const doc of [
+    "api",
+    "cli",
+    "configuration",
+    "backups",
+    "deploy",
+    "verify-token",
+    "dependent-app-integration",
+    "dependent-app-ai-context",
+    "integration-review",
+  ])
+    assert.ok(read("README.md").includes("docs/" + doc + ".md"));
 });

@@ -16,14 +16,16 @@
  * LICENSE_SIGNING_KEY_FILE (default ./license-signing.key), which is
  * gitignored — move it somewhere safer than a working copy.
  */
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 const [, , command, ...rest] = process.argv;
 
 function env(name) {
-  const value = process.env[name];
+  const value =
+    process.env[name] ||
+    (name === "LICENSE_SERVER_URL" ? process.env.RENDER_EXTERNAL_URL : undefined);
   if (!value) return value;
   if (
     (value.startsWith('"') && value.endsWith('"')) ||
@@ -44,30 +46,37 @@ function flag(name, fallback = undefined) {
 function usage() {
   console.log(`License tool
 
-  npm run license -- keygen [--force]
+  vp run license keygen [--force]
       Generate the Ed25519 signing keypair. Prints the public key to embed in
       server/license.ts; writes LICENSE_SIGNING_KEY_FILE (default
       ./license-signing.key) — KEEP PRIVATE, gitignored.
 
-  npm run license -- keycheck [--expect <pem-or-file>] [--token <token>] [--server]
+  vp run license keycheck [--expect <pem-or-file>] [--token <token>] [--server]
       Validate the signing key this deployment is configured with and print its
       public half and fingerprint. --expect compares against the public key your
       app embeds; --token verifies a real issued token; --server compares the
       fingerprint the deployed service reports. Exits 1 on any mismatch.
 
-  npm run license -- issue [--plan standard] [--to "Name"] [--activations 1]
-                        [--expires 2027-12-31] [--allowance 200000]
-                        [--entitlements '{"seats":5,"pro":true}']
-      Create a license on the service and print its product key — shown once,
-      stored only as a hash. --allowance is sugar for an "allowance"
-      entitlement; a plan preset on the server may supply defaults.
+  vp run license issue --plan standard --to "Name" [--installation ID]
+                        [--request-id UUID] [--paid --method "Bank transfer" --reference ID]
+      Issue from the saved plan and record its ETB sale. Unpaid by default.
+      Reuse --request-id when retrying. Plan terms cannot be overridden here.
 
-  npm run license -- list
-  npm run license -- inspect <token-or-payload>
-  npm run license -- revoke <licenseId>
-  npm run license -- activations <licenseId>
-  npm run license -- deactivate <licenseId> --installation <installationId>
+  vp run license list
+  vp run license inspect <token-or-payload>
+  vp run license revoke <licenseId>
+  vp run license activations <licenseId>
+  vp run license deactivate <licenseId> --installation <installationId>
       Release a binding so the customer can activate elsewhere (transfer).
+
+  vp run license machines [--q <reference|machineId|installationId>] [--limit 25]
+      The trial ledger. Search by the support reference a customer reads out,
+      a machine id from an earlier answer, or an installation id from a log.
+      "trial" is what the next registration from that machine would be told.
+
+  vp run license clear <machineId>
+      Give one machine its trial back. Grants exactly ONE more: the next run
+      reads fresh, the one after it is spent again. Audited.
 
   Service connection (all but keygen/inspect; keycheck only with --server):
       LICENSE_SERVER_URL, LICENSE_ADMIN_TOKEN
@@ -78,6 +87,10 @@ function usage() {
 }
 
 async function admin(path, options = {}) {
+  path = path.replace(
+    /^\/admin\/(licenses|machines)/,
+    "/admin/products/" + encodeURIComponent(flag("product") || "default") + "/$1",
+  );
   const base = env("LICENSE_SERVER_URL");
   const token = env("LICENSE_ADMIN_TOKEN");
   if (!base || !token) {
@@ -117,7 +130,9 @@ function keygen() {
   writeFileSync(keyPath, privatePem, "utf8");
   console.log(`Private key written to ${keyPath} — keep it with the license service only.`);
   console.log("  Deploy it as LICENSE_SIGNING_KEY_FILE (or inline as LICENSE_SIGNING_KEY).\n");
-  console.log("Paste this as LICENSE_PUBLIC_KEY in server/license.ts:\n");
+  console.log(
+    "Embed this PUBLIC key in your dependent app's trusted key set (not in this server's environment):\n",
+  );
   console.log(JSON.stringify(publicPem));
   // The same value `keycheck` and the console's Settings page report later, so
   // this line is comparable against them without re-deriving anything.
@@ -125,7 +140,7 @@ function keygen() {
     .update(publicKey.export({ type: "spki", format: "der" }))
     .digest("hex");
   console.log(`\nFingerprint: ${digest.slice(0, 16).match(/.{2}/g).join(":")}`);
-  console.log("Check it any time with: npm run license -- keycheck");
+  console.log("Check it any time with: vp run license keycheck");
 }
 
 /**
@@ -141,7 +156,7 @@ async function keypair() {
     return await import("../dist/src/keypair.js");
   } catch (error) {
     if (error?.code === "ERR_MODULE_NOT_FOUND") {
-      console.error("Build the server first: npm run build");
+      console.error("Build the server first: vp run build");
       process.exit(1);
     }
     throw error;
@@ -206,13 +221,16 @@ async function keycheck() {
   }
 
   if (flag("server") !== undefined) {
-    const config = await admin("/admin/config");
-    const deployed = config.signingKey?.fingerprint;
+    const config = await admin("/admin/products");
+    const product = config.products.find((p) => p.id === (flag("product") || "default"));
+    const active = product?.keys.find((k) => !k.retiredAt && !k.pending);
+    const deployed = active ? fingerprintPublicKey(active.publicKeyPem) : undefined;
     if (!deployed) {
       console.error("--server     that service did not report a signing key (older version?).");
       failed = true;
     } else if (deployed === info.fingerprint) {
-      console.log(`--server     ${env("LICENSE_SERVER_URL")} signs with this same key.`);
+      const kid = active.kid ? ` (kid ${active.kid})` : "";
+      console.log(`--server     ${env("LICENSE_SERVER_URL")} signs with this same key${kid}.`);
     } else {
       console.error("--server     MISMATCH");
       console.error(`  local key      ${info.fingerprint}`);
@@ -251,25 +269,27 @@ switch (command) {
     inspect(rest.find((argument) => !argument.startsWith("--")));
     break;
   case "issue": {
+    for (const name of ["expires", "activations", "allowance", "entitlements"])
+      if (flag(name) !== undefined)
+        throw Error("Edit the plan first; issuance does not accept --" + name + ".");
+    const requestId = flag("request-id") || randomUUID();
+    console.log("Issuance request ID (reuse if retrying): " + requestId);
     const body = {
+      requestId,
+      plan: flag("plan", "standard"),
       issuedTo: flag("to", ""),
-      expiresAt: flag("expires", null),
+      subjectKind: flag("subject", "installation"),
+      ...(flag("installation") ? { installationId: flag("installation") } : {}),
+      ...(flag("paid")
+        ? {
+            payment: {
+              date: new Date().toISOString().slice(0, 10),
+              method: flag("method", ""),
+              reference: flag("reference", ""),
+            },
+          }
+        : {}),
     };
-    const plan = flag("plan");
-    if (typeof plan === "string") body.plan = plan;
-    const activations = flag("activations");
-    if (activations !== undefined) body.activationLimit = Number(activations);
-    const allowance = flag("allowance");
-    if (allowance !== undefined) body.allowance = Number(allowance);
-    const entitlementsFlag = flag("entitlements");
-    if (typeof entitlementsFlag === "string") {
-      try {
-        body.entitlements = JSON.parse(entitlementsFlag);
-      } catch {
-        console.error("--entitlements must be a JSON object, e.g. '{\"seats\":5}'.");
-        process.exit(1);
-      }
-    }
     const result = await admin("/admin/licenses", { method: "POST", body: JSON.stringify(body) });
     const entitlements = Object.entries(result.license.entitlements ?? {})
       .map(([name, value]) => `${name}=${value}`)
@@ -278,7 +298,9 @@ switch (command) {
       `License ${result.license.id} (${result.license.plan}${entitlements ? `; ${entitlements}` : ""})`,
     );
     console.log(`Issued to: ${result.license.issuedTo || "(unnamed)"}`);
-    console.log("\nProduct key — shown once, store it now:\n");
+    console.log(
+      "\nProduct key — keep it private; admins can recover it with configured encryption:\n",
+    );
     console.log(`  ${result.key}`);
     break;
   }
@@ -297,9 +319,9 @@ switch (command) {
   }
   case "revoke": {
     const id = rest.find((argument) => !argument.startsWith("--"));
-    const { license } = await admin(`/admin/licenses/${id}/revoke`, { method: "POST" });
-    console.log(`Revoked ${license.id} at ${license.revokedAt}.`);
-    console.log("Installations learn of it on their next refresh; imports stop there.");
+    await admin(`/admin/licenses/${id}/revoke`, { method: "POST" });
+    console.log(`Revoked ${id}.`);
+    console.log("Installations learn of it on refresh; offline grants expire at their deadlines.");
     break;
   }
   case "activations": {
@@ -324,6 +346,45 @@ switch (command) {
       body: JSON.stringify({ installationId }),
     });
     console.log("Binding released. The key can now activate on another installation.");
+    break;
+  }
+  case "machines": {
+    const query = flag("q");
+    const limit = flag("limit");
+    const search = new URLSearchParams();
+    if (typeof query === "string") search.set("q", query);
+    if (limit !== undefined) search.set("limit", String(Number(limit)));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    const { machines, total } = await admin(`/admin/machines${suffix}`);
+    for (const machine of machines) {
+      // The reference first: it is the only column a customer can read out, so
+      // it is the one an operator is scanning for.
+      console.log(
+        `${machine.supportReference}  ${machine.id}  ${machine.trialState.padEnd(5)}  ` +
+          `regs=${machine.registrationCount}  ${machine.signalKinds.join(",") || "(no signals)"}`,
+      );
+      console.log(
+        `    installations: ${machine.installationIds.join(", ") || "(none)"}` +
+          `${machine.clearedAt ? `  cleared ${machine.clearedAt}` : ""}` +
+          `${machine.trialSpentReported ? "  client-reported spent" : ""}`,
+      );
+    }
+    if (machines.length === 0) {
+      console.log(query ? "(nothing matches that search)" : "(no machines registered yet)");
+    } else if (machines.length < total) {
+      console.log(`\n${machines.length} of ${total} — narrow with --q, or raise --limit.`);
+    }
+    break;
+  }
+  case "clear": {
+    const id = rest.find((argument) => !argument.startsWith("--"));
+    if (!id) {
+      console.error("Usage: license clear <machineId>   (find one with: license machines --q …)");
+      process.exit(1);
+    }
+    const { machine } = await admin(`/admin/machines/${id}/clear`, { method: "POST" });
+    console.log(`Cleared ${machine.id} at ${machine.clearedAt}.`);
+    console.log("That machine gets ONE more trial: the next run is fresh, the one after is not.");
     break;
   }
   default:

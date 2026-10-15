@@ -1,118 +1,61 @@
 # Keyforge
 
-A self-hostable product-key server you can read in an afternoon: signed
-offline license tokens, activation seats, an install census, and an admin
-console — one process, deployable on a free tier. Download it, configure it
-with one JSON file, and ship licenses for your app. MIT licensed.
+Keyforge is an MIT-licensed, self-hosted licensing server for one company managing multiple products or services. Deploy it on your own infrastructure and define your own plans and entitlements. A future paid hosted platform can add vendor tenancy and billing around this core; that hosted layer is not implemented.
 
-Built with Fastify, Kysely over **SQLite or Postgres**, and Ed25519
-signatures. The web console is React (Vite + Tailwind + TanStack Query) with
-[Better Auth](https://better-auth.com) session login.
+The console includes product policy and signing-key rotation, entitlement definitions, priced plans, license issuance and encrypted admin key recovery, activation seats, installations and machine trial history, support assignment and replies, trusted-backend metering, operator profiles and sessions, token diagnostics, and downloadable or independently scheduled backups to local storage, AWS S3, Cloudflare R2, UploadThing and custom upload endpoints.
 
-**It is not DRM.** Offline licensing keeps honest customers honest. A
-determined user can patch the public key out of their own copy of your app,
-and Keyforge does not pretend otherwise — see
-[how verification works](docs/verify-token.md) for exactly what the guarantee
-is and where it stops.
+Build output is generated, not tracked in this public repository. Run
+`vp run build:all` before deployment. A cPanel deployment project must explicitly
+include its prebuilt `dist/`, as described in the deployment guide.
 
-## Quick start
+## Develop
 
-Scaffold a server already configured for your product:
+Start with the [beginner guide](docs/getting-started.md) for prerequisites, secret generation and the first license workflow. Install [Vite+](https://viteplus.dev/guide/install), copy `.env.example` to `.env.local` and replace its secret placeholders before running:
 
-```bash
-npm create keyforge@latest my-license-server
+```sh
+vp install
+vp run license keygen
+vp run secrets:init
+vp run build:all
+vp run admin:create --email admin@example.com --password "<strong-password>"
+vp run start
 ```
 
-It asks for a product name, a database, a licensing model, a package manager
-and how much of the admin surface to expose, then writes the config, generates
-real secrets, and hands you the next commands. Every answer is also a flag, so
-`--db postgres --auth full --use-case time -y` skips the questions. See
-[packages/create-keyforge](packages/create-keyforge).
+Set exactly one signing-key source, independent random console/admin secrets, the public `LICENSE_SERVER_URL`, and the generated encryption ring file paths. The key generator follows `LICENSE_SIGNING_KEY_FILE`. Secrets and databases are ignored by Git. `secrets:init` creates data and backup rings, not console/admin secrets.
 
-Or clone this repository and configure it by hand:
-
-```bash
-npm install
-npm run license keygen              # one-time: generate the signing keypair
-cp .env.example .env.local          # then fill in the values
-npm run build:all                   # server → dist/, console → dist/public
-npm run admin:create -- --email you@example.com --password "long secret"
-npm run start
+```sh
+vp run check
+vp run test
+vp -C ui run dev
 ```
 
-The console is served at `/`, the health check at `/healthz`.
+Node 24.21.0 LTS is pinned for development and deployment. Supported runtime lines are modern Node 22, 24 and 26 as declared in `engines`; CI covers 22 and 24. Vite+ 1.1.0 fronts pnpm 12.11.2 and uses one workspace lockfile. Use `vp run test` for this repository's Node test suite; `vp test` invokes Vite+'s separate Vitest command.
 
-## How it works
+## Guides
 
-The service holds the only copy of your Ed25519 private key. Every answer an
-installation receives — active, expired, even revoked — arrives as a **signed
-token** the app verifies against an embedded public key. A spoofed license
-server can answer requests all day without ever minting a token your app
-accepts.
+Every deployment serves a public **`/docs`** reader with search, local guide links, copyable code and both themes. Content is bundled from the repository's Markdown at build time. Start with the [documentation index](docs/index.md) or [beginner guide](docs/getting-started.md); see [maintaining the docs site](docs/documentation-site.md).
 
-- **Product keys** (`KEY-XXXXX-…`, format configurable) are stored as SHA-256
-  hashes. The plaintext appears exactly once, in the issue response.
-- **Entitlements are yours to define** — a usage allowance, seat counts,
-  feature flags, a tier name — signed into every token verbatim. The server
-  never interprets them; your app enforces the ones it cares about. Licensing
-  models are just shapes: count-based is a numeric entitlement, time-based is
-  an expiry, editions are flags.
-- **Activations** bind a key to an installation id. Limits are enforced at
-  activation; releasing a binding frees the seat for transfer.
-- **Tokens** carry the entitlements plus an offline grace window, after which
-  the app must revalidate.
-- **Installations register on install**, licensed or not, so you can compare
-  the installed base against licenses actually issued.
-- **Usage is out of scope by design.** The ledger knows where the app is
-  installed and where keys are activated, never what customers do with it.
+- [TypeScript client SDK](packages/keyforge-client/README.md): online onboarding, signed offline use, secure storage adapters, and a Node reference example.
+- [Windows device recognition](docs/windows-device-identity.md): optional scoped signals, diagnostics, authenticated backfill and recovery.
+- [Cross-platform device identity and language support](docs/device-identity.md): Windows/Linux/macOS auto selection, native adapters, HTTP clients in other languages and shared hash vectors.
+- [Client OpenAPI contract](docs/client-openapi.json) and [AI integration skill](packages/keyforge-client/skill/keyforge-integrate/SKILL.md).
+- [Dependent app integration](docs/dependent-app-integration.md): registration, activation, offline verification, support and metering.
+- [AI integration context](docs/dependent-app-ai-context.md): compact instructions to give another app's coding assistant.
+- [API reference](docs/api.md) and [token verification](docs/verify-token.md).
+- [Configuration and environment precedence](docs/configuration.md).
+- [CLI](docs/cli.md), [backups and recovery](docs/backups.md), [deployment](docs/deploy.md), [cPanel](docs/cpanel-guide.md).
+- [Implementation review and future hosted architecture](docs/integration-review.md).
+- [Polaris console redesign and component inventory](docs/ui-redesign.md), [visual system](ui/DESIGN.md).
+- [Scaffolder](packages/create-keyforge/README.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
 
-## What you get
+## Upgrade existing installations
 
-An **admin console** — licenses, the installed base, a token inspector, an
-append-only audit log, entitlements, operators and backups — with `admin` and
-`support` roles enforced server-side. See [docs/console.md](docs/console.md).
+Back up the unified database (licensing and operators together), and keep separate recovery copies of signing keys and encryption rings first. Boot migrations preserve historical records and import historical ledger records into the `default` product once; they do not import the retired split auth database. Old license hashes cannot be reversed: an admin can securely re-enter the original product key after password verification to retain it encrypted. Historical installation IDs cannot be claimed without a credential; dependent apps must register a new identity.
 
-An **admin CLI** for everything the console does, plus key generation and
-ledger copying, at `npm run license`, `npm run db` and `npm run admin:create`.
-See [docs/cli.md](docs/cli.md).
+This release replaces the old unscoped device API. Integrators must adopt product-scoped routes, license token v4 and trial token v2. Existing client binaries require an application update; no compatibility adapter is provided. Preserve old public keys in client trust stores for the chosen transition period.
 
-**SQLite by default**, one file and no server. Set `DATABASE_URL=postgres://…`
-and the same service runs on Postgres — migrations run automatically on either
-engine, so switching is a config change.
+For a populated local demo, build with `vp run build:all`, stop the app, run `vp run demo:reset --apply --maintenance --scope database`, then `vp run start`. Demo login details are in the ignored .artifacts/demo/manifest.json file. See [reset and cleanup commands](docs/cli.md#reset-cleanup-and-demo-data) for targeted resets and provider setup.
 
-## Deploying
+SQLite uses one file for licensing and operator authentication. See [Database setup and demo data](docs/database.md) for resetting and reseeding the demo installation.
 
-`npm create keyforge --deploy <target>` writes that host's manifest, named
-after *your* project: `local`, `docker`, `render`, `fly`, `railway`, `koyeb`
-or `cpanel`.
-
-> **On a host with no persistent disk** — Render's free tier and Koyeb — a
-> SQLite ledger is empty again after every deploy: licenses, activations,
-> audit log and operator accounts alike. Use managed Postgres there. The
-> scaffolder says so out loud when you pick that combination.
-
-Full recipes, secrets and caveats per host: [docs/deploy.md](docs/deploy.md).
-
-## Documentation
-
-| Doc | What is in it |
-| --- | --- |
-| [verify-token.md](docs/verify-token.md) | How your app verifies a token offline. **Read this first** if you are deciding whether to trust Keyforge. |
-| [api.md](docs/api.md) | Every HTTP route. `/v1/*` is what your app calls on customers' machines; `/admin/*` is what you call. Includes the full error-code table. |
-| [cli.md](docs/cli.md) | `npm run license`, `npm run db`, `npm run admin:create`. |
-| [configuration.md](docs/configuration.md) | `keyforge.config.json` and every environment variable. |
-| [console.md](docs/console.md) | The admin console: first operator, roles, per-page reference. |
-| [deploy.md](docs/deploy.md) | Per-host recipes, and bringing your own Postgres. |
-| [backups.md](docs/backups.md) | Snapshots, `pg_dump`, standby mirrors, restoring. |
-
-If tokens are being rejected in the field, start with
-`npm run license -- keycheck --expect <your app's public key>`. It compares the
-key this service signs with against the one your app verifies against — the one
-mismatch that looks like success on the server and failure everywhere else.
-
-## Contributing & security
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for how we behave here. Report
-vulnerabilities privately per [SECURITY.md](SECURITY.md) — never in a public
-issue. Licensed [MIT](LICENSE).
+Customers can request a license before installation at `/request-license`. Operators review **Licenses → License requests**. See [License requests, issuance and payments](docs/license-sales.md).

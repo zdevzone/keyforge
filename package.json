@@ -24,45 +24,76 @@
   },
   "type": "module",
   "scripts": {
+    "secrets:init": "node scripts/init-secrets.mjs",
     "license": "node --env-file-if-exists=.env.local scripts/license-tool.mjs",
     "db": "node --env-file-if-exists=.env.local scripts/db-tool.mjs",
     "admin:create": "node --env-file-if-exists=.env.local scripts/create-admin.mjs",
-    "build": "tsc -p tsconfig.json",
-    "build:ui": "npm --prefix ui run build",
-    "build:all": "npm run build && npm --prefix ui ci && npm run build:ui",
+    "build": "tsc -p tsconfig.json && vp -C packages/keyforge-client run build && node scripts/runtime-package.mjs",
+    "build:ui": "vp -C ui run build",
+    "build:all": "vp run build && vp -C ui run build",
+    "dev:ui": "vp -C ui dev",
     "start": "node --env-file-if-exists=.env.local dist/src/index.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && vp -C packages/keyforge-client run typecheck",
     "lint": "vp lint",
     "fmt": "vp fmt",
-    "check": "vp lint && vp fmt --check && npm run typecheck",
-    "test": "tsx --test \"test/**/*.test.ts\""
+    "check": "vp lint && vp fmt --check && vp run typecheck && vp -C ui run typecheck",
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "backup:restore": "node --env-file-if-exists=.env.local scripts/restore-backup.mjs",
+    "test:console": "node scripts/console-smoke.mjs",
+    "test:issuance": "node scripts/issuance-smoke.mjs",
+    "test:docs": "node scripts/docs-smoke.mjs",
+    "docs:api": "node scripts/generate-api-docs.mjs",
+    "docs:client-api": "tsx scripts/generate-client-openapi.ts",
+    "db:reset": "node --env-file-if-exists=.env.local scripts/reset-database.mjs",
+    "data:clean": "node --env-file-if-exists=.env.local scripts/cleanup-data.mjs",
+    "demo:seed": "node --env-file-if-exists=.env.local scripts/demo-seed.mjs",
+    "demo:reset": "node --env-file-if-exists=.env.local scripts/reset-database.mjs --demo --clean-local",
+    "storage:init": "node --env-file-if-exists=.env.local scripts/storage-init.mjs",
+    "test:features": "node --env-file-if-exists=.env.local scripts/test-features.mjs"
   },
   "dependencies": {
-    "@fastify/rate-limit": "^11.2.0",
-    "@fastify/static": "^10.1.3",
+    "@aws-sdk/client-s3": "^3.1149.0",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/static": "^10.1.6",
     "@t3-oss/env-core": "^0.13.11",
-    "better-auth": "^1.7.1",
-    "better-sqlite3": "^12.11.1",
-    "fastify": "^5.12.1",
-    "kysely": "^0.29.5",
-    "pg": "^8.23.0",
-    "zod": "^4.4.3"
+    "better-auth": "^1.7.7",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.5",
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1",
+    "uploadthing": "^7.7.4",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^26.2.0",
+    "@types/node": "^24.19.2",
     "@types/pg": "^8.23.1",
-    "smol-toml": "^1.8.0",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
-    "vite-plus": "^0.3.0",
-    "yaml": "^2.9.0"
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "playwright": "^1.64.0",
+    "smol-toml": "^1.9.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite-plus": "catalog:",
+    "yaml": "^2.9.1"
+  },
+  "overrides": {
+    "effect": "3.22.2"
   },
   "devEngines": {
     "packageManager": {
-      "name": "npm",
-      "version": "12.0.2",
+      "name": "pnpm",
+      "version": "12.11.2",
+      "onFail": "warn"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.21.0",
       "onFail": "warn"
     }
-  }
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || ^26.0.0"
+  },
+  "packageManager": "pnpm@12.11.2"
 }

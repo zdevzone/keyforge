@@ -1,132 +1,66 @@
-# Backups
+# Backups and recovery
 
-The license ledger is the record of everything you have sold. Back it up, and
-treat the backups as secrets — they contain the ledger, and the auth database
-contains operator password hashes.
+Admins use **Settings → Backups** to configure destinations, enable independent daily UTC schedules, run **Back up now**, download archives, inspect upload results and verify recovery. All features are available in the self-hosted open-source server. The backup API and console require admin access.
 
-## SQLite deployments
+## Destinations and credential detection
 
-The console's **Settings → Backups** page (and
-`GET /admin/backup/licenses`, `GET /admin/backup/auth`) downloads a
-consistent snapshot taken with SQLite's online backup API. That is safe while
-the service is running and writing; copying the `.sqlite` file yourself is
-not, because WAL data may not be in it.
+| Destination | Server configuration |
+| --- | --- |
+| Local storage | Persistent `LICENSE_BACKUP_DIR` (default ./backups). |
+| AWS S3 | `LICENSE_BACKUP_S3_BUCKET`, optional `LICENSE_BACKUP_S3_REGION` (default us-east-1), optional `LICENSE_BACKUP_S3_ENDPOINT`. Dedicated `LICENSE_BACKUP_S3_ACCESS_KEY_ID` / `LICENSE_BACKUP_S3_SECRET_ACCESS_KEY` / optional `LICENSE_BACKUP_S3_SESSION_TOKEN`; otherwise the AWS SDK credential chain, including AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN or an instance/task role. |
+| Cloudflare R2 | `LICENSE_BACKUP_R2_BUCKET`, `LICENSE_BACKUP_R2_ACCOUNT_ID` or explicit `LICENSE_BACKUP_R2_ENDPOINT`, `LICENSE_BACKUP_R2_ACCESS_KEY_ID` / `LICENSE_BACKUP_R2_SECRET_ACCESS_KEY` / optional `LICENSE_BACKUP_R2_SESSION_TOKEN`. Uses the S3 API with region auto. |
+| UploadThing | `LICENSE_BACKUP_UPLOADTHING_TOKEN` or `UPLOADTHING_TOKEN`: the current app token from UploadThing, not a legacy secret key. |
+| Custom upload endpoint | Add a name and HTTP(S) URL in the console. Choose POST or PUT and multipart form (default field file) or a raw file body. Anonymous endpoints need no authorization settings. |
 
-Scripted, using the CLI's admin token:
+R2 also accepts R2_BUCKET_NAME, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_SESSION_TOKEN. Canonical LICENSE_BACKUP_ settings take precedence. AWS_REGION supplies the S3 region when the canonical setting is absent. Configure any or all providers together and restart the server after changing environment variables. “Configured” means credentials/settings were detected, not that permissions were tested. Access is checked during each operation, and failures appear in history.
 
-```bash
-curl -fsS -H "Authorization: Bearer $LICENSE_ADMIN_TOKEN" \
-  "$LICENSE_SERVER_URL/admin/backup/licenses" \
-  -o "licenses-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
+For custom endpoints that require one authorization/API-key header, enter the header name and a dedicated environment variable name beginning LICENSE_BACKUP_CUSTOM_ in the console. Set the complete value on the server, for example `LICENSE_BACKUP_CUSTOM_BOX_TOKEN=Bearer ...`, then restart. The console stores the reference, never the header value. No header is sent for anonymous destinations. URLs may target local storage services or public upload servers; the endpoint owner manages storage and authentication.
+
+The endpoint must accept the selected request format and return HTTP 2xx after persisting the file. Raw bodies use application/octet-stream and an attachment filename; multipart bodies include a UUID.kfbackup file. Redirects are not followed. A generic URL cannot automatically adapt to every provider's protocol; OAuth workflows, special multipart signing and multi-step uploads need an adapter. HTTP is supported for local services; HTTPS protects remote transport. Only admins may configure outbound destinations.
+
+## Manual uploads and downloads
+
+**Back up now** creates an encrypted archive for the chosen destination. The worker captures the database, retains an encrypted local copy, then uploads to that provider. Each provider has a separate action. History shows queued, creating snapshot, uploading, completed or failed, with a safe error message. Upload response bodies and credential values are not exposed.
+
+A failed remote upload still allows **Download** and **Verify** if snapshot creation succeeded. Retry by creating a new job. There is no automatic retry after a worker lease expires or an ambiguous upload failure.
+
+SQLite offers an immediate unified database download without an archive key. This sensitive file contains licensing, operators and sessions in one consistent snapshot. Postgres's **Download backup now** creates a local encrypted archive and downloads it when complete. Downloads of encrypted jobs are available for every destination through the same history controls.
+
+Custom endpoints are upload-only: the retained local archive supplies downloads. S3, R2 and UploadThing can also retrieve their recorded remote object if the local copy is missing and the original provider configuration remains available. Keep the archive directory persistent; multiple instances need a shared directory to reliably download custom-endpoint jobs. Changing an object endpoint/region requires restoring the original configuration for historical remote reads and cleanup.
+
+## Archives, schedules and retention
+
+A .kfbackup archive is an authenticated AES-256-GCM envelope bound to its job UUID. Its manifest includes engine, capture timestamps, filenames and SHA-256 checksums. It excludes signing and encryption key files; database records may contain encrypted secrets. Retain matching recovery keys separately. Preserve the UUID when renaming an archive; restore needs --job UUID.
+
+Generate an independent backup ring with `vp run secrets:init` and set LICENSE_BACKUP_KEYRING_FILE (or LICENSE_BACKUP_KEYRING). Archive jobs require it; raw SQLite downloads do not.
+
+Postgres uses pg_dump in custom format to capture the shared database. Use pg_dump/pg_restore tools matching the server major version, and an equally new or newer verification/restore server. A newer pg_restore can emit settings unsupported by an older target (for example transaction_timeout on Postgres 16). CI selects the matching client binaries explicitly. Archives are buffered in memory; Postgres dumps are limited to 128 MiB. SQLite archives are also buffered. Use external streaming/database-native backups for larger installations.
+
+Each destination has its own enabled switch, UTC hour and minute, and retention days (1–3650). Save the schedule after changing it. The worker checks every 30 seconds while the server runs; an overdue schedule produces one catch-up job, then advances to the next daily time. Disabled schedules do not affect manual backups or other providers. Existing single-destination schedules migrate automatically.
+
+Database locks serialize claims across instances. A ten-minute worker lease bounds abandoned jobs; expired jobs become failed. Queued providers drain sequentially per process to bound memory. This scheduler depends on a running server.
+
+Retention removes local archives and remotely stored S3/R2/UploadThing objects, keeping history. Read/delete permissions are needed in addition to upload. Cleanup failures remain visible and are retried on later ticks. Custom endpoint retention removes only the local copy; remote retention belongs to the endpoint owner. Removing a custom destination disables its schedule and preserves job history and local downloads.
+
+For production, use persistent storage and retain recoverable copies outside the server. Keep provider credentials and backup rings in server environment/secret storage; do not commit them.
+
+## Verify
+
+SQLite verification decrypts, checks checksums and runs integrity_check in isolated temporary files. Postgres verification creates a random temporary database using LICENSE_BACKUP_VERIFY_DATABASE_URL, restores into it, then drops it. The verification connection must differ from production and allow CREATE DATABASE. Verification never restores production, and does not prove every application workflow.
+
+## Restore
+
+Stop every server process and all other writers first. Keep a separate target backup. Build restore modules with vp run build before the outage. Restore requires the matching LICENSE_BACKUP_KEYRING or its file source, and the original job UUID.
+
+```sh
+vp run backup:restore --file ./JOB_UUID.kfbackup --job JOB_UUID --maintenance --sqlite ./db/licenses.sqlite --replace
+vp run backup:restore --file ./JOB_UUID.kfbackup --job JOB_UUID --maintenance --database "postgres://user:password@host/keyforge" --replace
 ```
 
-Run that from cron or a scheduled job and copy the result off the machine.
-Every download is recorded in the audit log.
+SQLite validates every snapshot before writing targets, refuses existing files without --replace and refuses live WAL/SHM sidecars. Existing targets are copied to timestamped .before-restore files. SQLite archives contain one `database.sqlite` snapshot, verified in temporary storage before one staged file replaces the target. Split-file archives are not supported. Retain rollback copies. Postgres restoration runs pg_restore --single-transaction with clean/if-exists and requires --replace. It does not delete objects absent from the archive.
 
-## Postgres deployments
+For raw unified SQLite downloads, validate integrity and foreign keys, stop connections, preserve the old file and replace the target manually. For an offline ledger-only standby use vp run db copy/mirror/verify; those do not copy operator authentication.
 
-`GET /admin/backup/licenses` answers **501** on Postgres, deliberately: a
-half-hearted snapshot of a database the service does not exclusively own would
-be worse than an honest refusal. Use Postgres' own tooling, which is better
-than anything this service could offer:
+Before restarting, restore matching data/signing keys from separate secure storage and verify the backend selection. Check health, operator login, products, licenses, bindings, support and metering. A restore can roll back revocation and quota consumption; reconcile those events with your application records.
 
-```bash
-pg_dump --format=custom "$DATABASE_URL" > keyforge-$(date -u +%Y%m%d).dump
-
-# restore
-pg_restore --clean --if-exists --dbname "$DATABASE_URL" keyforge-20260101.dump
-```
-
-Managed providers (Render, Neon, Supabase, RDS) also take automatic backups —
-check the retention window, and test a restore before you need one.
-
-Note that with Postgres, operator accounts live in the **same database** as the
-ledger, so one dump covers both. On SQLite they are two files
-(`licenses.sqlite` and `auth.sqlite`) and both are worth keeping.
-
-## A second database
-
-`npm run db` copies a whole ledger between databases — either direction, either
-engine. That covers the two things `pg_dump` and a `.sqlite` download do not:
-moving a live SQLite ledger onto managed Postgres without losing it, and
-keeping a standby somewhere you control.
-
-```bash
-npm run build                                   # this tool uses the compiled server
-
-npm run db -- copy   --from ./licenses.sqlite --to "$DATABASE_URL"
-npm run db -- mirror --to ./standby/licenses.sqlite
-npm run db -- verify --to ./standby/licenses.sqlite
-```
-
-`copy` is one shot and refuses a destination that already holds rows unless you
-pass `--replace`. `mirror` is the same copy aimed at a standby: `--from`
-defaults to this deployment's own database, `--replace` is implied, and it is
-safe to run on a schedule. `verify` compares row counts and a content checksum
-per table and **exits 1** on a mismatch, so cron tells you when the mirror
-stopped working. Nothing prints a password.
-
-Run these against a standby, or against a ledger nothing is serving. Unlike
-`npm run license`, which goes through the running service's admin API, this
-tool works on databases at rest.
-
-### What a mirror is not
-
-**It is a backup, not a replica.** It is exactly as old as the last run, and
-the service never writes to it. Licenses issued between two runs exist only in
-the live database.
-
-That is a deliberate choice, not a missing feature. Two writable ledgers with
-automatic failover would eventually issue one product key twice and count one
-seat twice — a gap you can see is better than a ledger you cannot trust.
-
-Only the four ledger tables travel: licenses, activations, installations and
-the audit log. **Operator accounts do not** — those belong to Better Auth,
-whose tables this tool does not own. Sessions do not travel either.
-
-### Scheduling it
-
-```bash
-# crontab: hourly, and shout if the copy stopped matching
-17 * * * * cd /srv/keyforge && npm run db -- mirror --to /backups/licenses.sqlite \
-             && npm run db -- verify --to /backups/licenses.sqlite
-```
-
-On Render, the same two commands as a **Cron Job** service pointed at the same
-repository; on Fly, `fly machine run` on a schedule; on any host, a scheduled
-job that can reach both databases. The mirror needs `DATABASE_URL` (or
-`LICENSE_DB_PATH`) exactly as the service does.
-
-A standby on a different provider than the live database is worth the trouble:
-a mirror in the same account as the thing it mirrors survives a disk failure,
-not a suspended account.
-
-### Promoting the standby
-
-Manual, on purpose — nothing fails over on its own.
-
-1. **Stop the service**, or at least stop selling. Anything the live database
-   accepts from here is not in the standby.
-2. `npm run db -- verify --from <live> --to <standby>` if the live database still
-   answers, so you know exactly how far behind you are starting.
-3. Point `DATABASE_URL` (or `LICENSE_DB_PATH`) at the standby and restart.
-   Migrations run at boot, so an older snapshot is brought up to schema.
-4. **Re-seed the operator.** Set `LICENSE_SEED_ADMIN_EMAIL` and
-   `LICENSE_SEED_ADMIN_PASSWORD` and restart, or run `npm run admin:create`.
-   Operator accounts were not in the mirror; everyone signs in again.
-5. Mirror *from* the promoted database onwards, so the standby is no longer
-   also the thing you are mirroring to.
-
-Licenses issued after the last mirror are gone. Customers holding those keys
-fail activation with `unknown_key` — reissue them from your own sales records,
-which is the argument for mirroring often and keeping the audit log.
-
-## Restoring
-
-Restoring is a file copy (SQLite) or `pg_restore` (Postgres). The service runs
-its migrations at boot, so an older snapshot is brought up to the current
-schema automatically the first time it starts against the restored data.
-
-Signing keys are **not** in any backup — they live in the environment. Losing
-`LICENSE_SIGNING_KEY` invalidates every token you have ever issued, so store it
-somewhere durable and separate from these dumps.
+See [Database setup and demo data](database.md) for the shared database and demo reset commands.

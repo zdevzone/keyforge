@@ -10,10 +10,10 @@
 
 <!-- Which of these you actually ran, and what happened: -->
 
-- [ ] `npm run check`
-- [ ] `npm test` (SQLite)
-- [ ] `npm test` with `TEST_DATABASE_URL` set (Postgres)
-- [ ] `npm run build:all`
+- [ ] `vp run check`
+- [ ] `vp run test` (SQLite)
+- [ ] `vp run test` with `TEST_DATABASE_URL` set (Postgres)
+- [ ] `vp run build:all`
 - [ ] Scaffolded a project with `packages/create-keyforge` and used it
 
 **Anything a reviewer should look at twice**

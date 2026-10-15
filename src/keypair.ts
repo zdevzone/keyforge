@@ -43,6 +43,8 @@ const ROUND_TRIP_PROBE = Buffer.from("keyforge signing key round trip", "utf8");
  */
 export function resolveSigningKey(env: NodeJS.ProcessEnv = process.env): string {
   const inline = env.LICENSE_SIGNING_KEY;
+  if (inline && env.LICENSE_SIGNING_KEY_FILE)
+    throw new Error("Set only one of LICENSE_SIGNING_KEY and LICENSE_SIGNING_KEY_FILE.");
   // A PEM pasted into a dashboard env field usually arrives with its newlines
   // escaped; both spellings are accepted, and neither is silently wrong.
   if (inline) return inline.replaceAll("\\n", "\n");
@@ -123,6 +125,25 @@ export function describeSigningKey(pem: string): SigningKeyInfo {
     publicKeyPem,
     fingerprint: fingerprintPublicKey(publicKeyPem),
   };
+}
+
+/**
+ * The name this deployment's tokens carry in their `kid`.
+ *
+ * Explicit when the operator set one — a date-shaped id like "2026-08" reads
+ * better in a rotation runbook than a hash does. Otherwise derived from the
+ * key's own fingerprint, so the field is never absent and never has to be
+ * invented later: a deployment that rotates for the first time can publish the
+ * old key under the id it was already signing with, rather than discovering it
+ * has no name for the key half its customers are still verifying against.
+ */
+export function resolveKid(
+  signingKey: SigningKeyInfo,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const configured = env.LICENSE_SIGNING_KID?.trim();
+  if (configured) return configured;
+  return `key-${signingKey.fingerprint.replaceAll(":", "")}`;
 }
 
 /**

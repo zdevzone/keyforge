@@ -3,8 +3,8 @@ deployment:
   tasks:
     - |
       # This repo is a TypeScript Fastify service that builds to dist/.
-      # Build locally or in CI before deployment; do not run npm install/build inside cPanel.
-      # Set these two to your own cPanel account and app directory.
+      # Build with vp run build:all before deployment; never build inside cPanel.
+      # Set these to your own cPanel account and application directory.
       export CPANEL_USER="<your-cpanel-user>"
       export APP_DIR="/home/$CPANEL_USER/repo/keyforge"
 
@@ -16,7 +16,8 @@ deployment:
       # 2. Deploy only the runtime artifacts needed by the service.
       # The app starts with: node --env-file-if-exists=.env.local dist/src/index.js
       /bin/cp -R dist "$APP_DIR/"
-      /bin/cp package.json package-lock.json "$APP_DIR/"
+      /bin/cp dist/runtime-package.json "$APP_DIR/package.json"
+      /bin/cp dist/runtime-pnpm-workspace.yaml "$APP_DIR/pnpm-workspace.yaml"
       /bin/cp -R scripts "$APP_DIR/"
 
       # 3. Initialize the database file only if it does not already exist.

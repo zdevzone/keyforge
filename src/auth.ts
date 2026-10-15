@@ -2,22 +2,34 @@ import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { admin as adminPlugin } from "better-auth/plugins";
 import Database from "better-sqlite3";
+import { z } from "zod";
 
 import { createPostgresPool, isPostgresUrl } from "./database.js";
 import { ac, roles } from "./permissions.js";
 
+export const AUTH_PREFIX = "keyforge_auth_";
+export const BOOTSTRAP_ADMIN_TABLE = "keyforge_bootstrap_admin";
+
+const authHandles = new WeakMap<object, ReturnType<typeof openAuthDatabase>>();
+export async function closeAuth(auth: AuthInstance): Promise<void> {
+  const handle = authHandles.get(auth);
+  if (!handle) return;
+  authHandles.delete(auth);
+  if ("end" in handle) await handle.end();
+  else handle.close();
+}
+
 /**
- * Identity for the admin console. Kept apart from the license ledger on
- * purpose: `licenses.sqlite` records what was sold, this database records who
- * may operate the counter. The CLI keeps using the bearer token; the browser
+ * Identity for the admin console, stored beside the license ledger.
+ * Unified SQLite uses prefixed auth tables; PostgreSQL retains its schema. The CLI keeps using the bearer token; the browser
  * signs in here and carries a session cookie instead.
  *
  * Sign-up is disabled on the running service — operators are created with
- * `npm run admin:create`, the same way the admin token is provisioned by hand.
+ * `vp run admin:create`, the same way the admin token is provisioned by hand.
  */
 
 export interface CreateAuthOptions {
-  /** SQLite file for users and sessions, e.g. ./db/auth.sqlite. */
+  /** SQLite file for users and sessions; runtime uses the unified license file. */
   dbPath: string;
   /**
    * postgres:// URL. When set, operators live in that database beside the
@@ -49,9 +61,37 @@ function openAuthDatabase(options: CreateAuthOptions) {
 
 export function createAuth(options: CreateAuthOptions) {
   const database = openAuthDatabase(options);
-  return betterAuth({
+  const unified = !isPostgresUrl(options.url);
+  const auth = betterAuth({
     database,
+    // Boot explicitly migrates and checks the schema before serving requests.
+    // Avoid Better Auth racing that migration with its eager preflight check.
+    advanced: { database: { validateSchema: false } },
     secret: options.secret,
+    session: { modelName: unified ? AUTH_PREFIX + "session" : "session" },
+    account: { modelName: unified ? AUTH_PREFIX + "account" : "account" },
+    verification: { modelName: unified ? AUTH_PREFIX + "verification" : "verification" },
+    user: {
+      modelName: unified ? AUTH_PREFIX + "user" : "user",
+      additionalFields: {
+        phone: { type: "string", required: false, validator: { input: z.string().max(50) } },
+        jobTitle: { type: "string", required: false, validator: { input: z.string().max(100) } },
+        timezone: {
+          type: "string",
+          required: false,
+          validator: {
+            input: z.string().refine((value) => {
+              try {
+                new Intl.DateTimeFormat("en", { timeZone: value });
+                return true;
+              } catch {
+                return false;
+              }
+            }, "Choose a valid timezone"),
+          },
+        },
+      },
+    },
     baseURL: options.baseURL,
     // The console is same-origin by construction — the SPA is served by this
     // very process — so the host the browser is talking to is always a
@@ -84,6 +124,8 @@ export function createAuth(options: CreateAuthOptions) {
       }),
     ],
   });
+  authHandles.set(auth, database);
+  return auth;
 }
 
 export type AuthInstance = ReturnType<typeof createAuth>;
@@ -99,9 +141,72 @@ export type AuthInstance = ReturnType<typeof createAuth>;
  * they are restored to `admin`. Idempotent: only null/empty roles are touched.
  */
 export async function ensureAuthSchema(auth: AuthInstance): Promise<number> {
+  await migrateLegacyPostgresAccountIssuer(auth);
   const { runMigrations } = await getMigrations(auth.options);
   await runMigrations();
-  return backfillOperatorRoles(auth);
+  const checked = await getMigrations(auth.options);
+  if (
+    checked.toBeCreated.length ||
+    checked.toBeAdded.length ||
+    checked.schemaProblems.length ||
+    checked.unsafeChanges.length
+  )
+    throw new Error(
+      "Operator schema validation failed after migrations. " +
+        [...checked.schemaProblems, ...checked.unsafeChanges].join(" "),
+    );
+  const promoted = await backfillOperatorRoles(auth);
+  const handle = authHandles.get(auth)!;
+  const statement = `CREATE TABLE IF NOT EXISTS ${BOOTSTRAP_ADMIN_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), user_id TEXT NOT NULL)`;
+  if ("connect" in handle) {
+    const client = await handle.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(4919071115)");
+      await client.query(statement);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } else handle.exec(statement);
+  return promoted;
+}
+
+/** Better Auth 1.7.0–1.7.2 required account.issuer; 1.7.3+ no longer writes it.
+ * Follow the upstream upgrade guide without dropping historical account data.
+ * The transaction lock works through managed transaction poolers too. */
+async function migrateLegacyPostgresAccountIssuer(auth: AuthInstance): Promise<void> {
+  const handle = authHandles.get(auth);
+  if (!handle || !("connect" in handle)) return;
+  const client = await handle.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(4919071115)");
+    const { rows } = await client.query<{ table_schema: string }>(
+      "SELECT table_schema FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'account' AND column_name = 'issuer'",
+    );
+    if (rows.length) {
+      const schema = '"' + rows[0].table_schema.replaceAll('"', '""') + '"';
+      const duplicates = await client.query(
+        `SELECT 1 FROM ${schema}."account" GROUP BY "providerId", "accountId" HAVING count(*) > 1 LIMIT 1`,
+      );
+      if (duplicates.rows.length)
+        throw new Error(
+          "Operator account provider/account keys are duplicated. Resolve those identities before upgrading Better Auth; no issuer compatibility changes were applied.",
+        );
+      await client.query(`ALTER TABLE ${schema}."account" ALTER COLUMN "issuer" DROP NOT NULL`);
+      await client.query(`DROP INDEX IF EXISTS ${schema}."account_issuer_accountId_uidx"`);
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function backfillOperatorRoles(auth: AuthInstance): Promise<number> {
@@ -152,8 +257,8 @@ export async function seedOperator(options: SeedOperatorOptions): Promise<"creat
     baseURL: options.baseURL,
     allowSignUp: true,
   });
-  await ensureAuthSchema(auth);
   try {
+    await ensureAuthSchema(auth);
     await auth.api.signUpEmail({
       body: {
         email: options.email,
@@ -175,11 +280,25 @@ export async function seedOperator(options: SeedOperatorOptions): Promise<"creat
         update: { role: "admin" },
       });
     }
+    await rememberBootstrapAdmin(auth, options.email);
     return "created";
   } catch (error) {
     const code = (error as { body?: { code?: string } })?.body?.code ?? "";
     const message = (error as Error)?.message ?? "";
-    if (code === "USER_ALREADY_EXISTS" || /already exists/i.test(message)) return "exists";
+    if (code === "USER_ALREADY_EXISTS" || /already exists/i.test(message)) {
+      await rememberBootstrapAdmin(auth, options.email);
+      return "exists";
+    }
     throw error;
+  } finally {
+    await closeAuth(auth);
   }
+}
+
+async function rememberBootstrapAdmin(auth: AuthInstance, email: string) {
+  const handle = authHandles.get(auth)!;
+  const users = "connect" in handle ? '"user"' : AUTH_PREFIX + "user";
+  const statement = `INSERT INTO ${BOOTSTRAP_ADMIN_TABLE} (id, user_id) SELECT 1, id FROM ${users} WHERE email = ${"connect" in handle ? "$1" : "?"} AND role = 'admin' ON CONFLICT (id) DO NOTHING`;
+  if ("query" in handle) await handle.query(statement, [email]);
+  else handle.prepare(statement).run(email);
 }

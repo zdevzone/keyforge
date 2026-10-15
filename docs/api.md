@@ -1,581 +1,315 @@
-# HTTP API reference
-
-Every endpoint this service exposes, what it requires, and what it returns when
-it works and when it does not.
-
-There are two surfaces, and they exist for different callers:
-
-- **`/v1/*` — the device API.** Called by your application, on your customers'
-  machines. No credentials: the product key *is* the credential. Rate limited.
-- **`/admin/*` — the operator API.** Called by you, from the console or the
-  CLI. Requires an admin token or an operator session.
-
-A fake license server can answer `/v1` requests all day; what it cannot do is
-mint a token your app will accept, because that needs the private signing key.
-That is why the device API needs no secret and why your server URL does not
-need protecting.
-
----
-
-## Conventions
-
-**Base URL** — wherever the service is deployed. Examples below use
-`https://license.example.com`.
-
-**Requests** — `POST` bodies are JSON and need `content-type: application/json`.
-Query parameters are used for `GET` filters.
-
-**Timestamps** — ISO 8601 UTC strings (`2027-12-31T00:00:00.000Z`), everywhere,
-in both directions. `null` means "no expiry" rather than "unknown".
-
-### Authentication
-
-`/v1/*` takes none.
-
-`/admin/*` accepts either, and one is enough:
-
-```bash
-# The CLI's way: the token the service was started with.
-curl -H "authorization: Bearer $LICENSE_ADMIN_TOKEN" …
-
-# The console's way: a Better Auth session cookie, sent by the browser.
-```
-
-The bearer token predates roles and is the vendor's own key, so it always counts
-as **admin**. A session carries the operator's role: `admin` or `support`. An
-operator with no role recorded is treated as `support` — unknown authority is
-never full authority.
-
-| Role | Can | Cannot |
-|---|---|---|
-| `admin` | Everything | — |
-| `support` | Read licenses, installations, activations, audit; release an activation | Issue, edit, revoke; download backups; manage operators |
-
-With no `LICENSE_ADMIN_TOKEN` **and** no auth configured, the admin API answers
-`503 admin_disabled` rather than being open. Misconfiguration fails closed.
-
-### Errors
-
-Every failure has the same shape:
-
-```json
-{ "error": "unknown_key", "message": "That product key was not recognised." }
-```
-
-`error` is a stable identifier — match on it. `message` is written for a human
-and may be reworded.
-
-| Status | `error` | Meaning |
-|---|---|---|
-| 400 | `bad_request` | A required field is missing or empty |
-| 400 | `bad_activation_limit` | `activationLimit` is not a positive integer |
-| 400 | `bad_entitlements` | Entitlements are not an object of number/string/boolean |
-| 400 | `bad_expiry` | `expiresAt` is neither an ISO date nor `null` |
-| 400 | `bad_status` | `status` filter is not `active`, `expired` or `revoked` |
-| 400 | `bad_licensed` | `licensed` filter is not `yes` or `no` |
-| 400 | `bad_limit` | `limit` is not a positive integer |
-| 400 | `bad_offset` | `offset` is not a non-negative integer |
-| 400 | `bad_cursor` | `before` is not a valid audit cursor |
-| 401 | `admin_unauthorized` | No valid admin token or session |
-| 403 | `insufficient_role` | Valid session, but the action needs `admin` |
-| 403 | `not_activated_here` | That installation holds no active binding |
-| 404 | `unknown_key` | No license has that product key |
-| 404 | `unknown_license` | No license has that id |
-| 404 | `not_found` | No such route |
-| 404 | `registry_disabled` | The install census is switched off |
-| 404 | `audit_disabled` | The audit log is switched off |
-| 404 | `backups_disabled` | Backups are switched off |
-| 404 | `unknown_database` | Backup target is not `licenses` or `auth` |
-| 404 | `admin_feature_disabled` | That Better Auth admin surface is not enabled |
-| 409 | `activation_limit_reached` | Every seat is in use |
-| 410 | `license_revoked` | The license was revoked |
-| 410 | `license_expired` | The license passed its expiry |
-| 501 | `backup_unsupported` | Online backup needs SQLite; this runs on Postgres |
-| 503 | `admin_disabled` | No admin token and no auth configured |
-| 503 | `auth_disabled` | The console/auth database is not configured |
-
-`unknown_key` and `license_revoked` are deliberately different answers. A
-customer mistyping their own key needs to hear that, not a refund question.
-
-### Rate limits
-
-Applied per IP, configurable under `limits` in `keyforge.config.json`, and
-switchable off entirely with `limits.enabled: false`.
-
-| Endpoint | Default |
-|---|---|
-| `POST /v1/activate` | 20 per minute |
-| `POST /v1/validate` | 20 per minute |
-| `POST /v1/register` | 30 per minute |
-
-`/v1/refresh` and `/v1/deactivate` are not rate limited: a client that has
-already activated is not the attack surface a limiter is for.
-
----
-
-# Device API — `/v1`
-
-## `POST /v1/register`
-
-The install census. Call it on every install, licensed or not, so you can
-compare installs against licenses actually sold. Re-registering is a cheap
-upsert, so calling it more than once is safe.
-
-| Field | Required | Type | Notes |
-|---|---|---|---|
-| `installationId` | **yes** | string | Your stable per-machine id. Trimmed, capped at 200 chars |
-| `appVersion` | no | string | Capped at 50 chars |
-| `platform` | no | string | Capped at 100 chars |
-| `userName` | no | string | Ignored when `registry.collectUserInfo` is false |
-| `userEmail` | no | string | Ignored when `registry.collectUserInfo` is false |
-
-```bash
-curl -X POST https://license.example.com/v1/register \
-  -H 'content-type: application/json' \
-  -d '{"installationId":"5f3a…","appVersion":"2.1.0","platform":"win32"}'
-```
-
-**200**
-
-```json
-{ "ok": true, "licensed": false }
-```
-
-`licensed` reports whether this installation is already tied to a license.
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_request` | `installationId` missing or empty |
-| 404 | `registry_disabled` | `registry.enabled` is false — old installers fail cleanly rather than half-working |
-
----
-
-## `POST /v1/validate`
-
-Is this key any good, and are there seats left? **Reads only** — validating
-during install never consumes a seat. Use it for instant feedback on a key
-field before the customer commits.
-
-| Field | Required | Type |
-|---|---|---|
-| `key` | **yes** | string — the product key, any case, trimmed |
-
-```bash
-curl -X POST https://license.example.com/v1/validate \
-  -H 'content-type: application/json' -d '{"key":"KEY-ABCDE-FGHIJ-KLMNO-PQRST"}'
-```
-
-**200**
-
-```json
-{
-  "valid": true,
-  "plan": "pro",
-  "entitlements": { "seats": 5, "exports": true },
-  "issuedTo": "Acme Ltd",
-  "expiresAt": "2027-12-31T00:00:00.000Z",
-  "activationLimit": 3,
-  "seatsInUse": 1,
-  "seatsAvailable": 2
-}
-```
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_request` | `key` missing or empty |
-| 404 | `unknown_key` | No license with that key |
-| 410 | `license_revoked` | Revoked |
-| 410 | `license_expired` | Past `expiresAt` |
-
----
-
-## `POST /v1/activate`
-
-Bind a key to one installation and receive a signed token. This is the call
-that consumes a seat.
-
-| Field | Required | Type |
-|---|---|---|
-| `key` | **yes** | string |
-| `installationId` | **yes** | string — the same id you registered |
-
-**Idempotent for the same installation.** Re-activating where the key is already
-bound returns a fresh token without consuming another seat, which is what a
-reinstall on the same machine needs.
-
-**200**
-
-```json
-{ "token": "eyJ2IjoyLCJsaWNlbnNlSWQ….MEUCIQDf…" }
-```
-
-The token is `base64url(payload).base64url(signature)`, Ed25519. Verify it in
-your app with the embedded public key — see [verify-token.md](verify-token.md)
-for the snippet. Payload fields are documented there.
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_request` | `key` or `installationId` missing |
-| 404 | `unknown_key` | No license with that key |
-| 409 | `activation_limit_reached` | Every seat is in use on other installations |
-| 410 | `license_revoked` / `license_expired` | Not usable |
-
----
-
-## `POST /v1/refresh`
-
-Re-issue the token for an existing binding. Call it periodically so the
-installation learns about revocation and expiry.
-
-| Field | Required | Type |
-|---|---|---|
-| `licenseId` | **yes** | string — from the token payload, not the product key |
-| `installationId` | **yes** | string |
-
-**200** — `{ "token": "…" }`
-
-The token carries the verdict **whether or not the news is good**: a revoked or
-expired license still returns a signed token, with `status` set accordingly.
-That is deliberate — the installation persists an *authenticated* refusal rather
-than a bare flag anyone could delete, or a response anyone could fake.
-
-| Status | `error` | When |
-|---|---|---|
-| 404 | `unknown_license` | No license with that id |
-| 403 | `not_activated_here` | No active binding for that installation |
-
----
-
-## `POST /v1/deactivate`
-
-Release this installation's seat so the key can be used elsewhere. The
-customer-facing half of a transfer.
-
-| Field | Required | Type |
-|---|---|---|
-| `licenseId` | **yes** | string |
-| `installationId` | **yes** | string |
-
-**200** — `{ "ok": true }`
-
-Releasing a binding that does not exist is **not** an error; the end state is
-what was asked for either way.
-
-| Status | `error` | When |
-|---|---|---|
-| 404 | `unknown_license` | No license with that id |
-
----
-
-# Operator API — `/admin`
-
-All of these need a bearer token or a session. Roles as per the table above.
-
-## `POST /admin/licenses`
-
-Issue a license. **Admin only.**
-
-| Field | Required | Type | Default |
-|---|---|---|---|
-| `plan` | no | string | `licenses.defaultPlan` (`standard`) |
-| `entitlements` | no | object | The plan preset's entitlements |
-| `allowance` | no | number | Sugar for `entitlements.allowance` |
-| `issuedTo` | no | string | `""` |
-| `activationLimit` | no | positive integer | Preset, else `licenses.defaultActivationLimit` |
-| `expiresAt` | no | ISO date or `null` | Preset's `durationDays` from now, else `null` |
-
-Anything sent explicitly beats the preset.
-
-**201**
-
-```json
-{
-  "license": {
-    "id": "9c1e…", "plan": "pro",
-    "entitlements": { "seats": 5 },
-    "issuedTo": "Acme Ltd", "status": "active", "activationLimit": 3,
-    "issuedAt": "2026-08-26T09:12:00.000Z", "expiresAt": null, "revokedAt": null,
-    "keyHash": "4f2b…"
-  },
-  "key": "KEY-ABCDE-FGHIJ-KLMNO-PQRST"
-}
-```
-
-> **`key` appears in this response and nowhere else, ever.** The ledger stores
-> only its SHA-256 hash. If it is lost, the license must be revoked and reissued.
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_entitlements` | Not an object of number/string/boolean values |
-| 400 | `bad_activation_limit` | Not a positive integer |
-| 401/403 | `admin_unauthorized` / `insufficient_role` | Not an admin |
-
----
-
-## `GET /admin/licenses`
-
-List and search. Either role.
-
-| Parameter | Required | Type | Default |
-|---|---|---|---|
-| `q` | no | string | Matches id or `issuedTo` |
-| `status` | no | `active` \| `expired` \| `revoked` | all |
-| `limit` | no | positive integer | server default |
-| `offset` | no | non-negative integer | `0` |
-
-**200** — `{ "licenses": [ … ], "total": 128 }`
-
-`status=expired` is computed against the clock, not stored — a license whose
-`expiresAt` has passed is still `active` in the database.
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_status` / `bad_limit` / `bad_offset` | Bad filter |
-
----
-
-## `GET /admin/licenses/:id`
-
-One license. Either role. **200** — `{ "license": { … } }`, else `404
-unknown_license`.
-
----
-
-## `PATCH /admin/licenses/:id`
-
-Edit a license. **Admin only.** Every field is optional; anything omitted is
-left as it is.
-
-| Field | Type | Notes |
-|---|---|---|
-| `entitlements` | object | Replaces the whole map, not merged |
-| `allowance` | number | Sugar for `entitlements.allowance` |
-| `issuedTo` | string | |
-| `activationLimit` | positive integer | Lowering it does not release existing seats |
-| `expiresAt` | ISO date or `null` | `null` makes it perpetual |
-
-**200** — `{ "license": { … } }`
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_entitlements` / `bad_activation_limit` / `bad_expiry` | Invalid value |
-| 404 | `unknown_license` | No such license |
-
----
-
-## `POST /admin/licenses/:id/revoke`
-
-Revoke. **Admin only.** No body.
-
-**200** — `{ "license": { …, "status": "revoked", "revokedAt": "…" } }`
-
-Installations learn of it on their next `refresh`; they do not stop instantly.
-An installation offline past its grace window stops on its own.
-
-| Status | `error` | When |
-|---|---|---|
-| 404 | `unknown_license` | No such license |
-
----
-
-## `GET /admin/licenses/:id/activations`
-
-Every binding, live and released. Either role.
-
-**200**
-
-```json
-{ "activations": [
-  { "licenseId": "9c1e…", "installationId": "5f3a…",
-    "activatedAt": "2026-08-26T09:20:00.000Z", "deactivatedAt": null }
-] }
-```
-
----
-
-## `POST /admin/licenses/:id/deactivate`
-
-Release a seat on the customer's behalf — the transfer path when they can no
-longer reach the old machine. **Either role**, because it is the common support
-action and it destroys nothing.
-
-| Field | Required | Type |
-|---|---|---|
-| `installationId` | **yes** | string |
-
-**200** — `{ "ok": true }`
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_request` | `installationId` missing |
-| 404 | `unknown_license` | No such license |
-
----
-
-## `GET /admin/installations`
-
-The install census. Either role.
-
-| Parameter | Required | Type | Default |
-|---|---|---|---|
-| `q` | no | string | Matches installation id, user name or email |
-| `licensed` | no | `yes` \| `no` | all |
-| `limit` | no | positive integer | server default |
-| `offset` | no | non-negative integer | `0` |
-
-**200** — `{ "installations": [ … ], "total": 412 }`
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_licensed` / `bad_limit` / `bad_offset` | Bad filter |
-| 404 | `registry_disabled` | Census switched off |
-
----
-
-## `GET /admin/entitlements`
-
-Every entitlement key the ledger actually contains. Either role. No parameters.
-
-Entitlements are free-form, so nothing stops `seats` on one license and `seat`
-on the next. This is the endpoint that makes that visible; the console renders
-it on the Entitlements page.
-
-**200**
-
-```json
-{
-  "licensesScanned": 128,
-  "catalog": [
-    { "name": "seats", "types": ["number"], "licenseCount": 96,
-      "activeLicenseCount": 91, "plans": ["pro", "team"],
-      "values": [ { "value": "5", "count": 60 }, { "value": "10", "count": 36 } ],
-      "moreValues": 0 }
-  ]
-}
-```
-
-`types` with more than one entry means the same key holds different types on
-different licenses — an app doing a numeric comparison will handle some and
-silently ignore the rest. `moreValues` counts distinct values beyond those
-listed, so a capped list never reads as complete.
-
----
-
-## `GET /admin/config`
-
-What the console needs to render itself. Either role. No parameters.
-
-**200**
-
-```json
-{
-  "viewer": { "actor": "ops@example.com", "role": "admin" },
-  "adminScope": ["operators", "sessions"],
-  "branding": { "name": "Keyforge" },
-  "features": { "audit": true, "backups": true, "ledgerBackup": true, "registry": true },
-  "engine": "sqlite",
-  "licenses": { "defaultPlan": "standard", "defaultActivationLimit": 1, "planPresets": { … } },
-  "signingKey": {
-    "keyType": "ed25519",
-    "fingerprint": "43:5f:fe:d0:fb:72:36:ee",
-    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\n…\n-----END PUBLIC KEY-----\n"
-  }
-}
-```
-
-`signingKey` is the **public half only** — the value you embed in your app. The
-private key never leaves the server and appears in no response. Compare
-`fingerprint` against `npm run license keycheck`; if they differ, the server is
-signing with a key your app will not accept.
-
-`ledgerBackup` is false on Postgres, where snapshots come from `pg_dump`.
-
----
-
-## `GET /admin/backup/:database`
-
-Download a consistent SQLite snapshot, taken through SQLite's online backup API
-— safe while the service is running, unlike copying the file. **Admin only.**
-Recorded in the audit log.
-
-`:database` is `licenses` or `auth`.
-
-**200** — `application/octet-stream`, `content-disposition: attachment;
-filename="licenses-backup-2026-08-26T09-12-00.sqlite"`
-
-| Status | `error` | When |
-|---|---|---|
-| 404 | `backups_disabled` | `features.backups` is false |
-| 404 | `unknown_database` | Not `licenses` or `auth` |
-| 501 | `backup_unsupported` | Running on Postgres — use `pg_dump` |
-| 503 | `auth_disabled` | No auth database configured |
-
-See [backups.md](backups.md) for scheduling, and for copying a ledger to a
-second database.
-
----
-
-## `GET /admin/audit`
-
-The audit log, newest first. Either role.
-
-| Parameter | Required | Type | Default |
-|---|---|---|---|
-| `limit` | no | positive integer | server default |
-| `before` | no | cursor | from the previous page's `nextBefore` |
-| `licenseId` | no | string | Only entries for that license |
-
-**200**
-
-```json
-{ "entries": [
-    { "id": 412, "at": "2026-08-26T09:12:00.000Z", "actor": "ops@example.com",
-      "action": "license.issue", "licenseId": "9c1e…",
-      "detail": { "plan": "pro", "activationLimit": 3 } }
-  ],
-  "nextBefore": 400 }
-```
-
-`nextBefore` is `null` on the last page. Pass it back as `before` to continue.
-
-Recorded actions: `license.issue`, `license.update`, `license.revoke`,
-`license.deactivate`, `backup.download`.
-
-| Status | `error` | When |
-|---|---|---|
-| 400 | `bad_limit` / `bad_cursor` | Bad paging |
-| 404 | `audit_disabled` | `features.audit` is false |
-
----
-
-# Service endpoints
-
-## `GET /healthz`
-
-Liveness, for your platform's health check. No auth. **200** — `{ "ok": true }`.
-
-Answers as soon as the process is listening. The signing key is validated
-*before* the port binds, so a service that answers here has a usable key.
-
-## `GET /api/meta`
-
-Public deployment identity, for the login page title. No auth.
-
-**200** — `{ "name": "Keyforge" }`
-
-## `ALL /api/auth/*`
-
-Better Auth: sign-in, sign-out, session, password change, and operator
-management when enabled. Handled by Better Auth itself rather than defined here
-— consult its documentation for shapes.
-
-Answers `503 auth_disabled` when `LICENSE_AUTH_SECRET` is unset, which also
-means the console is switched off.
-
----
-
-## Anything else
-
-Unmatched `GET` requests that are not under `/v1/`, `/admin/` or `/api/` return
-the console's `index.html`, so the single-page app can route them. Everything
-else gets `404 not_found`.
+# API reference
+
+For dependent apps, use the [client OpenAPI document](client-openapi.json) and [TypeScript SDK guide](../packages/keyforge-client/README.md). The machine-readable contract covers current public routes and explicitly separates installation, private-request and trusted-backend credentials. Its request/response examples are exercised against the server by `test/client-sdk.test.ts`; regenerate with `vp run docs:client-api`.
+
+This is the fresh product-scoped contract. Legacy unscoped routes are removed. License tokens are v4; trial tokens are v2. All timestamps are ISO 8601. API responses are non-cacheable.
+
+## Authentication and roles
+
+`PUT /v1/products/:productId/installations/:installationId/device-signals` authenticates the installation bearer credential and accepts `{machineSignals: [{kind, hash}]}` (maximum three; kinds `machine-guid`, `smbios-uuid`, `volume-serial`, `linux-machine-id`, `macos-platform-uuid`, `root-volume-uuid`; lowercase SHA-256 hex). It updates current signal availability and appends evidence to the authenticated identity's existing group, never matching or merging another group. Empty signals mark current availability unavailable without deleting historical group evidence. Response: `{ok: true, serverTime}`. It never registers again, issues a trial, changes counters, consumes/releases seats, resets usage or affects finances. See the [desktop adapter contract](device-identity.md).
+
+Device operations require Bearer installation credentials. Registration pins a random 256-bit base64url secret to the chosen installation ID. Metering requires a distinct product-scoped trusted service credential. Console routes require Better Auth cookies or the optional privileged LICENSE_ADMIN_TOKEN.
+
+Admins manage products, definitions, plans, licenses, keys, meters, service credentials, operators and backups. Support operators can read product records, release seats, clear machine trials and handle support assignment/status/messages. They cannot reveal product keys or mutate product/catalog/billing-like policy. Profile/password/session controls operate on the signed-in operator's own account. JSON writes from console sessions check request origin when present.
+
+Better Auth endpoints live under /api/auth/* (GET/POST): sign-in/email, sign-out, get-session, update-user, change-password, list-sessions, revoke-session and configured admin plugin operations. Self profile fields are name, image (HTTPS URL, a validated bounded raster data URL, or null), phone, jobTitle and a valid IANA timezone. See the profile image constraints below. Email and role cannot be changed by update-user.
+
+## Bodies and response conventions
+
+Product IDs are lowercase slugs. Definition IDs permit letters, digits, underscore, dot and hyphen (up to 64). Updates to existing catalog, product, meter, schedule and support records require their current integer revision; stale values return revision_conflict. Archive records instead of deleting data used by history.
+
+- Product create: id/name; patch: name/archived/graceDays/trial/revision. Trial contains enabled, nullable nonnegative integer allowance and nullable positive durationDays.
+- Definition PUT: id/type/description/archived, optional defaultValue/minimum/maximum/revision. Types are number/string/boolean/mixed; mixed legacy definitions must be resolved before new grants.
+- Plan PUT: id/description/entitlements/durationDays/activationLimit/archived/revision, price (integer santim or null) and currency (ETB). Configure a price before issuance. Entitlements must match active definitions. durationDays is positive or null.
+- Catalog import: catalog:{version:1,definitions,plans}, preview boolean; apply also requires the preview fingerprint. Export excludes secrets and licenses.
+- License POST: requestId UUID and plan required; issuedTo, installationId or licenseRequestId, subjectKind installation/service, planRevision, expectedPrice optional. Optional payment:{date,method,reference} records the full plan price received on today’s UTC date. Terms cannot be overridden. Atomically returns HTTP 201 with license/key, immutable ETB sale and delivery status. Exact retries reuse the request ID; changed payloads conflict. No price means issuance is refused.
+- License PATCH: editable issuedTo/entitlements/activationLimit/expiresAt and current revision. Revoke is explicit. Key POST requires currentPassword for console sessions; optional key securely retains a matching historical original. API bearer automation has no password prompt.
+- Register: installationId/requestId UUID plus optional appVersion/platform/userName/userEmail/machineSignals. Exact retries return the original response; identity cannot be claimed with a different credential.
+- Validate/activate: installationId/key. Refresh/deactivate: installationId/licenseId. Activation/refresh return token/serverTime. Refresh may return signed expired/revoked status with HTTP 200.
+- Support create: licenseId/requestId/category/urgency/subject/message/createdAt plus optional reporter.name and app.version/platform. Set Idempotency-Key to requestId. Categories: technical/licensing/billing/feature_request/other. Urgencies: low/normal/high/critical. HTTP 202 acknowledges persistence.
+- Support patch: revision/status/assignedTo (operator email or null). States: queued/in_progress/waiting_customer/resolved/closed. Message POST: UUID requestId/message and operator-only internal boolean. Customer reads omit assignment/internal notes.
+- Meter PUT: id/entitlement/period/description/archived/revision. Period lifetime/daily/monthly; entitlement must be numeric. Credentials POST: name/permissions (usage:read, usage:consume); secret is returned once.
+- Usage summary: licenseId/meterId. Consume adds positive safe-integer units and UUID eventId. Atomic quota enforcement; stable events remain idempotent across UTC periods.
+- Backups GET: jobs/destinations with individual schedules and credential readiness (no credential values). POST: destination local/s3/r2/uploadthing or custom UUID ID; HTTP 202 job. Destination POST: name/url/method POST or PUT/format multipart or raw/fileField, optional paired headerName/headerValueEnv (LICENSE_BACKUP_CUSTOM_ variable). Destination PUT also requires revision; archived disables its schedule. Per-destination schedule PUT: enabled/hourUTC/minuteUTC/retentionDays/revision. Existing schedule PUT also accepts destination. Upload-only endpoints retain a local download copy; failed uploads can be downloaded if snapshot creation succeeded. Download routes return binary snapshots or encrypted archives, not JSON.
+- Diagnostics POST: token. Returns untrusted payload plus signatureValid/schemaValid/currentAuthorization/serverTime; it does not mint authorization.
+
+List routes use q/limit/offset (limit at most 200), with additional status/category/urgency/licensed filters where applicable. Audit uses limit/before/licenseId and returns nextBefore. Licenses include masked keyReference and keyStored, never a hash or encrypted key. Installation links include released history and current authorization. Public key discovery includes pending/retired keys; trust must be established separately.
+
+## Registered routes
+
+The table is generated from an isolated server's route registration. Product-scoped paths use :productId; :id is the relevant record ID.
+
+| Method | Path |
+| --- | --- |
+| GET | `/admin/audit` |
+| GET | `/admin/backup/:database` |
+| GET | `/admin/backups` |
+| POST | `/admin/backups` |
+| GET | `/admin/backups/:id/download` |
+| POST | `/admin/backups/:id/verify` |
+| POST | `/admin/backups/destinations` |
+| PUT | `/admin/backups/destinations/:id` |
+| PUT | `/admin/backups/destinations/:id/schedule` |
+| PUT | `/admin/backups/schedule` |
+| GET | `/admin/config` |
+| GET | `/admin/operators/directory` |
+| GET | `/admin/products` |
+| POST | `/admin/products` |
+| PATCH | `/admin/products/:productId` |
+| GET | `/admin/products/:productId/catalog` |
+| GET | `/admin/products/:productId/catalog/export` |
+| POST | `/admin/products/:productId/catalog/import` |
+| GET | `/admin/products/:productId/credentials` |
+| POST | `/admin/products/:productId/credentials` |
+| POST | `/admin/products/:productId/credentials/:id/revoke` |
+| PUT | `/admin/products/:productId/definitions/:id` |
+| POST | `/admin/products/:productId/diagnostics` |
+| GET | `/admin/products/:productId/finance` |
+| PUT | `/admin/products/:productId/finance/prices/:priceId` |
+| GET | `/admin/products/:productId/finance/report` |
+| POST | `/admin/products/:productId/finance/sales` |
+| POST | `/admin/products/:productId/finance/sales/:saleId/entries` |
+| GET | `/admin/products/:productId/installations` |
+| POST | `/admin/products/:productId/keys/:kid/activate` |
+| POST | `/admin/products/:productId/keys/stage` |
+| GET | `/admin/products/:productId/license-recipients` |
+| GET | `/admin/products/:productId/license-requests` |
+| GET | `/admin/products/:productId/licenses` |
+| POST | `/admin/products/:productId/licenses` |
+| GET | `/admin/products/:productId/licenses/:id` |
+| PATCH | `/admin/products/:productId/licenses/:id` |
+| GET | `/admin/products/:productId/licenses/:id/activations` |
+| POST | `/admin/products/:productId/licenses/:id/deactivate` |
+| GET | `/admin/products/:productId/licenses/:id/delivery` |
+| POST | `/admin/products/:productId/licenses/:id/key` |
+| POST | `/admin/products/:productId/licenses/:id/revoke` |
+| GET | `/admin/products/:productId/machines` |
+| POST | `/admin/products/:productId/machines/:id/clear` |
+| GET | `/admin/products/:productId/meters` |
+| PUT | `/admin/products/:productId/meters/:id` |
+| GET | `/admin/products/:productId/notifications` |
+| POST | `/admin/products/:productId/notifications/bulk` |
+| PUT | `/admin/products/:productId/notifications/preferences` |
+| POST | `/admin/products/:productId/notifications/read` |
+| PUT | `/admin/products/:productId/plans/:id` |
+| GET | `/admin/products/:productId/reports` |
+| GET | `/admin/products/:productId/support` |
+| GET | `/admin/products/:productId/support/:id` |
+| PATCH | `/admin/products/:productId/support/:id` |
+| POST | `/admin/products/:productId/support/:id/messages` |
+| POST | `/admin/products/:productId/support/:id/read` |
+| GET | `/admin/system` |
+| GET | `/admin/system/reset` |
+| POST | `/admin/system/reset` |
+| GET | `/api/auth/*` |
+| POST | `/api/auth/*` |
+| GET | `/api/meta` |
+| GET | `/healthz` |
+| GET | `/v1/license-request-catalog` |
+| POST | `/v1/license-requests` |
+| GET | `/v1/license-requests/:id` |
+| POST | `/v1/license-requests/:id/collect` |
+| GET | `/v1/meta` |
+| POST | `/v1/products/:productId/activate` |
+| POST | `/v1/products/:productId/deactivate` |
+| POST | `/v1/products/:productId/installations/:installationId/licenses/:id/collect` |
+| GET | `/v1/products/:productId/installations/:installationId/notifications` |
+| PUT | `/v1/products/:productId/installations/:installationId/notifications/preferences` |
+| POST | `/v1/products/:productId/installations/:installationId/notifications/read` |
+| GET | `/v1/products/:productId/installations/:installationId/support` |
+| POST | `/v1/products/:productId/installations/:installationId/support` |
+| GET | `/v1/products/:productId/installations/:installationId/support/:id` |
+| POST | `/v1/products/:productId/installations/:installationId/support/:id/messages` |
+| GET | `/v1/products/:productId/keys` |
+| POST | `/v1/products/:productId/refresh` |
+| POST | `/v1/products/:productId/register` |
+| POST | `/v1/products/:productId/usage/consume` |
+| POST | `/v1/products/:productId/usage/summary` |
+| POST | `/v1/products/:productId/validate` |
+
+## Errors
+
+Domain errors use error/message/retryable/serverTime; rate limiting may include Retry-After. Better Auth returns its own error envelope. Retry 429/503 with bounded backoff; 409 usually needs record reload, seat release or a corrected idempotency key. Do not retry invalid credentials indefinitely.
+
+| Code |
+| --- |
+| `activation_limit_reached` |
+| `admin_disabled` |
+| `admin_unauthorized` |
+| `assignment_unavailable` |
+| `audit_disabled` |
+| `auth_disabled` |
+| `backup_cache_missing` |
+| `backup_corrupt` |
+| `backup_database_unconfigured` |
+| `backup_destination_changed` |
+| `backup_destination_unconfigured` |
+| `backup_encryption_unconfigured` |
+| `backup_provider_access_denied` |
+| `backup_provider_failed` |
+| `backup_provider_not_found` |
+| `backup_provider_timeout` |
+| `backup_remote_http_error` |
+| `backup_retention_failed` |
+| `backup_too_large` |
+| `backup_tool_unavailable` |
+| `backup_unavailable` |
+| `backup_unsupported` |
+| `backups_disabled` |
+| `bad_credential` |
+| `bad_definition` |
+| `bad_entitlements` |
+| `bad_meter` |
+| `bad_request` |
+| `bad_trial` |
+| `customer_required` |
+| `definition_in_use` |
+| `delivery_failed` |
+| `delivery_unavailable` |
+| `duplicate_catalog_id` |
+| `encryption_key_missing` |
+| `encryption_unconfigured` |
+| `excess_credit` |
+| `future_date` |
+| `historical_overpayment` |
+| `idempotency_conflict` |
+| `initial_sale_exists` |
+| `installation_unauthorized` |
+| `insufficient_role` |
+| `internal_error` |
+| `invalid_assignee` |
+| `invalid_date` |
+| `invalid_license_request` |
+| `invalid_message` |
+| `invalid_origin` |
+| `invalid_payment` |
+| `invalid_payment_reference` |
+| `invalid_recipient` |
+| `invalid_refund` |
+| `invalid_request_secret` |
+| `invalid_support_request` |
+| `key_already_staged` |
+| `key_mismatch` |
+| `key_required` |
+| `license_` |
+| `license_expired` |
+| `license_revoked` |
+| `malformed_token` |
+| `meter_in_use` |
+| `not_activated_here` |
+| `not_found` |
+| `notification_confirmation_required` |
+| `notification_selection_required` |
+| `original_key_unavailable` |
+| `overpayment` |
+| `paid_license_required` |
+| `price_required` |
+| `product_archived` |
+| `product_exists` |
+| `quota_exhausted` |
+| `rate_limited` |
+| `reason_required` |
+| `reauthentication_required` |
+| `registry_disabled` |
+| `request_closed` |
+| `request_not_found` |
+| `request_pending` |
+| `revision_conflict` |
+| `revision_required` |
+| `service_unauthorized` |
+| `signing_unavailable` |
+| `support_rate_limited` |
+| `unknown_backup` |
+| `unknown_backup_destination` |
+| `unknown_credential` |
+| `unknown_license` |
+| `unknown_machine` |
+| `unknown_meter_or_license` |
+| `unknown_plan` |
+| `unknown_product` |
+| `unknown_sale` |
+| `unknown_staged_key` |
+| `unknown_support_request` |
+| `usage_unauthorized` |
+| `verification_unconfigured` |
+
+## Console reports
+
+`GET /admin/products/:productId/reports` requires an operator session or admin bearer token. Both admin and support roles may read reports for the selected product. It returns explicit report fields, never stored product keys, credential hashes, private keys, or support message bodies.
+
+Query fields: `type` (`licenses`, `expirations`, `usage`, `activations`, `support`; default `licenses`), optional `from` and `to` (inclusive UTC calendar dates), `customer` (case-insensitive name substring), and `status` (default `all`). Invalid dates or a reversed range return 400. Activation reports return 404 `registry_disabled` when registry collection is disabled.
+
+The response contains `rows`, status `counts`, per-meter `meters` totals for usage, and `generatedAt`. Dates refer to license issuance, expiry, activation, or support receipt according to type. Status is current at generation time, not historical. Expiration reports omit perpetual licenses. Usage is stored as cumulative daily/monthly/lifetime buckets: dated ranges include whole overlapping buckets and omit undated lifetime totals. Units from different meters are never combined. Reports are not an event-level billing ledger.
+
+The console paginates the returned snapshot, exports all filtered rows to CSV (with spreadsheet-formula neutralization), and prints all filtered rows using the browser's Save as PDF destination. No report is publicly shared.
+
+Profile updates at `/api/auth/update-user` retain their existing session, origin, and field restrictions. The `image` field accepts an HTTPS URL, null/empty for removal, or a PNG/JPEG/WebP base64 data URL up to 256 KiB with a matching raster signature. The console accepts source images up to 5 MiB and resizes them to at most 256 pixels before saving. The image is stored in the operator database and travels with its backup; SVG data and arbitrary data URLs are refused.
+
+## Manual ETB sales and finance
+
+Financial routes require an admin session or privileged admin bearer token; support operators are denied reads as well as writes. All amounts are integer **santim**, with 100 santim = ETB 1.00. No currency conversion, tax computation or payment gateway is involved.
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| GET | `/admin/products/:productId/finance` | Sales with derived balances/status, immutable transaction entries, price defaults and safe license/plan choices. |
+| PUT | `/admin/products/:productId/finance/prices/:priceId` | `{amount: integer|null, revision?: integer}`. `__product__` is the product fallback; other IDs are plan IDs. Null inherits the fallback. |
+| POST | `/admin/products/:productId/finance/sales` | `{requestId: UUID, licenseId, kind: initial|renewal, date: YYYY-MM-DD, listAmount, discount, amount, dueDate?: date|null, note?: string}`. Amount must equal listAmount minus discount. One initial sale per license; multiple renewals supported. |
+| POST | `/admin/products/:productId/finance/sales/:saleId/entries` | `{requestId: UUID, kind: payment|refund|credit, amount, date, paymentId?: string|null, method?: string, reference?: string, reason?: string}`. Refunds reference a payment; refunds and credits require a reason. |
+| GET | `/admin/products/:productId/finance/report` | Optional `from`, `to`, `customer`. Sale value follows sale dates; receipts/refunds/credits follow their own dates; outstanding is cumulative through `to` (default current UTC date). Returns ETB totals, period sales, period entries and as-of balances. |
+
+Sale and entry UUIDs provide idempotency: retries with identical normalized payloads return the original record; changed payloads return `idempotency_conflict`. Dates cannot be future-dated, and entries cannot precede their sale. Overpayments, excessive credits, and refunds exceeding the referenced receipt are rejected. Historical daily balances cannot become negative through backdating. Financial records are append-only through these APIs; corrections retain history using refunds, credits and new sale records.
+
+A cash refund reopens the amount owed. A credit reduces the agreed charge; when cancelling a paid charge, record its refund then credit. This distinguishes money returned from debt cancelled. A zero-value sale is `complimentary`, never evidence of cash received. Legacy licenses have no sales record until explicitly recorded. Default price changes do not rewrite sale snapshots. Renewals record a new sale; expiry changes remain a separate explicit licensing action. New issuance atomically records a plan-priced sale, unpaid unless a payment is supplied. Existing licenses without sales remain unchanged. No token payload, signing, activation or validation behavior changes.
+
+New errors: `future_date`, `initial_sale_exists`, `unknown_sale`, `invalid_date`, `overpayment`, `reason_required`, `excess_credit`, `invalid_refund`, `invalid_payment_reference`, `historical_overpayment`. These are validation errors (400), except unknown sale (404) and initial sale conflict (409).
+
+## Inbox read state and in-app notifications
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| POST | `/admin/products/:productId/support/:id/read` | `{lastMessageId}` where the original request uses `original`. Stores the current operator's read marker. `invalid_message` means the message does not belong to this ticket. |
+| GET | `/admin/products/:productId/notifications` | Current attention/assignment/expiration items, per-operator read state and preferences. |
+| PUT | `/admin/products/:productId/notifications/preferences` | `{messages, assignments, expirations}` booleans; scoped to the operator and product. |
+| POST | `/admin/products/:productId/notifications/read` | `{eventId}` marks an item read for the current operator. |
+| GET | `/v1/products/:productId/installations/:installationId/notifications` | Installation-authenticated public reply and license expiration notices, read state and preferences. No internal notes or operator identity. |
+| PUT | `/v1/products/:productId/installations/:installationId/notifications/preferences` | Installation-authenticated `{messages, expirations}` booleans. |
+| POST | `/v1/products/:productId/installations/:installationId/notifications/read` | Installation-authenticated `{eventId}`. |
+
+Support listing accepts `view=all|attention|unread|mine|unassigned`, existing status/category/urgency/search filters and limit/offset pagination. It includes an operator-only preview, unread and needsAttention flags. Newest updated conversations come first. Read state is personal; assignment and status are shared. Existing original messages and replies remain intact. Private notes are shown in a separate history view and remain excluded from every customer response.
+
+Notifications are a **pull-based current-attention feed**, not background email or push delivery. The console polls every 30 seconds while open. Stable event IDs let clients mark notices read without duplicates; a new customer message or expiration threshold produces a new ID. Expirations are derived within 30, 7 and 1 days of the current expiry. Read notices and preferences persist in the database; changing or revoking a license removes obsolete expiry notices. Assignment notices represent current assignments, not an assignment-event audit.
+
+Dependent apps must poll the authenticated notification endpoint, render unread items, open the existing support thread API, and POST read markers. Preference controls can use the corresponding PUT endpoint. Replying continues through the existing installation support message endpoint. Preinstallation requests now use a private status page; no email transport is introduced. A saved operator reply is available for retrieval; it is not falsely labelled delivered or read.
+
+All new data uses versioned `platform_records` kinds (`price`, `sale`, `financial_entry`, `conversation_read`, `notification_read`, `notification_preferences`) and existing SQLite/Postgres transaction locking. No SQL schema migration or rewrite of legacy licenses/tickets is required. Existing full database backups include these records. Very large datasets may later warrant indexed relational tables; current list views are paginated and exports include all filtered records.
+
+## Notification history and bulk controls
+
+`GET /admin/products/:productId/notifications` now captures operator notifications in personal product-scoped history and returns `createdAt` in addition to the event's `date` (expiry date for expiration events). Previously captured notifications remain visible after the conversation resolves. Preferences control new captures; they do not erase history. Deleted event IDs remain tombstoned for that recipient, so polling cannot recreate them. Existing `notification_read` state is honored. Customer notification routes and privacy boundaries retain their existing contract.
+
+`POST /admin/products/:productId/notifications/bulk` accepts `{action:"read"|"unread"|"delete",scope:"selected"|"matching"|"all",filter:"all"|"unread"|"read",eventIds?:string[],confirmed?:boolean}`. `selected` requires at least one event ID (maximum 2000). `matching` applies the filter across all pages. `all` ignores the filter and acts on every nondeleted notification owned by the current operator in the product. Deletion requires `confirmed:true` and only dismisses notifications; it preserves the referenced license/conversation. Returns `{ok:true,affected:number}`. Actions are atomic and cannot change another recipient's notification state. Errors: `notification_confirmation_required`, `notification_selection_required` (HTTP 400), plus validation errors.
+
+Raw SQLite snapshots support `GET /admin/backup/:database` with `database=database|licenses|auth`; unified deployments return the shared file through all three aliases. The preferred path is `/admin/backup/database`. See [Database setup](database.md).
+
+## Requests before installation and automatic issuance
+
+See [License requests and sales](license-sales.md) for the complete operator/customer workflow. Issuance requires `requestId` and an active, priced plan. It does not accept entitlement, seat or expiry overrides. A linked ETB initial sale is created atomically; optional `payment:{date,method,reference}` records full payment on today's UTC date. Exact retries return the same license, key and sale. Existing records are not rewritten.
+
+- `GET /v1/license-request-catalog`: public available product and requested-plan choices (no financial data).
+- `POST /v1/license-requests`: `{id:UUID,productId,plan,name,email}` with a new random 256-bit base64url/hex bearer credential. Exact retries reuse both. Returns 202; the customer must save `/license-request/ID#CREDENTIAL`. No email is sent; contact email is unverified.
+- `GET /v1/license-requests/:id`: bearer-authorized status, contact details and delivery metadata, never the key or stored credential hash.
+- `POST /v1/license-requests/:id/collect`: same bearer; returns `{key,license}` after issuance and records retrieval. Safe to repeat; invalid/revoked/expired licenses cannot be retrieved.
+- `GET /admin/products/:productId/license-recipients`: admin-only installation and unissued request choices.
+- `GET /admin/products/:productId/license-requests`: operator request listing, with credential hashes removed.
+- `GET /admin/products/:productId/licenses/:id/delivery`: operator-safe delivery status. Available is not proof of retrieval; retrieved, manual and failed are explicit.
+- `POST /v1/products/:productId/installations/:installationId/licenses/:id/collect`: installation bearer credential, restricted to the targeted installation. The dependent app's notification item provides this `collectPath`. No key is included in notification listings.
+
+Plan PUT accepts optional `price` in integer santim (null inherits the existing product fallback) and `currency:ETB`. Catalogs and exports expose resolved prices only to admins. Import price changes participate in the existing preview fingerprint. Sales and payment history remain fixed.
+
+## Online application reset
+
+Admin-only `GET /admin/system/reset` returns the retained seeded administrator identity, availability/reason and backup prerequisites. `POST /admin/system/reset` accepts `{confirmation:"DELETE ALL",backup:boolean,requestId:UUID}`. Case and spacing must match exactly. It retains the first recorded seeded admin's ID, profile, password/provider accounts and non-impersonated sessions; other operators, sessions and application records are deleted. Schema/migration state, the bootstrap identity and reset replay receipts remain. Default product/configured plan defaults are recreated using normal bootstrap logic. A request ID that completed previously returns its receipt without clearing newer data.
+
+With `backup:true`, enabled/encrypted local backups are mandatory. The server locks writers, captures the complete pre-reset database, verifies the encrypted archive through the existing restore/integrity checks, and only then deletes data in the same reset transaction. PostgreSQL requires pg_dump/pg_restore and a separate `LICENSE_BACKUP_VERIFY_DATABASE_URL` with temporary-database creation permission. The new verified archive remains downloadable through `/admin/backups/:id/download`. Backup failure aborts deletion; database errors roll back deletion, retaining any already verified backup. External configuration, signing keys, encryption rings and archive files are never deleted. Already-issued offline tokens can remain valid until their original expiry.
+
+Errors: `reset_unavailable` (missing/inactive bootstrap admin or auth, 409/503), `reset_busy` (running backups or requests, 409), `reset_in_progress` (concurrent operation, 409/503), `reset_unrelated_data` (unrelated data/dependencies, 409), `reset_failed` (rolled-back reset, 500), plus existing backup errors and `bad_request` for invalid confirmation/body. Other requests on this server receive 503 with Retry-After during reset, except health checks. Deleted operators must sign in using a newly provisioned account; the retained administrator can continue their original session.

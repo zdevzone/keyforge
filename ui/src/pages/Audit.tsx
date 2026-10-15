@@ -1,8 +1,11 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { fetchAudit, type AuditEntry } from "../api";
-import { Button, Card, ErrorNote, Spinner, formatDateTime } from "../components";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
+import { Card, ErrorNote, Spinner, formatDateTime } from "../components";
+import { PageNavigation as Pagination } from "../components/PageNavigation";
 
 const actionLabels: Record<string, string> = {
   "license.issue": "issued license",
@@ -30,6 +33,7 @@ function detailSummary(entry: AuditEntry): string {
 }
 
 export default function Audit() {
+  const [page, setPage] = useState(1);
   const { data, error, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
       queryKey: ["audit"],
@@ -41,38 +45,41 @@ export default function Audit() {
   if (isPending) return <Spinner label="Loading audit log…" />;
   if (error) return <ErrorNote message={(error as Error).message} />;
 
-  const entries = data.pages.flatMap((page) => page.entries);
+  const currentPage = Math.min(page, data.pages.length);
+  const entries = data.pages[currentPage - 1].entries;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Audit log</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Every admin action, newest first. Console operators appear by email; the CLI's shared
           bearer token can only say "cli".
         </p>
       </div>
 
       <Card>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-5 py-3 font-medium">When</th>
-              <th className="px-5 py-3 font-medium">Who</th>
-              <th className="px-5 py-3 font-medium">Action</th>
-              <th className="px-5 py-3 font-medium">License</th>
-              <th className="px-5 py-3 font-medium">Detail</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
+        <Table className="w-full text-sm">
+          <TableHeader>
+            <TableRow className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHead className="px-5 py-3 font-medium">When</TableHead>
+              <TableHead className="px-5 py-3 font-medium">Who</TableHead>
+              <TableHead className="px-5 py-3 font-medium">Action</TableHead>
+              <TableHead className="px-5 py-3 font-medium">License</TableHead>
+              <TableHead className="px-5 py-3 font-medium">Detail</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-slate-100">
             {entries.map((entry) => (
-              <tr key={entry.id} className="align-top">
-                <td className="px-5 py-3 whitespace-nowrap">{formatDateTime(entry.at)}</td>
-                <td className="px-5 py-3">{entry.actor}</td>
-                <td className="px-5 py-3 whitespace-nowrap">
+              <TableRow key={entry.id} className="align-top">
+                <TableCell className="px-5 py-3 whitespace-nowrap">
+                  {formatDateTime(entry.at)}
+                </TableCell>
+                <TableCell className="px-5 py-3">{entry.actor}</TableCell>
+                <TableCell className="px-5 py-3 whitespace-nowrap">
                   {actionLabels[entry.action] ?? entry.action}
-                </td>
-                <td className="px-5 py-3">
+                </TableCell>
+                <TableCell className="px-5 py-3">
                   {entry.licenseId ? (
                     <Link
                       to={`/licenses/${entry.licenseId}`}
@@ -83,30 +90,39 @@ export default function Audit() {
                   ) : (
                     "—"
                   )}
-                </td>
-                <td className="px-5 py-3 text-xs text-slate-500">{detailSummary(entry)}</td>
-              </tr>
+                </TableCell>
+                <TableCell className="px-5 py-3 text-xs text-muted-foreground">
+                  {detailSummary(entry)}
+                </TableCell>
+              </TableRow>
             ))}
             {entries.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-slate-400">
+              <TableRow>
+                <TableCell colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
                   Nothing recorded yet — admin actions land here as they happen.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
-        {hasNextPage && (
-          <div className="border-t border-slate-200 px-5 py-3 text-center">
-            <Button
-              variant="secondary"
-              disabled={isFetchingNextPage}
-              onClick={() => void fetchNextPage()}
-            >
-              {isFetchingNextPage ? "Loading…" : "Load more"}
-            </Button>
-          </div>
-        )}
+          </TableBody>
+        </Table>
+        <div className="arc-theme table-pagination flex-wrap gap-3" aria-busy={isFetchingNextPage}>
+          <p aria-live="polite" className="text-sm text-muted-foreground">
+            Page {currentPage} · {entries.length} entries{isFetchingNextPage ? " · Loading…" : ""}
+          </p>
+          <Pagination
+            page={currentPage}
+            pageCount={data.pages.length + (hasNextPage ? 1 : 0)}
+            label="Audit pages"
+            onPageChange={(next) => {
+              if (isFetchingNextPage) return;
+              if (next <= data.pages.length) setPage(next);
+              else
+                void fetchNextPage().then((result) => {
+                  if (!result.isError) setPage(next);
+                });
+            }}
+          />
+        </div>
       </Card>
     </div>
   );

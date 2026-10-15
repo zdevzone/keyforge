@@ -1,8 +1,12 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { Plus, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+
+import { Input } from "@/components/ui/input";
 
 import { fetchAdminConfig, fetchLicenses, liveStatus, type License, type LiveStatus } from "../api";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
 import {
   Button,
   Card,
@@ -16,12 +20,13 @@ import IssueLicense from "../IssueLicense";
 
 const PAGE_SIZE = 25;
 
-function SummaryCard(props: { label: string; value: number }) {
+function SummaryCard(props: { label: string; value: number; note: string }) {
   return (
-    <Card className="px-5 py-4">
-      <div className="text-sm text-slate-500">{props.label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums">{props.value}</div>
-    </Card>
+    <div className="summary-item">
+      <span className="summary-label">{props.label}</span>
+      <span className="summary-value">{props.value.toLocaleString()}</span>
+      <span className="summary-note">{props.note}</span>
+    </div>
   );
 }
 
@@ -33,8 +38,9 @@ const filters: Array<{ label: string; value: LiveStatus | "all" }> = [
 ];
 
 export default function Licenses() {
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(params.get("q") || "");
+  const [query, setQuery] = useState(params.get("q") || "");
   const [filter, setFilter] = useState<LiveStatus | "all">("all");
   const [page, setPage] = useState(0);
   const [issuing, setIssuing] = useState(false);
@@ -58,7 +64,7 @@ export default function Licenses() {
   }, [search]);
 
   const status = filter === "all" ? undefined : filter;
-  const { data, isPending, error, isPlaceholderData } = useQuery({
+  const { data, isPending, error, isPlaceholderData, isFetching, refetch } = useQuery({
     queryKey: ["licenses", { q: query, status, page }],
     queryFn: () => fetchLicenses({ q: query, status, page, pageSize: PAGE_SIZE }),
     placeholderData: keepPreviousData,
@@ -75,23 +81,49 @@ export default function Licenses() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <SummaryCard label="Licenses" value={everything} />
-        <SummaryCard label="Active" value={counts.active} />
-        <SummaryCard label="Expired" value={counts.expired} />
-        <SummaryCard label="Revoked" value={counts.revoked} />
-      </div>
+      <Card className="summary-panel">
+        <h1 className="mb-6">License overview</h1>
+        <div className="summary-grid">
+          <SummaryCard label="Total licenses" value={everything} note="Selected product" />
+          <SummaryCard label="Active" value={counts.active} note="Currently valid" />
+          <SummaryCard label="Expired" value={counts.expired} note="Past expiration date" />
+          <SummaryCard label="Revoked" value={counts.revoked} note="Access withdrawn" />
+        </div>
+      </Card>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-4">
-          <input
-            type="search"
-            placeholder="Search by customer, plan or id…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-          />
-          <div className="flex gap-1">
+        <div className="list-toolbar">
+          <h2>Licenses</h2>
+          <Link className="text-sm text-primary underline" to="/license-requests">
+            License requests
+          </Link>
+          {canIssue && (
+            <Button onClick={() => setIssuing(true)}>
+              <Plus data-icon="inline-start" />
+              Issue license
+            </Button>
+          )}
+          <Button variant="secondary" disabled={isFetching} onClick={() => void refetch()}>
+            <RefreshCw data-icon="inline-start" />
+            Refresh
+          </Button>
+        </div>
+        <div className="list-filters">
+          <div className="relative w-full sm:max-w-xs">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              aria-label="Filter licenses"
+              placeholder="Search by customer, plan or id…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="w-full pl-9"
+            />
+          </div>
+          <div className="filter-tabs" aria-label="License status">
             {filters.map((option) => (
               <button
                 key={option.value}
@@ -99,53 +131,44 @@ export default function Licenses() {
                   setFilter(option.value);
                   setPage(0);
                 }}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
-                  filter === option.value
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
+                aria-pressed={filter === option.value}
               >
                 {option.label}
               </button>
             ))}
           </div>
-          {canIssue && (
-            <div className="ml-auto">
-              <Button onClick={() => setIssuing(true)}>Issue license</Button>
-            </div>
-          )}
         </div>
         {issuing && <IssueLicense onClose={() => setIssuing(false)} />}
         <div className={`overflow-x-auto ${isPlaceholderData ? "opacity-60" : ""}`}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-3 font-medium">Issued to</th>
-                <th className="px-5 py-3 font-medium">Plan</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Entitlements</th>
-                <th className="px-5 py-3 font-medium text-right">Seats</th>
-                <th className="px-5 py-3 font-medium">Issued</th>
-                <th className="px-5 py-3 font-medium">Expires</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <TableHead className="px-5 py-3 font-medium">Issued to</TableHead>
+                <TableHead className="px-5 py-3 font-medium">Plan</TableHead>
+                <TableHead className="px-5 py-3 font-medium">Status</TableHead>
+                <TableHead className="px-5 py-3 font-medium">Entitlements</TableHead>
+                <TableHead className="px-5 py-3 font-medium text-right">Seats</TableHead>
+                <TableHead className="px-5 py-3 font-medium">Issued</TableHead>
+                <TableHead className="px-5 py-3 font-medium">Expires</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-slate-100">
               {licenses.map((license) => (
                 <LicenseRow key={license.id} license={license} status={liveStatus(license)} />
               ))}
               {licenses.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-slate-400">
+                <TableRow>
+                  <TableCell colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
                     {everything === 0
                       ? "No licenses issued yet."
                       : "No licenses match the current filter."}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-sm text-slate-500">
+        <div className="table-pagination">
           <span>
             Showing {from}–{to} of {total}
           </span>
@@ -173,23 +196,23 @@ export default function Licenses() {
 function LicenseRow(props: { license: License; status: LiveStatus }) {
   const { license, status } = props;
   return (
-    <tr className="hover:bg-slate-50">
-      <td className="px-5 py-3">
+    <TableRow className="hover:bg-slate-50">
+      <TableCell className="px-5 py-3">
         <Link to={`/licenses/${license.id}`} className="font-medium text-slate-900 hover:underline">
-          {license.issuedTo || <span className="text-slate-400">(unnamed)</span>}
+          {license.issuedTo || <span className="text-muted-foreground">(unnamed)</span>}
         </Link>
-        <div className="font-mono text-xs text-slate-400">{license.id}</div>
-      </td>
-      <td className="px-5 py-3">{license.plan}</td>
-      <td className="px-5 py-3">
+        <div className="font-mono text-xs text-muted-foreground">{license.id}</div>
+      </TableCell>
+      <TableCell className="px-5 py-3">{license.plan}</TableCell>
+      <TableCell className="px-5 py-3">
         <StatusBadge status={status} />
-      </td>
-      <td className="px-5 py-3 text-xs text-slate-500">
+      </TableCell>
+      <TableCell className="px-5 py-3 text-xs text-muted-foreground">
         {entitlementsSummary(license.entitlements) || "—"}
-      </td>
-      <td className="px-5 py-3 text-right tabular-nums">{license.activationLimit}</td>
-      <td className="px-5 py-3 whitespace-nowrap">{formatDate(license.issuedAt)}</td>
-      <td className="px-5 py-3 whitespace-nowrap">{formatDate(license.expiresAt)}</td>
-    </tr>
+      </TableCell>
+      <TableCell className="px-5 py-3 text-right tabular-nums">{license.activationLimit}</TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap">{formatDate(license.issuedAt)}</TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap">{formatDate(license.expiresAt)}</TableCell>
+    </TableRow>
   );
 }

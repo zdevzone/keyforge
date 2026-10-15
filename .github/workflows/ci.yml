@@ -1,71 +1,92 @@
 name: CI
-
-# Read-only by default: nothing here writes to the repo.
-permissions:
-  contents: read
-
 on:
   push:
     branches: [main]
   pull_request:
-
+permissions:
+  contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["22.23.3", "24.21.0"]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
         with:
-          node-version: 22
-      - name: Install server dependencies
-        # npm ci installs the locked tree exactly, and fails when the lockfile
-        # and package.json disagree — which is the whole point of tracking it.
-        run: npm ci
-      - name: Check (Oxlint, Oxfmt, typecheck)
-        # Runs the LOCAL vp from node_modules, installed by npm ci. No global
-        # curl|bash install in CI, and no unpinned binary in the build path.
-        run: npm run check
-      - name: Test
-        run: npm test
-      - name: Build server
-        run: npm run build
-      - name: Install console dependencies
-        run: npm --prefix ui ci
-      - name: Build console
-        run: npm --prefix ui run build
-
-  # The same suite against Postgres — dialect differences (LIKE case
-  # sensitivity, bigint counts, identity columns) only show up here.
+          version: "1.1.0"
+          node-version: ${{ matrix.node }}
+          cache: true
+      - run: vp install --frozen-lockfile
+      - run: vp run check
+      - run: vp run build:all
+      - run: vp run test
+      - if: matrix.os == 'ubuntu-latest' && matrix.node == '24.21.0'
+        run: |
+          vp exec playwright install --with-deps chromium
+          vp run test:console
+          vp run test:issuance
+          vp run test:docs
   postgres:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        postgres: ["16.15", "18.6"]
+        include:
+          - postgres: "16.15"
+            client: 16
+          - postgres: "18.6"
+            client: 18
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_USER: keyforge
           POSTGRES_PASSWORD: keyforge
           POSTGRES_DB: keyforge_test
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: voidzero-dev/setup-vp@v1.21.2
         with:
-          node-version: 22
-      - run: npm ci
-      - name: Test against Postgres
-        run: npm test
+          version: "1.1.0"
+          node-version: "24.21.0"
+          cache: true
+      - run: vp install --frozen-lockfile
+      - name: Install compatible Postgres backup tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSLo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-${{ matrix.client }}
+          echo "/usr/lib/postgresql/${{ matrix.client }}/bin" >> "$GITHUB_PATH"
+      - run: vp run build
+      - run: vp run test
         env:
-          TEST_DATABASE_URL: postgres://keyforge:keyforge@localhost:5432/keyforge_test
-
+          TEST_DATABASE_URL: postgres://keyforge:keyforge@localhost:5432/keyforge_test?sslmode=disable
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t keyforge .
+      - uses: actions/checkout@v7.0.1
+      - run: docker build -t keyforge .
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Build with Render configuration
+        run: set -o pipefail && curl -fsSL https://vite.plus | VP_HOME="$HOME/.vite-plus" VP_VERSION=1.1.0 VP_NODE_MANAGER=no bash && export PATH="$HOME/.vite-plus/bin:$PATH" && NODE_ENV=development vp install --frozen-lockfile && vp run build:all
+        env:
+          NODE_ENV: production

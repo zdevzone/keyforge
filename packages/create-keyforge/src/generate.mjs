@@ -9,7 +9,7 @@
  */
 
 import { getPlatform, platformNotes, platformSecrets, platformSteps } from "./platforms.mjs";
-import { commands, devEngines, packageManagerField } from "./toolchain.mjs";
+import { commands, devEngines, packageManagerField, runtimeConfig } from "./toolchain.mjs";
 
 /** Kept in step with ADMIN_FEATURES in src/permissions.ts (asserted by tests). */
 export const ADMIN_FEATURES = ["operators", "sessions", "bans", "impersonation"];
@@ -197,6 +197,7 @@ export function buildConfig(answers) {
       activate: { max: 20, timeWindow: "1 minute" },
       validate: { max: 20, timeWindow: "1 minute" },
       register: { max: 30, timeWindow: "1 minute" },
+      support: { max: 10, timeWindow: "1 hour" },
     },
     licenses: {
       defaultPlan: licensing.defaultPlan,
@@ -228,6 +229,8 @@ export function buildEnvLocal(answers) {
     "",
     `# The trust root. Generate the pair with: ${commands(answers.packageManager).run("license")} keygen`,
     "LICENSE_SIGNING_KEY_FILE=./license-signing.key",
+    "LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json",
+    "LICENSE_BACKUP_KEYRING_FILE=./secrets/backup.keyring.json",
     "",
     "# Bearer token for the admin CLI. Unset = CLI admin access disabled.",
     `LICENSE_ADMIN_TOKEN="${answers.adminToken}"`,
@@ -250,7 +253,7 @@ export function buildEnvLocal(answers) {
     );
   } else {
     lines.push(
-      "# SQLite ledger; operator accounts land in auth.sqlite beside it.",
+      "# Unified SQLite database for licenses, operator accounts and sessions.",
       "LICENSE_DB_PATH=./db/licenses.sqlite",
     );
   }
@@ -271,6 +274,8 @@ export function buildEnvExample(answers) {
     `# ${answers.productName} license service — copy to .env.local and fill in.`,
     `# Generate the signing key pair with: ${commands(answers.packageManager).run("license")} keygen`,
     "LICENSE_SIGNING_KEY_FILE=./license-signing.key",
+    "LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json",
+    "LICENSE_BACKUP_KEYRING_FILE=./secrets/backup.keyring.json",
     '# LICENSE_SIGNING_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"',
     "",
     'LICENSE_ADMIN_TOKEN="<long random string; gates the admin CLI>"',
@@ -299,7 +304,7 @@ export function buildEnvExample(answers) {
 }
 
 /** Parsers used only by the scaffolder's manifest tests; see buildPackageJson. */
-const UPSTREAM_ONLY_DEV_DEPENDENCIES = ["yaml", "smol-toml"];
+const UPSTREAM_ONLY_DEV_DEPENDENCIES = ["yaml", "smol-toml", "ajv", "ajv-formats"];
 
 /**
  * The generated project's package.json, derived from the template's so it
@@ -314,6 +319,12 @@ export function buildPackageJson(templatePackageJson, answers) {
     pkg.devDependencies = { ...pkg.devDependencies };
     for (const name of UPSTREAM_ONLY_DEV_DEPENDENCIES) delete pkg.devDependencies[name];
   }
+  for (const group of [pkg.dependencies, pkg.devDependencies])
+    if (group) {
+      if (group["vite-plus"] === "catalog:") group["vite-plus"] = "1.1.0";
+      if (group.vite === "catalog:") group.vite = "npm:@voidzero-dev/vite-plus-core@1.1.0";
+    }
+  pkg.workspaces = ["ui"];
   pkg.name = answers.packageName;
   pkg.version = "0.1.0";
   pkg.description = `${answers.productName} license service (built on Keyforge).`;
@@ -326,6 +337,18 @@ export function buildPackageJson(templatePackageJson, answers) {
   // cost this project two red pipelines.
   pkg.packageManager = packageManagerField(answers.packageManager);
   pkg.devEngines = devEngines(answers.packageManager, answers.runtime);
+  // Client tooling belongs to upstream's SDK workspace, which deployments prune.
+  pkg.scripts = { ...pkg.scripts };
+  if (pkg.scripts?.build)
+    pkg.scripts.build = pkg.scripts.build.replace(
+      " && vp -C packages/keyforge-client run build",
+      "",
+    );
+  if (pkg.scripts?.typecheck)
+    pkg.scripts.typecheck = pkg.scripts.typecheck.replace(
+      " && vp -C packages/keyforge-client run typecheck",
+      "",
+    );
   pkg.scripts = retargetScripts(pkg.scripts, answers.packageManager);
   return pkg;
 }
@@ -348,7 +371,7 @@ export function buildPackageJson(templatePackageJson, answers) {
  */
 export function retargetScripts(scripts, packageManager) {
   if (!scripts) return scripts;
-  if (packageManager === "npm") return { ...scripts };
+
   const rewritten = {};
   for (const [name, value] of Object.entries(scripts)) {
     rewritten[name] = retargetNpmCommands(value, packageManager);
@@ -367,6 +390,14 @@ export function retargetScripts(scripts, packageManager) {
  * @param {import("./toolchain.d.mts").PackageManagerId} packageManager
  */
 export function retargetNpmCommands(text, packageManager) {
+  if (packageManager !== "vp") {
+    const command = commands(packageManager);
+    text = text
+      .replaceAll(/vp -C (\S+) run (\S+)/g, (_, dir, task) => command.runIn(dir, task))
+      .replaceAll(/vp run (\S+)/g, (_, task) => command.run(task))
+      .replaceAll(/vp install --frozen-lockfile/g, command.frozenInstall)
+      .replaceAll(/vp install/g, command.install);
+  }
   if (packageManager === "npm") return text;
   const run = commands(packageManager);
   return (
@@ -400,7 +431,7 @@ export function retargetNpmCommands(text, packageManager) {
  * @param {import("./toolchain.d.mts").PackageManagerId} packageManager
  */
 export function retargetDocs(contents, packageManager) {
-  if (packageManager === "npm") return contents;
+  if (packageManager === "npm") return retargetNpmCommands(contents, packageManager);
   const replaced = contents.replace(
     /## Passing flags through npm\n[\s\S]*?\nEvery example below uses the form that works\.\n/,
     `## Passing flags through ${packageManager}\n\n` +
@@ -470,16 +501,19 @@ function carveOut(text, heading) {
 export function retargetWorkflow(contents, packageManager) {
   if (packageManager === "npm") return contents;
   const run = commands(packageManager);
-  const prepare = run.corepack
-    ? `corepack enable && corepack prepare ${packageManagerField(packageManager)} --activate`
-    : `npm install -g ${packageManagerField(packageManager)}`;
+  const prepare =
+    packageManager === "vp"
+      ? "npm install -g vite-plus@1.1.0"
+      : run.corepack
+        ? `corepack enable && corepack prepare ${packageManagerField(packageManager)} --activate`
+        : `npm install -g ${packageManagerField(packageManager)}`;
 
   const rewritten = retargetNpmCommands(contents, packageManager);
 
   // One preparation step per job, immediately after the setup-node step that
   // puts npm and corepack on the runner in the first place.
   return rewritten.replaceAll(
-    /^(\s*)- uses: actions\/setup-node@v4\n((?:\1  .*\n)*)/gm,
+    /^(\s*)- uses: actions\/setup-node@v[0-9.]+\n((?:\1  .*\n)*)/gm,
     (match, indent, _block) =>
       `${match}${indent}- name: Enable ${packageManager}\n${indent}  run: ${prepare}\n`,
   );
@@ -503,109 +537,62 @@ export function retargetWorkflow(contents, packageManager) {
  * @param {{ packageManager: import("./toolchain.d.mts").PackageManagerId }} answers
  */
 export function retargetDockerfileContents(contents, packageManagerOrAnswers) {
-  // Called directly in tests with an answers object, and through the shared
-  // file helper with a bare id; accept either rather than making callers care.
-  const packageManager =
+  const id =
     typeof packageManagerOrAnswers === "string"
       ? packageManagerOrAnswers
       : packageManagerOrAnswers.packageManager;
-  if (packageManager === "npm") return contents;
-  const run = commands(packageManager);
-
-  const replacements = [
-    [/COPY package\.json package-lock\.json \.\/$/gm, `COPY package.json ${run.lockfile} ./`],
-    [
-      /COPY ui\/package\.json ui\/package-lock\.json ui\/$/gm,
-      `COPY ui/package.json ui/${run.lockfile} ui/`,
-    ],
-    [/RUN npm ci --omit=dev$/gm, `RUN ${run.frozenInstall} --production`],
-    [/RUN npm --prefix ui ci$/gm, `RUN ${run.frozenInstallIn("ui")}`],
-    [/RUN npm ci$/gm, `RUN ${run.frozenInstall}`],
-    [
-      /RUN npm run build && npm --prefix ui run build$/gm,
-      `RUN ${run.run("build")} && ${run.runIn("ui", "build")}`,
-    ],
-  ];
-
-  let output = contents;
-  const unmatched = [];
-
-  for (const [pattern, replacement] of replacements) {
-    if (!pattern.test(output)) {
-      unmatched.push(String(pattern));
-      continue;
-    }
-    // test() advanced lastIndex on these global patterns; reset before replacing.
-    pattern.lastIndex = 0;
-    output = output.replace(pattern, replacement);
-  }
-  if (unmatched.length > 0) {
+  if (!contents.includes("# KEYFORGE_TOOLCHAIN_TEMPLATE"))
     throw new Error(
-      "The template's Dockerfile no longer has the install lines this scaffolder " +
-        `rewrites, so a ${packageManager} project would ship an image built by npm. ` +
-        `Update retargetDockerfileContents. Missing: ${unmatched.join(", ")}`,
+      "The template Dockerfile no longer has the toolchain marker. Update retargetDockerfileContents.",
     );
-  }
-  // Belt and braces: the point of the exercise is that no npm invocation is
-  // left behind, and a future Dockerfile could add one this list does not know.
-  // `npm install -g bun@…` is added later, and on purpose: npm is the only
-  // manager node:22 carries, so it is what bootstraps the chosen one.
-  const leftover = (output.match(/^\s*RUN npm .*$/gm) ?? []).filter(
-    (line) => !/npm install -g/.test(line),
-  );
-  if (leftover.length === 0) {
-    // The structural rules above cover RUN and COPY; this catches the prose
-    // around them, so a Bun project's Dockerfile does not still explain
-    // itself in terms of `npm ci`.
-    return installManagerInImage(retargetNpmCommands(output, packageManager), packageManager);
-  }
-  throw new Error(
-    `These npm commands survived the ${packageManager} rewrite: ${leftover.join("; ").trim()}`,
-  );
+  const run = commands(id),
+    runtime = runtimeConfig("node");
+  const production =
+    id === "yarn"
+      ? "vp pm workspaces focus -A --production"
+      : id === "npm"
+        ? "vp install --frozen-lockfile --omit=dev"
+        : "vp install --frozen-lockfile --prod";
+  return [
+    "# KEYFORGE_TOOLCHAIN_TEMPLATE",
+    "FROM " + runtime.dockerImage + " AS build",
+    "WORKDIR /app",
+    "RUN npm install -g vite-plus@1.1.0",
+    "COPY package.json " + run.lockfile + " pnpm-workspace.yaml ./",
+    "COPY ui/package.json ui/",
+    "RUN vp install --frozen-lockfile",
+    "COPY tsconfig.json tsconfig.test.json ./",
+    "COPY src src",
+    "COPY scripts scripts",
+    "COPY docs docs",
+    "COPY ui ui",
+    "RUN " + run.run("build") + " && " + run.runIn("ui", "build"),
+    "FROM " + runtime.dockerImage + " AS deps",
+    "WORKDIR /app",
+    "RUN npm install -g vite-plus@1.1.0",
+    "COPY package.json " + run.lockfile + " pnpm-workspace.yaml ./",
+    "COPY ui/package.json ui/",
+    "RUN " + production,
+    "FROM postgres:18.6-bookworm AS pgtools",
+    "FROM " + runtime.dockerSlimImage,
+    "WORKDIR /app",
+    "ENV NODE_ENV=production",
+    "RUN apt-get update && apt-get install -y --no-install-recommends libpq5 liblz4-1 libzstd1 ca-certificates && rm -rf /var/lib/apt/lists/*",
+    "COPY --from=pgtools /usr/lib/postgresql/18/bin/pg_dump /usr/lib/postgresql/18/bin/pg_restore /usr/local/bin/",
+    "COPY --from=pgtools /usr/lib/x86_64-linux-gnu/libpq.so.5* /usr/lib/x86_64-linux-gnu/",
+    "COPY --from=deps /app/node_modules node_modules",
+    "COPY --from=build /app/dist dist",
+    "COPY --from=build /app/dist/runtime-package.json package.json",
+    "COPY scripts scripts",
+    "ENV LICENSE_DB_PATH=/data/licenses.sqlite",
+    "ENV LICENSE_HOST=0.0.0.0",
+    "VOLUME /data",
+    "EXPOSE 4100",
+    'CMD ["node", "dist/src/index.js"]',
+    "",
+  ].join("\n");
 }
 
-/**
- * Make the chosen package manager exist inside the image.
- *
- * Rewriting `npm ci` to `pnpm install` is not enough on its own, and this is
- * the part that is easy to miss by reading the diff rather than building it:
- * the base image is `node:22`, which ships **npm and corepack, and nothing
- * else**. Without this the image fails at the first install with
- * `pnpm: not found` -- after the rewrite has already made everything look
- * right.
- *
- * pnpm and Yarn come from corepack, which is already in the image. Bun does
- * not, so it is installed with the npm that is there. One preparation line per
- * stage that installs; the runtime stage does not, so it stays untouched.
- *
- * @param {string} contents
- * @param {import("./toolchain.d.mts").PackageManagerId} packageManager
- */
-function installManagerInImage(contents, packageManager) {
-  const run = commands(packageManager);
-  const version = packageManagerField(packageManager);
-  const prepare = run.corepack
-    ? `RUN corepack enable && corepack prepare ${version} --activate`
-    : `RUN npm install -g ${version}`;
-
-  // Split on stage boundaries so the line lands once per installing stage,
-  // rather than once per install command.
-  const stages = contents.split(/(?=^FROM )/m);
-  return stages
-    .map((stage) => {
-      const installs = new RegExp(`^RUN ${packageManager} `, "m").test(stage);
-      if (!installs || stage.includes(prepare)) return stage;
-      // After WORKDIR so the layer caches with the rest of the stage's setup.
-      return stage.replace(/^(WORKDIR .*)$/m, `$1\n${prepare}`);
-    })
-    .join("");
-}
-
-/**
- * What to tell the deployer once the files are on disk: get it running here
- * first, then the chosen host's own commands. Running it locally before
- * deploying is the step that turns a platform error into a five-second fix.
- */
 export function nextSteps(answers) {
   const run = commands(answers.packageManager);
   const steps = [

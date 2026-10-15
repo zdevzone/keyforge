@@ -4,18 +4,15 @@ services:
     runtime: node
     plan: free
     autoDeploy: true
-    # npm ci, matching CI and the Dockerfile: both lockfiles are tracked, so
-    # every build resolves the same dependency tree.
-    buildCommand: npm ci && npm run build && npm --prefix ui ci && npm run build:ui
-    startCommand: npm run start
+    # Bootstrap Vite+ because Render's native Node runtime does not provide it.
+    buildCommand: set -o pipefail && curl -fsSL https://vite.plus | VP_HOME="$HOME/.vite-plus" VP_VERSION=1.1.0 VP_NODE_MANAGER=no bash && export PATH="$HOME/.vite-plus/bin:$PATH" && NODE_ENV=development vp install --frozen-lockfile && vp run build:all
+    startCommand: node dist/src/index.js
     healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION
-        value: 22
+        value: 24.21.0
       - key: LICENSE_HOST
         value: 0.0.0.0
-      - key: LICENSE_PORT
-        value: 10000
       - key: LICENSE_DB_PATH
         value: ./db/licenses.sqlite
       - key: LICENSE_ADMIN_TOKEN

@@ -9,8 +9,8 @@
  * service — so run it against a standby, or against a ledger nothing is
  * serving.
  *
- *   npm run build          # this tool runs the compiled server code
- *   npm run db -- mirror --to ./backup/licenses.sqlite
+ *   vp run build          # this tool runs the compiled server code
+ *   vp run db mirror --to ./backup/licenses.sqlite
  *
  * A mirror is a backup, not a replica: it is as old as the last time it ran,
  * and the service never writes to it. Promotion is a decision you make by
@@ -42,26 +42,27 @@ function flag(name, fallback = undefined) {
 function usage() {
   console.log(`Database tool — copy, mirror and compare license ledgers.
 
-  npm run db -- copy --from <url|file> --to <url|file> [--replace]
+  vp run db copy --from <url|file> --to <url|file> [--replace]
       Copy every ledger table from one database to another, in either
       direction and across engines (SQLite <-> Postgres). The destination is
       migrated first and written in one transaction. Refuses a destination
       that already holds data unless --replace is given.
 
-  npm run db -- mirror --to <url|file> [--from <url|file>]
+  vp run db mirror --to <url|file> [--from <url|file>]
       A copy aimed at a standby, safe to run on a schedule. --from defaults to
       this deployment's own database (DATABASE_URL, else LICENSE_DB_PATH), and
       --replace is implied: the standby is overwritten every run.
 
-  npm run db -- verify --from <url|file> --to <url|file>
+  vp run db verify --from <url|file> --to <url|file>
       Compare the two: row counts and a content checksum per table. Exits 1 on
       a mismatch, so cron can tell you the mirror stopped working.
 
-  A target is a postgres:// URL or a SQLite file path. Only the four ledger
-  tables travel; operator accounts come back through boot-time seeding
+  A target is a postgres:// URL or a SQLite file path. Only the ledger tables
+  travel -- licenses, installations, activations, the machine/trial ledger and
+  the audit log; operator accounts come back through boot-time seeding
   (LICENSE_SEED_ADMIN_EMAIL / LICENSE_SEED_ADMIN_PASSWORD).
 
-  Run \`npm run build\` first — this tool uses the compiled server code.
+  Run \`vp run build\` first — this tool uses the compiled server code.
 `);
 }
 
@@ -78,7 +79,7 @@ async function replica() {
     return await import("../dist/src/replica.js");
   } catch (error) {
     if (error?.code === "ERR_MODULE_NOT_FOUND") {
-      console.error("Build the server first: npm run build");
+      console.error("Build the server first: vp run build");
       process.exit(1);
     }
     throw error;
@@ -113,6 +114,17 @@ function assertExists(target) {
   }
 }
 
+/**
+ * Width of the table-name column, from the names actually being printed.
+ *
+ * A literal used to do this, and `machine_installations` outgrew it the moment
+ * the trial ledger arrived — the counts stopped lining up and the output read
+ * as though something had gone wrong with the copy.
+ */
+function columnWidth(names) {
+  return Math.max(...names.map((name) => name.length));
+}
+
 async function copy({ fromSpec, toSpec, replace, label }) {
   const { copyLedger, describeTarget, resolveTarget } = await replica();
   const from = resolveTarget(fromSpec);
@@ -121,8 +133,9 @@ async function copy({ fromSpec, toSpec, replace, label }) {
 
   console.log(`${label} ${describeTarget(from)} -> ${describeTarget(to)}`);
   const result = await copyLedger({ from, to, replace }).catch(fail);
+  const nameWidth = columnWidth(Object.keys(result.copied));
   for (const [table, count] of Object.entries(result.copied)) {
-    console.log(`  ${table.padEnd(14)} ${String(count).padStart(7)}`);
+    console.log(`  ${table.padEnd(nameWidth)} ${String(count).padStart(7)}`);
   }
   const total = Object.values(result.copied).reduce((sum, count) => sum + count, 0);
   console.log(
@@ -164,9 +177,10 @@ switch (command) {
     assertExists(to);
     console.log(`Comparing ${describeTarget(from)} with ${describeTarget(to)}`);
     const result = await verifyLedger({ from, to }).catch(fail);
+    const nameWidth = columnWidth(result.tables.map((verdict) => verdict.table));
     for (const verdict of result.tables) {
       console.log(
-        `  ${verdict.table.padEnd(14)} ${String(verdict.from).padStart(7)} ${String(
+        `  ${verdict.table.padEnd(nameWidth)} ${String(verdict.from).padStart(7)} ${String(
           verdict.to,
         ).padStart(7)}  ${verdict.match ? "ok" : "MISMATCH"}`,
       );

@@ -37,6 +37,28 @@ import { z } from "zod";
 const nonEmpty = z.string().min(1);
 
 export const envSchema = {
+  LICENSE_DATA_KEYRING: nonEmpty.optional(),
+  LICENSE_DATA_KEYRING_FILE: nonEmpty.optional(),
+  LICENSE_BACKUP_KEYRING: nonEmpty.optional(),
+  LICENSE_BACKUP_KEYRING_FILE: nonEmpty.optional(),
+  LICENSE_BACKUP_DIR: nonEmpty.optional(),
+  LICENSE_BACKUP_S3_BUCKET: nonEmpty.optional(),
+  LICENSE_BACKUP_S3_REGION: nonEmpty.optional(),
+  LICENSE_BACKUP_S3_ENDPOINT: z.string().url().optional(),
+  LICENSE_BACKUP_S3_ACCESS_KEY_ID: nonEmpty.optional(),
+  LICENSE_BACKUP_S3_SECRET_ACCESS_KEY: nonEmpty.optional(),
+  LICENSE_BACKUP_S3_SESSION_TOKEN: nonEmpty.optional(),
+  LICENSE_BACKUP_R2_BUCKET: nonEmpty.optional(),
+  LICENSE_BACKUP_R2_ACCOUNT_ID: z
+    .string()
+    .regex(/^[a-zA-Z0-9-]+$/)
+    .optional(),
+  LICENSE_BACKUP_R2_ENDPOINT: z.string().url().optional(),
+  LICENSE_BACKUP_R2_ACCESS_KEY_ID: nonEmpty.optional(),
+  LICENSE_BACKUP_R2_SECRET_ACCESS_KEY: nonEmpty.optional(),
+  LICENSE_BACKUP_R2_SESSION_TOKEN: nonEmpty.optional(),
+  LICENSE_BACKUP_UPLOADTHING_TOKEN: nonEmpty.optional(),
+  LICENSE_BACKUP_VERIFY_DATABASE_URL: nonEmpty.optional(),
   // --- database ---------------------------------------------------------
   /** postgres:// or postgresql:// selects Postgres. Absent means SQLite. */
   DATABASE_URL: z
@@ -60,6 +82,16 @@ export const envSchema = {
   LICENSE_SIGNING_KEY: nonEmpty.optional(),
   /** Path to the PEM, as an alternative to inlining it. */
   LICENSE_SIGNING_KEY_FILE: nonEmpty.optional(),
+  /**
+   * The name tokens carry in their `kid`, so a verifier holding several public
+   * keys knows which one to try. Absent is fine: a kid is then derived from the
+   * key's own fingerprint, which is stable for the life of the key. Set it
+   * explicitly when you rotate on a schedule and want readable ids ("2026-08").
+   */
+  LICENSE_SIGNING_KID: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,64}$/, "LICENSE_SIGNING_KID must be 1-64 of A-Z a-z 0-9 . _ -")
+    .optional(),
 
   // --- admin surfaces ---------------------------------------------------
   /**
@@ -76,8 +108,6 @@ export const envSchema = {
     .string()
     .min(16, "LICENSE_AUTH_SECRET should be at least 16 characters; it signs session cookies")
     .optional(),
-  /** Auth sidecar path. Only used on SQLite deployments. */
-  LICENSE_AUTH_DB_PATH: nonEmpty.optional(),
 
   // --- boot-time operator seeding ---------------------------------------
   /** Both or neither; one alone does nothing, and index.ts says so. */
@@ -119,7 +149,10 @@ export const envSchema = {
 export function parseEnv(runtimeEnv: Record<string, string | undefined> = process.env) {
   return createEnv({
     server: envSchema,
-    runtimeEnv,
+    runtimeEnv: {
+      ...runtimeEnv,
+      LICENSE_SERVER_URL: runtimeEnv.LICENSE_SERVER_URL || runtimeEnv.RENDER_EXTERNAL_URL,
+    },
     emptyStringAsUndefined: true,
     onValidationError: (issues) => {
       const lines = issues.map((issue) => {
