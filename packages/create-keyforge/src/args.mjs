@@ -15,8 +15,8 @@ export const USAGE = `
 create-keyforge — scaffold a self-hosted license server.
 
 Usage
-  npm create keyforge@latest <directory> [options]
-  npx create-keyforge@latest <directory> [options]
+  node packages/create-keyforge/bin/create-keyforge.mjs <directory> [options]
+  vp create keyforge -- <directory> [options]  (after package publication)
 
 Options
   -d, --db <sqlite|postgres>   Database the ledger and operators run on.
@@ -32,7 +32,9 @@ Options
       --template <source>      Template to scaffold from: owner/repo[#ref], a
                                git URL, or a local directory. Defaults to the
                                Keyforge repository.
-      --install                Run npm install in the new project.
+      --pm <manager>           Package manager: vp (default), npm, pnpm, yarn, bun.
+      --runtime <runtime>      Runtime: node (default).
+      --install                Install dependencies with the selected manager.
       --no-git                 Skip initializing a git repository.
       --force                  Scaffold into a non-empty directory.
   -y, --yes                    Accept defaults for anything not passed.
@@ -40,11 +42,11 @@ Options
   -v, --version                Print the version.
 
 Examples
-  npm create keyforge@latest my-license-server
-  npx create-keyforge@latest acme-licensing --db postgres --auth full --use-case time -y
-  npx create-keyforge@latest acme-licensing --auth operators,sessions,bans
-  npx create-keyforge@latest acme-licensing --deploy render --db postgres -y
-  npx create-keyforge@latest acme-licensing --pm pnpm --runtime node -y
+  node packages/create-keyforge/bin/create-keyforge.mjs ../my-license-server --template .
+  vp create keyforge -- acme-licensing --db postgres --auth full --use-case time -y
+  vp create keyforge -- acme-licensing --auth operators,sessions,bans
+  vp create keyforge -- acme-licensing --deploy render --db postgres -y
+  vp create keyforge -- acme-licensing --pm vp --runtime node -y
 `.trim();
 
 /**

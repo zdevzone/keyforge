@@ -585,7 +585,8 @@ test("scaffolding writes one platform's files and drops the rest", async (t) => 
  * notice. So sweep the whole tree instead of the file we happen to remember.
  *
  * Upstream's repo URL is deliberate attribution in the generated README and
- * the public KeyForge source/download page (and its browser assertion).
+ * the preserved upstream guide, and the public KeyForge source/download page
+ * (and its browser assertion).
  * It must not leak into deployment configuration or contact addresses.
  */
 test("upstream's identity does not travel into a scaffolded project", async (t) => {
@@ -606,6 +607,7 @@ test("upstream's identity does not travel into a scaffolded project", async (t) 
     [
       "README.md",
       "docs/getting-started.md",
+      "docs/keyforge.md",
       "scripts/console-smoke.mjs",
       "ui/.impeccable/surfaces/welcome.md",
       "ui/src/docs/catalog.ts",

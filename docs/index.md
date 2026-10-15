@@ -7,10 +7,12 @@ Deploy your own license server, issue licenses from priced plans, and connect yo
 ## Run a server
 
 - [Setup and first license](getting-started.md): prerequisites, environment, generated secrets, first operator and verification.
+- [Project CLI](../packages/create-keyforge/README.md): generate a deployment with your database, licensing model and host settings.
 - [Configuration](configuration.md): environment variables, databases, deployment policy and defaults.
 - [Deployment](deploy.md): Render, Docker, local/VPS, Fly.io, Railway, Koyeb and cPanel.
 - [Backups and recovery](backups.md): encrypted archives, independent schedules, verification and restoration.
 - [Database maintenance](database.md): SQLite/PostgreSQL selection, demo data and the admin-preserving reset.
+- [Upgrade an existing installation](database.md#upgrade-existing-installations): backups, schema changes and older client compatibility.
 
 ## Operate KeyForge
 

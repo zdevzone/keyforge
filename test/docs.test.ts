@@ -86,7 +86,10 @@ test("project documentation uses Vite+ commands", () => {
   walk(root);
   assert.deepEqual(offenders, []);
 });
-test("integration and operation guides are discoverable from README", () => {
+test("integration and operation guides are discoverable through the README documentation index", () => {
+  const readme = read("README.md");
+  assert.ok(readme.includes("docs/index.md"));
+  const index = read("docs/index.md");
   for (const doc of [
     "api",
     "cli",
@@ -98,5 +101,8 @@ test("integration and operation guides are discoverable from README", () => {
     "dependent-app-ai-context",
     "integration-review",
   ])
-    assert.ok(read("README.md").includes("docs/" + doc + ".md"));
+    assert.ok(
+      readme.includes("docs/" + doc + ".md") || index.includes("(" + doc + ".md"),
+      `${doc} must be linked from the README or its documentation index`,
+    );
 });

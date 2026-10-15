@@ -1,5 +1,11 @@
 # Database setup and demo data
 
+## Upgrade existing installations
+
+Back up the unified database (licensing and operators together), and keep separate recovery copies of signing keys and encryption rings before upgrading. Boot migrations preserve historical records and import historical ledger records into the `default` product once; they do not import the retired split auth database. Old license hashes cannot be reversed: an admin can securely re-enter the original product key after password verification to retain it encrypted. Historical installation IDs cannot be claimed without a credential; dependent apps must register a new identity.
+
+The current release replaces the old unscoped device API. Integrators must adopt product-scoped routes, license token v4 and trial token v2. Existing client binaries require an application update; no compatibility adapter is provided. Preserve old public keys in client trust stores for the chosen transition period. See [client integration](dependent-app-integration.md) and [token verification](verify-token.md).
+
 ## Reset from Settings
 
 Administrators can use **Settings → System → Reset application data**. The dialog identifies the retained first seeded administrator and requires typing `DELETE ALL`. The backup checkbox is selected initially. When selected, reset proceeds only after an encrypted full database backup passes verification; the new archive is available in **Settings → Backups** after reset. An unconfigured/failed backup does not silently fall back to deleting without one. Keep the backup encryption ring to restore the archive.
