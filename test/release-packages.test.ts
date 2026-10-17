@@ -167,6 +167,7 @@ test("release workflow is opt-in, checks first, and limits OIDC to the publish j
   assert.match(workflow.jobs.publish.if, /!inputs.dry_run/);
   assert.equal(workflow.jobs.publish.environment, "npm");
   assert.equal(workflow.jobs.publish.permissions["id-token"], "write");
+  assert.equal(workflow.jobs.checks.permissions.actions, "read");
   const runSteps = workflow.jobs.checks.steps
     .map((step: { run?: string }) => step.run ?? "")
     .join("\n");

@@ -21,7 +21,7 @@ Previously published stable versions remain available until a deliberate stable 
 
 Wrong branch/channel combinations fail before building or publishing. **Dry run** defaults to true. A beta never changes `latest`. Beta versions are generated in temporary packaging copies; committed versions remain stable. The client starter installs its exact beta SDK, while stable starters use a compatible stable range. Server starter archives pin their default template to the tested source commit. An explicit `--template` remains available.
 
-Before publication the workflow runs lint/format/typechecks, builds, Node tests, package smoke checks and all three browser suites. It packs all three archives, verifies their contents and release metadata, and exercises those exact archives through both generators. The publish job downloads the checked archives without rebuilding. Archives are retained for seven days.
+Before publication the workflow requires successful branch CI, including its database and operating-system checks, then runs lint/format/typechecks, builds, Node tests, package smoke checks and all three browser suites. It packs all three archives, verifies their contents and release metadata, and exercises those exact archives through both generators. The publish job downloads the checked archives without rebuilding. Archives are retained for seven days.
 
 Only the publish job receives `id-token: write`. npm trusted publishing provides OIDC authentication and provenance; no `NPM_TOKEN` is needed. Package versions are published in SDK → server CLI → client CLI order. Each must become visible with matching SHA-512 integrity before the next starts; registry processing is allowed up to five minutes plus request time.
 

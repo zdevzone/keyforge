@@ -30,12 +30,21 @@ jobs:
     if: github.repository == 'zdevzone/keyforge'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Validate release branch and channel
         run: node --input-type=module -e 'import { assertReleaseContext } from "./scripts/release-packages.mjs"; assertReleaseContext(process.env)'
+      - name: Require successful branch CI, including databases and platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/zdevzone/keyforge/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=100" |
+            jq -e --arg sha "$GITHUB_SHA" --arg branch "$GITHUB_REF_NAME" '.workflow_runs | map(select(.head_branch == $branch))[0] | .head_sha == $sha and .status == "completed" and .conclusion == "success"'
       - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
           version: "1.1.0"
