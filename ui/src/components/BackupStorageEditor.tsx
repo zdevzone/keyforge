@@ -32,6 +32,7 @@ export function BackupStorageEditor({
   close: () => void;
 }) {
   const object = id === "s3" || id === "r2";
+  const [revision] = useState(settings.revision);
   const [bucket, setBucket] = useState(settings.bucket ?? "");
   const [region, setRegion] = useState(settings.region ?? (id === "r2" ? "auto" : "us-east-1"));
   const [endpoint, setEndpoint] = useState(settings.endpoint ?? "");
@@ -58,7 +59,7 @@ export function BackupStorageEditor({
                 request("/admin/backups/providers/" + id, {
                   method: "PUT",
                   body: {
-                    revision: settings.revision,
+                    revision,
                     ...(object
                       ? {
                           bucket,

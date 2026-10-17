@@ -774,6 +774,34 @@ try {
     await storageDialog.getByLabel("Private Blob read/write token", { exact: true }).inputValue(),
     "",
   );
+  const storageBefore = (await app.inject({ url: "/admin/backups", headers })).json().storage.blob;
+  const storagePoll = page.waitForResponse(
+    async (response) =>
+      response.url().endsWith("/admin/backups") &&
+      response.request().method() === "GET" &&
+      response.status() === 200 &&
+      (await response.json()).storage.blob.revision > storageBefore.revision,
+  );
+  const concurrentStorage = await app.inject({
+    method: "PUT",
+    url: "/admin/backups/providers/blob",
+    headers,
+    payload: { revision: storageBefore.revision, token: "concurrent-browser-provider-fixture" },
+  });
+  assert.equal(concurrentStorage.statusCode, 200, concurrentStorage.body);
+  await storagePoll;
+  const staleSave = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/admin/backups/providers/blob") &&
+      response.request().method() === "PUT",
+  );
+  await storageDialog.getByRole("button", { name: "Save storage settings", exact: true }).click();
+  assert.equal(
+    (await staleSave).status(),
+    409,
+    "Polling must not silently refresh an open editor's concurrency revision",
+  );
+  await storageDialog.getByRole("alert").waitFor();
   await storageDialog.getByRole("button", { name: "Cancel", exact: true }).click();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: /Download database now/ }).click();
