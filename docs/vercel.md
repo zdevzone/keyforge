@@ -138,6 +138,6 @@ An application rollback does not undo a fresh-data cutover. Keep Render and its 
 
 ## Web Analytics
 
-Enable Web Analytics in the Vercel project dashboard. The Vercel build command passes its environment name to `VITE_KEYFORGE_ANALYTICS`; tracking runs only for Production, never Preview or ordinary self-hosted/local builds. No analytics API key is needed.
+Enable Web Analytics in the Vercel project dashboard. Set the non-secret build variable `VITE_KEYFORGE_ANALYTICS=production` in the Production environment only, after enabling Analytics. Leave it unset in Preview and local/self-hosted builds. Tracking is opt-in so cloning this repository does not load a Vercel-only script on an unconfigured host. No analytics API key is needed.
 
 Only the public welcome, documentation and license-request form pages are counted. Documentation slugs are grouped as `/docs/:slug`. Console, sign-in and private customer status pages are excluded, including after client-side navigation. Page URLs omit query strings and fragments, custom events are rejected, and the HTML referrer policy exposes only the origin. Analytics does not receive license keys, customer request secrets or account information. Browser/ad-blocker settings may prevent events from appearing.

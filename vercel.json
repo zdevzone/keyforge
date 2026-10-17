@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "bash scripts/vercel-install.sh",
-  "buildCommand": "VITE_KEYFORGE_ANALYTICS=$VERCEL_ENV vp run build:all && node scripts/vercel-prepare.mjs",
+  "buildCommand": "vp run build:all && node scripts/vercel-prepare.mjs",
   "outputDirectory": "dist/public",
   "regions": ["iad1"],
   "functions": {
