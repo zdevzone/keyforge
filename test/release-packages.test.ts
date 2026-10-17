@@ -563,3 +563,15 @@ test("automatic Preview records dev's deployed SHA rather than workflow_run's ma
   );
   assert.equal((f.posts[1].body as Record<string, unknown>).ref, sha);
 });
+
+test("promotion accepts an empty successful Vercel response before verifying domain assignment", async () => {
+  const f = deploymentFixture();
+  await deployProduction(f.env, {
+    ...f,
+    request: async (url: string, options: RequestInit) => {
+      const response = await f.request(url, options);
+      return url.includes("/promote/") ? new Response(null, { status: 204 }) : response;
+    },
+  });
+  assert.equal(f.posts.length, 2);
+});
