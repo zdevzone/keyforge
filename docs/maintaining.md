@@ -82,6 +82,8 @@ For application rollback, first assess database compatibility, then select a pre
 
 See [publishing](publishing.md) for stable/beta channels, trusted publishers, package order and safe retries. Stable uses `main` and `latest`; beta uses `dev` and `beta`. Both require manual dispatch and approval. Keep personal accounts protected by two-factor authentication and save recovery codes. Review collaborators, environment tokens, trusted publishers, dependency alerts and workflow changes regularly. Report vulnerabilities privately through [SECURITY.md](https://github.com/zdevzone/keyforge/blob/main/SECURITY.md).
 
+When dev already contains new work, synchronize main through a short-lived branch created from dev: merge main into that branch, open a PR back to dev, and use a merge commit to retain ancestry. Do this before the next dev-to-main promotion if strict checks report the promotion branch as behind. Squashing this history-only synchronization would lose the ancestry being restored.
+
 ## Repository presentation
 
 The repository About website points to the live production app. GitHub Deployments lists Production and dev Preview with their environment URLs. Historical GitHub Pages and npm entries are inactive. Package publishing keeps its `npm` environment approval and OIDC identity without creating app deployment records. Preview records explicitly use the deployed dev commit, since `workflow_run` itself runs in the default-branch context. Keep the `npm`, `preview` and `production` environment names stable because publisher trust and approval policies reference them.

@@ -59,7 +59,8 @@ export async function deployVercel(
     });
     // Provider errors can contain configuration; never print response bodies.
     assert.ok(response.ok, `Deployment API request failed: HTTP ${response.status}`);
-    return response.json();
+    const responseText = await response.text();
+    return responseText.trim() ? JSON.parse(responseText) : {};
   }
   const github = (path, body) =>
     json(`https://api.github.com/repos/${repository}`, path, env.GITHUB_TOKEN, body);
