@@ -188,6 +188,8 @@ try {
       assert.ok(!(await readdir(project)).includes("packages"));
       const policy = JSON.parse(await readFile(join(project, "keyforge.config.json"), "utf8"));
       assert.ok(policy.licenses);
+      // Upstream-only guides/workflows are pruned; the generated docs must still work.
+      await run("vp", ["exec", "tsx", "--test", "test/docs-reader.test.ts"], project, env);
     } else {
       assert.ok(pkg.dependencies["@zdevzone/keyforge-client"]);
       await run("vp", ["run", "typecheck"], project, env);

@@ -7,6 +7,9 @@ import { docCatalog, docPath, resolveDocHref, sourceRepository } from "../ui/src
 import { createArticle, markdownLinks, searchDocs } from "../ui/src/docs/markdown.js";
 
 const read = (source: string) => readFileSync(resolve(source), "utf8");
+const optionalSources = new Set(
+  docCatalog.filter((entry) => entry.optional).map((entry) => entry.source),
+);
 const articles = docCatalog
   .filter((entry) => existsSync(entry.source))
   .map((entry) => createArticle(entry, read(entry.source)));
@@ -19,7 +22,8 @@ test("documentation publishes only explicit public sources, including all requir
       /^(docs\/[a-z-]+\.md|packages\/(keyforge-client|create-keyforge)\/README\.md)$/,
     );
     assert.ok(read("ui/src/docs/content.ts").includes('"../../../' + entry.source + '"'));
-    if (!entry.source.startsWith("packages/")) assert.ok(existsSync(entry.source));
+    if (!entry.optional && !entry.source.startsWith("packages/"))
+      assert.ok(existsSync(entry.source));
   }
   for (const required of [
     "getting-started",
@@ -42,7 +46,8 @@ test("every published Markdown local link and heading fragment resolves to an ex
       const resolved = new URL(link, "https://local.invalid/" + article.source);
       const source = decodeURIComponent(resolved.pathname.slice(1));
       if (!existsSync(source)) {
-        if (!source.startsWith("packages/")) broken.push(article.source + " → " + link);
+        if (!source.startsWith("packages/") && !optionalSources.has(source))
+          broken.push(article.source + " → " + link);
         continue;
       }
       const target = articles.find((a) => a.source === source);

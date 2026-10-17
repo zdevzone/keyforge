@@ -18,7 +18,7 @@ Use short-lived feature branches and pull requests into `dev`. People outside th
 
 For urgent fixes, branch from `main`, use a PR and CI, then merge `main` back into `dev` through a PR. Production deployment still requires the same source contents to have passed staging. Do not bypass testing by enabling auto-deploy.
 
-Dependabot targets `dev`. Review grouped minor/patch changes and individual major updates normally; there is no blanket dependency auto-merge. Report vulnerabilities privately using [SECURITY.md](../SECURITY.md).
+Dependabot targets `dev`. Review grouped minor/patch changes and individual major updates normally; there is no blanket dependency auto-merge. Report vulnerabilities privately using [SECURITY.md](https://github.com/zdevzone/keyforge/blob/main/SECURITY.md).
 
 ## Set up a separate Render testing service
 

@@ -12,7 +12,7 @@ Previously published stable versions remain available until a deliberate stable 
 
 ## GitHub Actions releases (recommended)
 
-[release.yml](../.github/workflows/release.yml), **Release npm packages**, is manually dispatched only in the public repository. Choose a channel and branch:
+[release.yml](https://github.com/zdevzone/keyforge/blob/main/.github/workflows/release.yml), **Release npm packages**, is manually dispatched only in the public repository. Choose a channel and branch:
 
 | Channel | Branch | npm tag | Version |
 | --- | --- | --- | --- |

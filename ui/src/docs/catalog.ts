@@ -5,6 +5,8 @@ export interface DocEntry {
   group: string;
   source: string;
   description: string;
+  /** Upstream-only guides may be pruned from generated deployment projects. */
+  optional?: boolean;
 }
 /** Explicit public files only. Never publish arbitrary repository paths. */
 export const docCatalog: DocEntry[] = [
@@ -153,6 +155,7 @@ export const docCatalog: DocEntry[] = [
     title: "Maintainer guide",
     group: "Reference",
     source: "docs/maintaining.md",
+    optional: true,
     description: "Contributions, staging, production promotion and recovery.",
   },
 ];
