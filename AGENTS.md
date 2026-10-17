@@ -31,6 +31,7 @@ Instructions for AI coding agents working in this repository.
 - `scripts/db-tool.mjs`: copies a ledger between databases (`vp run db`);
   the engine is `src/replica.ts`
 - `scripts/create-admin.mjs`: creates admin console operators
+- `scripts/deploy-production.mjs`: CI-gated Vercel Preview and manually approved Production deployments; server credentials stay in Vercel
 - `ui/`: React admin console (Vite), built into `dist/public`
 - `ui/src/components/ui/`: shadcn/ui primitives, **generated** by
   `vp dlx shadcn@latest add <name>` from `ui/components.json`. Replaced wholesale
