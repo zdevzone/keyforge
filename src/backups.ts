@@ -3,6 +3,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 
 import SQLite from "better-sqlite3";
@@ -829,10 +830,23 @@ export async function registerBackups(
       if (!job) throw new DomainError("unknown_backup", "No such backup.", 404);
       const bytes = await service.bytes(job);
       await platform.audit(req.actor, "backup.download", "default", { jobId: job.id });
-      return reply
-        .type("application/octet-stream")
-        .header("Content-Disposition", 'attachment; filename="' + job.id + '.kfbackup"')
-        .send(bytes);
+      return (
+        reply
+          .type("application/octet-stream")
+          .header("Content-Disposition", 'attachment; filename="' + job.id + '.kfbackup"')
+          // Streaming avoids Vercel's buffered response size limit while the
+          // archive itself remains checksum-checked and bounded in memory.
+          .send(
+            options.remoteOnly
+              ? Readable.from(
+                  (function* () {
+                    for (let offset = 0; offset < bytes.length; offset += 64 * 1024)
+                      yield bytes.subarray(offset, offset + 64 * 1024);
+                  })(),
+                )
+              : bytes,
+          )
+      );
     }),
   );
   app.post(

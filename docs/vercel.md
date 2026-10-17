@@ -81,6 +81,8 @@ Existing version 1 SQLite/native PostgreSQL archives and persistent-host backup 
 
 ## Acceptance and recovery
 
+Authenticated archive downloads stream in chunks to avoid the platform's buffered response limit. Capture, checksum verification and encryption are still buffered and bounded; this is not unlimited-size backup support. Uploads remain subject to Vercel's request size limit and KeyForge's existing avatar validation.
+
 Before production migration, verify health, welcome/docs, login, profile upload, plan issuance, payments and reports, customer delivery, SDK activation/refresh, trial and seat limits, support/notifications, backup/download/verification and reset in **staging only**. Inspect mobile and desktop in both themes.
 
 Vercel application rollback does not reverse database migrations or restore data. Test archive recovery into an independent target first, initialized using the exact matching release and its authentication schema:
