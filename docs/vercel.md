@@ -15,6 +15,8 @@ KeyForge runs as a Node.js Vercel Function with PostgreSQL and private external 
 
 Set the production branch to `main` under the project's Git settings. Scope Preview environment variables to **dev**, including database and storage credentials. Other branches and fork PRs must not inherit these credentials; use local/CI fixtures or deliberately provision isolated resources for additional previews.
 
+The stable customer-facing Preview domain `keyforge-dev.1hubengineering.com` has a **Deployment Protection Exception** so public license requests, private request-status links, documentation and client APIs do not require a Vercel account. KeyForge still requires its own operator session or API credential for administrative routes. Keep Vercel Authentication enabled for other deployment URLs; do not put a bypass secret in a public link or browser bundle. Configure this domain-level exception in the project's Deployment Protection settings, not in application redirect code. Verify `/request-license` opens in a signed-out browser and `/admin/config` still returns HTTP 401 without credentials.
+
 Vercel generates branch URLs such as `keyforge-git-dev-YOUR_SCOPE.vercel.app`; use the actual URL shown by your deployment. Arbitrary `dev-project.vercel.app` names are not ordinary custom domains you own. For a domain you control, add `dev.example.com` and assign its Git Branch to `dev`, then configure its DNS. No second Vercel project is needed. Usage limits are account/team-wide; consolidating projects does not halve database, storage or compute usage.
 
 ## Architecture

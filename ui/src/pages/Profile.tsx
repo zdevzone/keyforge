@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { authClient, useSession } from "../auth-client";
-import { Button, TextField, Spinner } from "../components";
+import { Button, FormFields, TextField, Spinner } from "../components";
 import { ProfileImage } from "../components/ProfileImage";
 import { SettingsProfile1 } from "../components/settings-profile1";
 import { Feedback, useAction } from "../platform-ui";
@@ -76,10 +76,10 @@ function Editor({
               />
             </div>
           </details>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FormFields>
             <TextField label="Phone" value={phone} onChange={setPhone} />
             <TextField label="Job title" value={jobTitle} onChange={setJob} />
-          </div>
+          </FormFields>
           <TextField label="Timezone" value={timezone} onChange={setTimezone} />
           <p className="text-sm text-muted-foreground">
             Login email: {user.email}. Your administrator manages your email and role.

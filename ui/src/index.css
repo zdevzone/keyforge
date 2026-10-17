@@ -1323,12 +1323,6 @@ select {
   font-size: 20px;
   font-weight: 500;
 }
-.console-modal form > label:not(:has(input[type="checkbox"])) {
-  margin-top: 20px;
-}
-.console-modal form > div:last-child {
-  padding-top: 12px;
-}
 .summary-panel {
   padding: 20px 24px;
 }
@@ -1593,19 +1587,6 @@ select {
     flex: 1;
   }
 }
-@media (min-width: 640px) {
-  .console-modal form > label:not(:has(input[type="checkbox"])) {
-    display: grid;
-    grid-template-columns: 140px minmax(0, 1fr);
-    align-items: center;
-    gap: 16px;
-  }
-  .console-modal form > label > input,
-  .console-modal form > label > select {
-    margin-top: 0;
-    font-weight: 400;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1784,14 +1765,88 @@ body {
   width: auto;
   min-width: 10rem;
   max-width: 100%;
+  min-height: 40px;
+  box-shadow: none;
 }
 .console-text-field {
   width: min(100%, 28rem);
   flex: 0 1 auto;
   align-self: start;
+  max-width: 28rem;
+}
+/* A single focus stroke owns each control. Generated component rings must not
+   stack with the global keyboard outline or an input-group's focus treatment. */
+:is(
+  [data-slot="button"],
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  [data-slot="badge"],
+  [data-slot="switch"],
+  [data-slot="checkbox"]
+):focus-visible {
+  box-shadow: none;
+}
+:is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible {
+  border-color: var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: -1px;
+}
+[data-slot="input-group"]:has(input:focus-visible, textarea:focus-visible) {
+  border-color: var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: -1px;
+  box-shadow: none;
+}
+[data-slot="input-group"] :is(input, textarea):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.console-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  align-items: start;
+  gap: 20px;
+}
+.console-form-grid > [data-slot="field"] {
+  width: 100%;
+  min-width: 0;
+}
+.console-modal form > label:not(:has(input[type="checkbox"], [role="checkbox"])) {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+}
+.console-modal form > label > :is(input, select) {
+  margin-top: 0;
+}
+form :is([data-slot="field-label"], label:not(:has(input[type="checkbox"], [role="checkbox"]))) {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+[data-slot="input"][type="file"] {
+  height: auto;
+  min-height: 40px;
+  padding-block: 5px;
+}
+[data-slot="input"][type="file"]::file-selector-button {
+  margin-inline-end: 12px;
+  padding-inline: 8px;
+  background: var(--muted);
+  color: var(--foreground);
+  cursor: pointer;
 }
 .console-number-field {
   width: min(100%, 12rem);
+  max-width: 12rem;
+}
+[data-slot="tabs-trigger"] {
+  color: var(--muted-foreground);
+}
+[data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--foreground);
 }
 .console-content form [data-slot="input"] {
   max-width: 28rem;
@@ -1820,6 +1875,7 @@ body {
 .console-date [data-slot="button"] {
   width: auto;
   min-width: 11rem;
+  min-height: 40px;
 }
 .console-global-command {
   flex: 1;

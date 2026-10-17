@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { fetchAdminConfig } from "../api";
 import { changePassword, useSession } from "../auth-client";
-import { Button, Card, ErrorNote, TextField } from "../components";
+import { Button, Card, ErrorNote, FormFields, TextField } from "../components";
 import { AccountSessions } from "../components/AccountSessions";
 import { Choice } from "../components/Choice";
 import { useTheme, setTheme } from "../components/ThemeControl";
@@ -146,7 +146,7 @@ function ChangePassword() {
           value={currentPassword}
           onChange={setCurrentPassword}
         />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <FormFields>
           <TextField
             label="New password"
             type="password"
@@ -161,10 +161,10 @@ function ChangePassword() {
             value={confirmPassword}
             onChange={setConfirmPassword}
           />
-        </div>
+        </FormFields>
         {error && <ErrorNote message={error} />}
         {done && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
             Password changed. If this operator is seeded at boot (LICENSE_SEED_ADMIN_PASSWORD), the
             stored password stays as you set it here — seeding never overwrites an existing user.
           </div>

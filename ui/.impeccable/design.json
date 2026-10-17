@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T18:06:06.000Z",
+  "generatedAt": "2026-10-17T17:40:01.963Z",
   "title": "Design System: Keyforge Console — Polaris",
   "extensions": {
     "colorMeta": {
@@ -16,7 +16,8 @@
           "oklch(0.7214 0.0055 211.0391)",
           "oklch(0.8357 0.0055 211.0391)",
           "oklch(0.9500 0.0055 211.0391)"
-        ]
+        ],
+        "canonical": "oklch(0.9816 0.0055 211.0391)"
       },
       "foreground": {
         "role": "neutral",
@@ -30,7 +31,8 @@
           "oklch(0.7214 0.03 218.3459)",
           "oklch(0.8357 0.03 218.3459)",
           "oklch(0.9500 0.03 218.3459)"
-        ]
+        ],
+        "canonical": "oklch(0.2204 0.03 218.3459)"
       },
       "card": {
         "role": "neutral",
@@ -44,7 +46,8 @@
           "oklch(0.7214 0.0032 197.1059)",
           "oklch(0.8357 0.0032 197.1059)",
           "oklch(0.9500 0.0032 197.1059)"
-        ]
+        ],
+        "canonical": "oklch(0.9977 0.0032 197.1059)"
       },
       "card-foreground": {
         "role": "neutral",
@@ -58,7 +61,8 @@
           "oklch(0.7214 0.0196 221.4949)",
           "oklch(0.8357 0.0196 221.4949)",
           "oklch(0.9500 0.0196 221.4949)"
-        ]
+        ],
+        "canonical": "oklch(0.1499 0.0196 221.4949)"
       },
       "popover": {
         "role": "neutral",
@@ -72,7 +76,8 @@
           "oklch(0.7214 0.0032 197.1059)",
           "oklch(0.8357 0.0032 197.1059)",
           "oklch(0.9500 0.0032 197.1059)"
-        ]
+        ],
+        "canonical": "oklch(0.9977 0.0032 197.1059)"
       },
       "popover-foreground": {
         "role": "neutral",
@@ -86,7 +91,8 @@
           "oklch(0.7214 0.0196 221.4949)",
           "oklch(0.8357 0.0196 221.4949)",
           "oklch(0.9500 0.0196 221.4949)"
-        ]
+        ],
+        "canonical": "oklch(0.1499 0.0196 221.4949)"
       },
       "primary": {
         "role": "primary",
@@ -100,7 +106,8 @@
           "oklch(0.7214 0.087 221.3232)",
           "oklch(0.8357 0.087 221.3232)",
           "oklch(0.9500 0.087 221.3232)"
-        ]
+        ],
+        "canonical": "oklch(0.4761 0.087 221.3232)"
       },
       "primary-foreground": {
         "role": "primary",
@@ -114,7 +121,8 @@
           "oklch(0.7214 0 0)",
           "oklch(0.8357 0 0)",
           "oklch(0.9500 0 0)"
-        ]
+        ],
+        "canonical": "oklch(1 0 0)"
       },
       "secondary": {
         "role": "secondary",
@@ -128,7 +136,8 @@
           "oklch(0.7214 0.1707 78.9825)",
           "oklch(0.8357 0.1707 78.9825)",
           "oklch(0.9500 0.1707 78.9825)"
-        ]
+        ],
+        "canonical": "oklch(0.8216 0.1707 78.9825)"
       },
       "secondary-foreground": {
         "role": "secondary",
@@ -142,7 +151,8 @@
           "oklch(0.7214 0.0502 64.9833)",
           "oklch(0.8357 0.0502 64.9833)",
           "oklch(0.9500 0.0502 64.9833)"
-        ]
+        ],
+        "canonical": "oklch(0.2506 0.0502 64.9833)"
       },
       "muted": {
         "role": "neutral",
@@ -156,7 +166,8 @@
           "oklch(0.7214 0.011 211.0375)",
           "oklch(0.8357 0.011 211.0375)",
           "oklch(0.9500 0.011 211.0375)"
-        ]
+        ],
+        "canonical": "oklch(0.9422 0.011 211.0375)"
       },
       "muted-foreground": {
         "role": "neutral",
@@ -170,7 +181,8 @@
           "oklch(0.7214 0.015 221.612)",
           "oklch(0.8357 0.015 221.612)",
           "oklch(0.9500 0.015 221.612)"
-        ]
+        ],
+        "canonical": "oklch(0.4987 0.015 221.612)"
       },
       "accent": {
         "role": "primary",
@@ -184,7 +196,8 @@
           "oklch(0.7214 0.1151 214.5277)",
           "oklch(0.8357 0.1151 214.5277)",
           "oklch(0.9500 0.1151 214.5277)"
-        ]
+        ],
+        "canonical": "oklch(0.6554 0.1151 214.5277)"
       },
       "accent-foreground": {
         "role": "primary",
@@ -198,7 +211,8 @@
           "oklch(0.7214 0 0)",
           "oklch(0.8357 0 0)",
           "oklch(0.9500 0 0)"
-        ]
+        ],
+        "canonical": "oklch(1 0 0)"
       },
       "destructive": {
         "role": "tertiary",
@@ -212,7 +226,8 @@
           "oklch(0.7214 0.1851 35.4282)",
           "oklch(0.8357 0.1851 35.4282)",
           "oklch(0.9500 0.1851 35.4282)"
-        ]
+        ],
+        "canonical": "oklch(0.5873 0.1851 35.4282)"
       },
       "border": {
         "role": "neutral",
@@ -226,7 +241,8 @@
           "oklch(0.7214 0.0146 213.1014)",
           "oklch(0.8357 0.0146 213.1014)",
           "oklch(0.9500 0.0146 213.1014)"
-        ]
+        ],
+        "canonical": "oklch(0.9008 0.0146 213.1014)"
       },
       "input": {
         "role": "neutral",
@@ -240,7 +256,8 @@
           "oklch(0.7214 0.0154 218.0794)",
           "oklch(0.8357 0.0154 218.0794)",
           "oklch(0.9500 0.0154 218.0794)"
-        ]
+        ],
+        "canonical": "oklch(0.7989 0.0154 218.0794)"
       },
       "ring": {
         "role": "primary",
@@ -254,7 +271,8 @@
           "oklch(0.7214 0.087 221.3232)",
           "oklch(0.8357 0.087 221.3232)",
           "oklch(0.9500 0.087 221.3232)"
-        ]
+        ],
+        "canonical": "oklch(0.4761 0.087 221.3232)"
       },
       "chart-1": {
         "role": "primary",
@@ -268,7 +286,8 @@
           "oklch(0.7214 0.087 221.3232)",
           "oklch(0.8357 0.087 221.3232)",
           "oklch(0.9500 0.087 221.3232)"
-        ]
+        ],
+        "canonical": "oklch(0.4761 0.087 221.3232)"
       },
       "chart-2": {
         "role": "secondary",
@@ -282,7 +301,8 @@
           "oklch(0.7214 0.1707 78.9825)",
           "oklch(0.8357 0.1707 78.9825)",
           "oklch(0.9500 0.1707 78.9825)"
-        ]
+        ],
+        "canonical": "oklch(0.8216 0.1707 78.9825)"
       },
       "chart-3": {
         "role": "tertiary",
@@ -296,7 +316,8 @@
           "oklch(0.7214 0.1599 146.0732)",
           "oklch(0.8357 0.1599 146.0732)",
           "oklch(0.9500 0.1599 146.0732)"
-        ]
+        ],
+        "canonical": "oklch(0.609 0.1599 146.0732)"
       },
       "chart-4": {
         "role": "primary",
@@ -310,7 +331,8 @@
           "oklch(0.7214 0.1151 214.5277)",
           "oklch(0.8357 0.1151 214.5277)",
           "oklch(0.9500 0.1151 214.5277)"
-        ]
+        ],
+        "canonical": "oklch(0.6554 0.1151 214.5277)"
       },
       "chart-5": {
         "role": "tertiary",
@@ -324,7 +346,8 @@
           "oklch(0.7214 0.1851 35.4282)",
           "oklch(0.8357 0.1851 35.4282)",
           "oklch(0.9500 0.1851 35.4282)"
-        ]
+        ],
+        "canonical": "oklch(0.5873 0.1851 35.4282)"
       },
       "sidebar": {
         "role": "neutral",
@@ -338,7 +361,8 @@
           "oklch(0.7214 0.0055 211.0391)",
           "oklch(0.8357 0.0055 211.0391)",
           "oklch(0.9500 0.0055 211.0391)"
-        ]
+        ],
+        "canonical": "oklch(0.9816 0.0055 211.0391)"
       },
       "sidebar-foreground": {
         "role": "neutral",
@@ -352,7 +376,8 @@
           "oklch(0.7214 0.0196 221.4949)",
           "oklch(0.8357 0.0196 221.4949)",
           "oklch(0.9500 0.0196 221.4949)"
-        ]
+        ],
+        "canonical": "oklch(0.1499 0.0196 221.4949)"
       },
       "sidebar-primary": {
         "role": "primary",
@@ -366,7 +391,8 @@
           "oklch(0.7214 0.087 221.3232)",
           "oklch(0.8357 0.087 221.3232)",
           "oklch(0.9500 0.087 221.3232)"
-        ]
+        ],
+        "canonical": "oklch(0.4761 0.087 221.3232)"
       },
       "sidebar-primary-foreground": {
         "role": "primary",
@@ -380,7 +406,8 @@
           "oklch(0.7214 0 0)",
           "oklch(0.8357 0 0)",
           "oklch(0.9500 0 0)"
-        ]
+        ],
+        "canonical": "oklch(1 0 0)"
       },
       "sidebar-accent": {
         "role": "primary",
@@ -394,7 +421,8 @@
           "oklch(0.7214 0.0076 207.1419)",
           "oklch(0.8357 0.0076 207.1419)",
           "oklch(0.9500 0.0076 207.1419)"
-        ]
+        ],
+        "canonical": "oklch(0.9652 0.0076 207.1419)"
       },
       "sidebar-accent-foreground": {
         "role": "primary",
@@ -408,7 +436,8 @@
           "oklch(0.7214 0.0196 221.4949)",
           "oklch(0.8357 0.0196 221.4949)",
           "oklch(0.9500 0.0196 221.4949)"
-        ]
+        ],
+        "canonical": "oklch(0.1499 0.0196 221.4949)"
       },
       "sidebar-border": {
         "role": "neutral",
@@ -422,7 +451,8 @@
           "oklch(0.7214 0.0146 213.1014)",
           "oklch(0.8357 0.0146 213.1014)",
           "oklch(0.9500 0.0146 213.1014)"
-        ]
+        ],
+        "canonical": "oklch(0.9008 0.0146 213.1014)"
       },
       "sidebar-ring": {
         "role": "primary",
@@ -436,7 +466,8 @@
           "oklch(0.7214 0.087 221.3232)",
           "oklch(0.8357 0.087 221.3232)",
           "oklch(0.9500 0.087 221.3232)"
-        ]
+        ],
+        "canonical": "oklch(0.4761 0.087 221.3232)"
       },
       "success": {
         "role": "tertiary",
@@ -450,7 +481,8 @@
           "oklch(0.7214 0.12 155)",
           "oklch(0.8357 0.12 155)",
           "oklch(0.9500 0.12 155)"
-        ]
+        ],
+        "canonical": "oklch(0.44 0.12 155)"
       },
       "warning": {
         "role": "secondary",
@@ -464,7 +496,8 @@
           "oklch(0.7214 0.11 65)",
           "oklch(0.8357 0.11 65)",
           "oklch(0.9500 0.11 65)"
-        ]
+        ],
+        "canonical": "oklch(0.46 0.11 65)"
       },
       "destructive-foreground": {
         "role": "tertiary",
@@ -478,7 +511,8 @@
           "oklch(0.7214 0 0)",
           "oklch(0.8357 0 0)",
           "oklch(0.9500 0 0)"
-        ]
+        ],
+        "canonical": "white"
       },
       "dark-background": {
         "role": "neutral",
@@ -492,7 +526,8 @@
           "oklch(0.7214 0.0127 222.2833)",
           "oklch(0.8357 0.0127 222.2833)",
           "oklch(0.9500 0.0127 222.2833)"
-        ]
+        ],
+        "canonical": "oklch(0.1161 0.0127 222.2833)"
       },
       "dark-foreground": {
         "role": "neutral",
@@ -506,7 +541,8 @@
           "oklch(0.7214 0.0077 207.1375)",
           "oklch(0.8357 0.0077 207.1375)",
           "oklch(0.9500 0.0077 207.1375)"
-        ]
+        ],
+        "canonical": "oklch(0.8802 0.0077 207.1375)"
       },
       "dark-card": {
         "role": "neutral",
@@ -520,7 +556,8 @@
           "oklch(0.7214 0.0145 221.8913)",
           "oklch(0.8357 0.0145 221.8913)",
           "oklch(0.9500 0.0145 221.8913)"
-        ]
+        ],
+        "canonical": "oklch(0.1567 0.0145 221.8913)"
       },
       "dark-card-foreground": {
         "role": "neutral",
@@ -534,7 +571,8 @@
           "oklch(0.7214 0.0077 207.1375)",
           "oklch(0.8357 0.0077 207.1375)",
           "oklch(0.9500 0.0077 207.1375)"
-        ]
+        ],
+        "canonical": "oklch(0.8802 0.0077 207.1375)"
       },
       "dark-popover": {
         "role": "neutral",
@@ -548,7 +586,8 @@
           "oklch(0.7214 0.0145 221.8913)",
           "oklch(0.8357 0.0145 221.8913)",
           "oklch(0.9500 0.0145 221.8913)"
-        ]
+        ],
+        "canonical": "oklch(0.1567 0.0145 221.8913)"
       },
       "dark-popover-foreground": {
         "role": "neutral",
@@ -562,7 +601,8 @@
           "oklch(0.7214 0.0077 207.1375)",
           "oklch(0.8357 0.0077 207.1375)",
           "oklch(0.9500 0.0077 207.1375)"
-        ]
+        ],
+        "canonical": "oklch(0.8802 0.0077 207.1375)"
       },
       "dark-primary": {
         "role": "primary",
@@ -576,7 +616,8 @@
           "oklch(0.7214 0.1151 214.5277)",
           "oklch(0.8357 0.1151 214.5277)",
           "oklch(0.9500 0.1151 214.5277)"
-        ]
+        ],
+        "canonical": "oklch(0.6554 0.1151 214.5277)"
       },
       "dark-primary-foreground": {
         "role": "primary",
@@ -590,7 +631,8 @@
           "oklch(0.7214 0.0135 227.6868)",
           "oklch(0.8357 0.0135 227.6868)",
           "oklch(0.9500 0.0135 227.6868)"
-        ]
+        ],
+        "canonical": "oklch(0.1012 0.0135 227.6868)"
       },
       "dark-secondary": {
         "role": "secondary",
@@ -604,7 +646,8 @@
           "oklch(0.7214 0.1499 78.9127)",
           "oklch(0.8357 0.1499 78.9127)",
           "oklch(0.9500 0.1499 78.9127)"
-        ]
+        ],
+        "canonical": "oklch(0.7791 0.1499 78.9127)"
       },
       "dark-secondary-foreground": {
         "role": "secondary",
@@ -618,7 +661,8 @@
           "oklch(0.7214 0.0398 66.6103)",
           "oklch(0.8357 0.0398 66.6103)",
           "oklch(0.9500 0.0398 66.6103)"
-        ]
+        ],
+        "canonical": "oklch(0.2004 0.0398 66.6103)"
       },
       "dark-muted": {
         "role": "neutral",
@@ -632,7 +676,8 @@
           "oklch(0.7214 0.0179 215.0251)",
           "oklch(0.8357 0.0179 215.0251)",
           "oklch(0.9500 0.0179 215.0251)"
-        ]
+        ],
+        "canonical": "oklch(0.2209 0.0179 215.0251)"
       },
       "dark-muted-foreground": {
         "role": "neutral",
@@ -646,7 +691,8 @@
           "oklch(0.7214 0.0099 214.3671)",
           "oklch(0.8357 0.0099 214.3671)",
           "oklch(0.9500 0.0099 214.3671)"
-        ]
+        ],
+        "canonical": "oklch(0.6208 0.0099 214.3671)"
       },
       "dark-accent": {
         "role": "primary",
@@ -660,7 +706,8 @@
           "oklch(0.7214 0.0599 220.8978)",
           "oklch(0.8357 0.0599 220.8978)",
           "oklch(0.9500 0.0599 220.8978)"
-        ]
+        ],
+        "canonical": "oklch(0.3487 0.0599 220.8978)"
       },
       "dark-accent-foreground": {
         "role": "primary",
@@ -674,7 +721,8 @@
           "oklch(0.7214 0.0206 208.1388)",
           "oklch(0.8357 0.0206 208.1388)",
           "oklch(0.9500 0.0206 208.1388)"
-        ]
+        ],
+        "canonical": "oklch(0.9208 0.0206 208.1388)"
       },
       "dark-destructive": {
         "role": "tertiary",
@@ -688,7 +736,8 @@
           "oklch(0.7214 0.1801 34.9238)",
           "oklch(0.8357 0.1801 34.9238)",
           "oklch(0.9500 0.1801 34.9238)"
-        ]
+        ],
+        "canonical": "oklch(0.6406 0.1801 34.9238)"
       },
       "dark-border": {
         "role": "neutral",
@@ -702,7 +751,8 @@
           "oklch(0.7214 0.0199 223.5646)",
           "oklch(0.8357 0.0199 223.5646)",
           "oklch(0.9500 0.0199 223.5646)"
-        ]
+        ],
+        "canonical": "oklch(0.2794 0.0199 223.5646)"
       },
       "dark-input": {
         "role": "neutral",
@@ -716,7 +766,8 @@
           "oklch(0.7214 0.0195 223.3506)",
           "oklch(0.8357 0.0195 223.3506)",
           "oklch(0.9500 0.0195 223.3506)"
-        ]
+        ],
+        "canonical": "oklch(0.3193 0.0195 223.3506)"
       },
       "dark-ring": {
         "role": "primary",
@@ -730,7 +781,8 @@
           "oklch(0.7214 0.0972 214.4813)",
           "oklch(0.8357 0.0972 214.4813)",
           "oklch(0.9500 0.0972 214.4813)"
-        ]
+        ],
+        "canonical": "oklch(0.5518 0.0972 214.4813)"
       },
       "dark-chart-1": {
         "role": "primary",
@@ -744,7 +796,8 @@
           "oklch(0.7214 0.1 214.5457)",
           "oklch(0.8357 0.1 214.5457)",
           "oklch(0.9500 0.1 214.5457)"
-        ]
+        ],
+        "canonical": "oklch(0.6001 0.1 214.5457)"
       },
       "dark-chart-2": {
         "role": "secondary",
@@ -758,7 +811,8 @@
           "oklch(0.7214 0.1499 78.9127)",
           "oklch(0.8357 0.1499 78.9127)",
           "oklch(0.9500 0.1499 78.9127)"
-        ]
+        ],
+        "canonical": "oklch(0.7791 0.1499 78.9127)"
       },
       "dark-chart-3": {
         "role": "tertiary",
@@ -772,7 +826,8 @@
           "oklch(0.7214 0.1394 146.2174)",
           "oklch(0.8357 0.1394 146.2174)",
           "oklch(0.9500 0.1394 146.2174)"
-        ]
+        ],
+        "canonical": "oklch(0.5591 0.1394 146.2174)"
       },
       "dark-chart-4": {
         "role": "primary",
@@ -786,7 +841,8 @@
           "oklch(0.7214 0.0852 206.2659)",
           "oklch(0.8357 0.0852 206.2659)",
           "oklch(0.9500 0.0852 206.2659)"
-        ]
+        ],
+        "canonical": "oklch(0.72 0.0852 206.2659)"
       },
       "dark-chart-5": {
         "role": "tertiary",
@@ -800,7 +856,8 @@
           "oklch(0.7214 0.1592 35.1927)",
           "oklch(0.8357 0.1592 35.1927)",
           "oklch(0.9500 0.1592 35.1927)"
-        ]
+        ],
+        "canonical": "oklch(0.5998 0.1592 35.1927)"
       },
       "dark-sidebar": {
         "role": "neutral",
@@ -814,7 +871,8 @@
           "oklch(0.7214 0.012 213.9613)",
           "oklch(0.8357 0.012 213.9613)",
           "oklch(0.9500 0.012 213.9613)"
-        ]
+        ],
+        "canonical": "oklch(0.1003 0.012 213.9613)"
       },
       "dark-sidebar-foreground": {
         "role": "neutral",
@@ -828,7 +886,8 @@
           "oklch(0.7214 0.0077 207.1375)",
           "oklch(0.8357 0.0077 207.1375)",
           "oklch(0.9500 0.0077 207.1375)"
-        ]
+        ],
+        "canonical": "oklch(0.8802 0.0077 207.1375)"
       },
       "dark-sidebar-primary": {
         "role": "primary",
@@ -842,7 +901,8 @@
           "oklch(0.7214 0.1151 214.5277)",
           "oklch(0.8357 0.1151 214.5277)",
           "oklch(0.9500 0.1151 214.5277)"
-        ]
+        ],
+        "canonical": "oklch(0.6554 0.1151 214.5277)"
       },
       "dark-sidebar-primary-foreground": {
         "role": "primary",
@@ -856,7 +916,8 @@
           "oklch(0.7214 0.0135 227.6868)",
           "oklch(0.8357 0.0135 227.6868)",
           "oklch(0.9500 0.0135 227.6868)"
-        ]
+        ],
+        "canonical": "oklch(0.1012 0.0135 227.6868)"
       },
       "dark-sidebar-accent": {
         "role": "primary",
@@ -870,7 +931,8 @@
           "oklch(0.7214 0.0145 221.8913)",
           "oklch(0.8357 0.0145 221.8913)",
           "oklch(0.9500 0.0145 221.8913)"
-        ]
+        ],
+        "canonical": "oklch(0.1567 0.0145 221.8913)"
       },
       "dark-sidebar-accent-foreground": {
         "role": "primary",
@@ -884,7 +946,8 @@
           "oklch(0.7214 0.0077 207.1375)",
           "oklch(0.8357 0.0077 207.1375)",
           "oklch(0.9500 0.0077 207.1375)"
-        ]
+        ],
+        "canonical": "oklch(0.8802 0.0077 207.1375)"
       },
       "dark-sidebar-border": {
         "role": "neutral",
@@ -898,7 +961,8 @@
           "oklch(0.7214 0.0199 223.5646)",
           "oklch(0.8357 0.0199 223.5646)",
           "oklch(0.9500 0.0199 223.5646)"
-        ]
+        ],
+        "canonical": "oklch(0.2794 0.0199 223.5646)"
       },
       "dark-sidebar-ring": {
         "role": "primary",
@@ -912,7 +976,8 @@
           "oklch(0.7214 0.0972 214.4813)",
           "oklch(0.8357 0.0972 214.4813)",
           "oklch(0.9500 0.0972 214.4813)"
-        ]
+        ],
+        "canonical": "oklch(0.5518 0.0972 214.4813)"
       },
       "dark-success": {
         "role": "tertiary",
@@ -926,7 +991,8 @@
           "oklch(0.7214 0.13 155)",
           "oklch(0.8357 0.13 155)",
           "oklch(0.9500 0.13 155)"
-        ]
+        ],
+        "canonical": "oklch(0.75 0.13 155)"
       },
       "dark-warning": {
         "role": "secondary",
@@ -940,7 +1006,8 @@
           "oklch(0.7214 0.15 78)",
           "oklch(0.8357 0.15 78)",
           "oklch(0.9500 0.15 78)"
-        ]
+        ],
+        "canonical": "oklch(0.8 0.15 78)"
       }
     },
     "typographyMeta": {
@@ -1095,8 +1162,8 @@
     ],
     "breakpoints": [
       {
-        "name": "dialog-label-grid",
-        "value": "640px"
+        "name": "responsive-form-columns",
+        "value": "500px"
       },
       {
         "name": "desktop-navigation",
@@ -1141,9 +1208,9 @@
       "name": "Text field",
       "kind": "input",
       "refersTo": "input",
-      "description": "Labelled panel-colored text field with visible keyboard focus.",
+      "description": "Labels stay above bounded controls; focus uses one continuous 2px stroke without a second ring.",
       "html": "<label class=\"ds-field\">Customer<input class=\"ds-input\" placeholder=\"Customer name\" /></label>",
-      "css": ".ds-field{font-family:var(--font-sans);display:grid;gap:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-input{font-family:var(--font-sans);min-height:40px;border:1px solid var(--input);border-radius:var(--radius);padding:4px 12px;background:var(--card);color:var(--foreground);font-size:14px}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:focus-visible{outline:2px solid var(--ring);outline-offset:3px;border-color:var(--ring)}.ds-input:disabled{opacity:.5;cursor:not-allowed}@media(max-width:767px){.ds-input{font-size:16px}}"
+      "css": ".ds-field{font-family:var(--font-sans);display:grid;gap:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-input{font-family:var(--font-sans);min-height:40px;border:1px solid var(--input);border-radius:var(--radius);padding:4px 12px;background:var(--card);color:var(--foreground);font-size:14px}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:focus-visible{outline:2px solid var(--ring);outline-offset:-1px;border-color:var(--ring);box-shadow:none}.ds-input:disabled{opacity:.5;cursor:not-allowed}@media(max-width:767px){.ds-input{font-size:16px}}"
     },
     {
       "name": "Active navigation",
@@ -1175,7 +1242,7 @@
       "refersTo": "input",
       "description": "Choice uses short Select lists or a Command/Popover catalog; values remain supplied options.",
       "html": "<label class=\"ds-choice-label\" for=\"ds-choice\">Product</label><button id=\"ds-choice\" class=\"ds-choice\" type=\"button\" role=\"combobox\" aria-expanded=\"false\"><span>Keyforge</span><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
-      "css": ".ds-choice-label{font-family:var(--font-sans);display:block;margin-bottom:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-choice{font-family:var(--font-sans);display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-size:14px;cursor:pointer}.ds-choice:hover{background:var(--muted)}.ds-choice:focus-visible{outline:2px solid var(--ring);outline-offset:3px}.ds-choice:disabled{opacity:.5;cursor:not-allowed}"
+      "css": ".ds-choice-label{font-family:var(--font-sans);display:block;margin-bottom:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-choice{font-family:var(--font-sans);display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-size:14px;cursor:pointer}.ds-choice:hover{background:var(--muted)}.ds-choice:focus-visible{outline:2px solid var(--ring);outline-offset:-1px}.ds-choice:disabled{opacity:.5;cursor:not-allowed}"
     },
     {
       "name": "Operational data table",
@@ -1192,6 +1259,34 @@
       "description": "Wrapping PageNavigation uses bounded page numbers; audit retains known cursor-page semantics.",
       "html": "<nav class=\"ds-pages\" aria-label=\"List pages\"><button disabled aria-label=\"Previous page\">‹</button><button aria-current=\"page\" aria-label=\"Page 1\">1</button><button aria-label=\"Page 2\">2</button><button aria-label=\"Next page\">›</button></nav>",
       "css": ".ds-pages{font-family:var(--font-sans);display:flex;flex-wrap:wrap;gap:4px}.ds-pages button{display:grid;place-items:center;min-width:38px;min-height:38px;border:1px solid transparent;border-radius:var(--radius);background:transparent;color:var(--foreground);font:inherit;font-size:14px;font-variant-numeric:tabular-nums;cursor:pointer;box-shadow:none}.ds-pages button[aria-current=\"page\"]{border-color:var(--border);background:var(--background)}.ds-pages button:hover:not(:disabled){background:var(--muted)}.ds-pages button:focus-visible{outline:2px solid var(--ring);outline-offset:3px}.ds-pages button:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Responsive form row",
+      "kind": "custom",
+      "description": "Related fields share columns when each can fit 15rem; labels remain above the controls.",
+      "html": "<div class=\"ds-form\"><label class=\"ds-field\">Permanent key<input class=\"ds-control\" placeholder=\"imports\" /></label><label class=\"ds-field\">Description<input class=\"ds-control\" placeholder=\"Imported records\" /></label></div>",
+      "css": ".ds-form{font-family:var(--font-sans);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));align-items:start;gap:20px;max-width:40rem}.ds-field{display:flex;flex-direction:column;gap:8px;color:var(--foreground);font-size:14px;font-weight:500;min-width:0}.ds-control{font:inherit;min-height:40px;box-sizing:border-box;width:100%;min-width:0;padding:4px 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:none}.ds-control:focus-visible{border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-control::placeholder{color:var(--muted-foreground)}"
+    },
+    {
+      "name": "Operator role badge",
+      "kind": "chip",
+      "description": "Admin uses the Polaris secondary surface and its paired foreground in either theme.",
+      "html": "<span class=\"ds-role\">admin</span>",
+      "css": ".ds-role{font-family:var(--font-sans);display:inline-flex;align-items:center;border:1px solid transparent;border-radius:9999px;padding:2px 8px;font-size:12px;line-height:16px;font-weight:500;background:var(--secondary);color:var(--secondary-foreground)}"
+    },
+    {
+      "name": "Command search focus",
+      "kind": "input",
+      "description": "The entire search group owns focus; the inner field has no additional outline.",
+      "html": "<div class=\"ds-command\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input aria-label=\"Search licenses and commands\" placeholder=\"Customer, plan, license or page…\" /></div>",
+      "css": ".ds-command{font-family:var(--font-sans);display:flex;align-items:center;gap:8px;min-height:40px;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);color:var(--muted-foreground);background:var(--muted)}.ds-command:has(input:focus-visible){border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-command input{font:inherit;width:100%;min-width:0;background:transparent;color:var(--foreground);border:0;box-shadow:none;outline:none}.ds-command input::placeholder{color:var(--muted-foreground)}"
+    },
+    {
+      "name": "Table toolbar",
+      "kind": "custom",
+      "description": "Search, status and Columns align above results and wrap in order on narrow screens.",
+      "html": "<div class=\"ds-toolbar\"><label class=\"ds-field\">Filter products<input class=\"ds-control\" placeholder=\"Name or product ID\" /></label><label class=\"ds-field\">Product status<select class=\"ds-control\"><option>All products</option><option>Active</option><option>Archived</option></select></label><button class=\"ds-columns\">Columns</button></div>",
+      "css": ".ds-form{font-family:var(--font-sans);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));align-items:start;gap:20px;max-width:40rem}.ds-field{display:flex;flex-direction:column;gap:8px;color:var(--foreground);font-size:14px;font-weight:500;min-width:0}.ds-control{font:inherit;min-height:40px;box-sizing:border-box;width:100%;min-width:0;padding:4px 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:none}.ds-control:focus-visible{border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-control::placeholder{color:var(--muted-foreground)}.ds-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:16px;font-family:var(--font-sans)}.ds-toolbar>.ds-field{max-width:100%}.ds-columns{font:inherit;padding:8px 12px;border:1px solid var(--border);background:var(--background);color:var(--foreground);border-radius:var(--radius);cursor:pointer}.ds-columns:hover{background:var(--muted)}.ds-columns:focus-visible{outline:2px solid var(--ring);outline-offset:3px}"
     }
   ],
   "narrative": {
@@ -1224,6 +1319,11 @@
         "name": "The Quiet Surface Rule",
         "body": "Keep operational cards and buttons flat at rest; reserve elevation for dialogs and floating controls.",
         "section": "elevation"
+      },
+      {
+        "name": "The Single Focus Rule",
+        "body": "One control or enclosing input group owns one visible keyboard focus indicator; never stack a component shadow ring and a second outline.",
+        "section": "components"
       }
     ],
     "dos": [

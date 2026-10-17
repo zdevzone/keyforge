@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -12,6 +13,7 @@ import {
   Modal,
   Card,
   TextField,
+  FormFields,
   Spinner,
   ErrorNote,
   EntitlementsEditor,
@@ -227,48 +229,48 @@ function DefinitionEditor({ value, done }: { value: any; done: () => void }) {
           );
         }}
       >
-        <label htmlFor="definition-key" className="block text-sm font-medium">
-          Permanent key
-          <Input
-            id="definition-key"
+        <FormFields>
+          <TextField
+            label="Permanent key"
             required
             disabled={Boolean(value.id)}
             value={id}
-            onChange={(e) => setId(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+            onChange={setId}
           />
-        </label>
-        <TextField label="Description" value={description} onChange={setDescription} />
-        <Select
-          label="Value type"
-          value={type}
-          onChange={setType}
-          options={["number", "string", "boolean"].map((v) => ({ value: v, label: v }))}
-        />
-        {type === "boolean" ? (
+          <TextField label="Description" value={description} onChange={setDescription} />
+        </FormFields>
+        <FormFields>
           <Select
-            label="Default (optional)"
-            value={defaultValue}
-            onChange={setDefault}
-            options={[
-              { value: "", label: "No default" },
-              { value: "true", label: "Enabled" },
-              { value: "false", label: "Disabled" },
-            ]}
+            label="Value type"
+            value={type}
+            onChange={setType}
+            options={["number", "string", "boolean"].map((v) => ({ value: v, label: v }))}
           />
-        ) : (
-          <TextField
-            label="Default value (optional)"
-            type={type === "number" ? "number" : "text"}
-            value={defaultValue}
-            onChange={setDefault}
-          />
-        )}
+          {type === "boolean" ? (
+            <Select
+              label="Default (optional)"
+              value={defaultValue}
+              onChange={setDefault}
+              options={[
+                { value: "", label: "No default" },
+                { value: "true", label: "Enabled" },
+                { value: "false", label: "Disabled" },
+              ]}
+            />
+          ) : (
+            <TextField
+              label="Default value (optional)"
+              type={type === "number" ? "number" : "text"}
+              value={defaultValue}
+              onChange={setDefault}
+            />
+          )}
+        </FormFields>
         {type === "number" && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <FormFields>
             <TextField label="Minimum (optional)" type="number" value={minimum} onChange={setMin} />
             <TextField label="Maximum (optional)" type="number" value={maximum} onChange={setMax} />
-          </div>
+          </FormFields>
         )}
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -332,19 +334,17 @@ function PlanEditor({ value, done }: { value: any; done: () => void }) {
           );
         }}
       >
-        <label htmlFor="plan-id" className="block text-sm font-medium">
-          Permanent plan ID
-          <Input
-            id="plan-id"
+        <FormFields>
+          <TextField
+            label="Permanent plan ID"
             required
             disabled={Boolean(value.id)}
             value={id}
-            onChange={(e) => setId(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+            onChange={setId}
           />
-        </label>
-        <TextField label="Description" value={description} onChange={setDescription} />
-        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Description" value={description} onChange={setDescription} />
+        </FormFields>
+        <FormFields>
           <TextField label="Price (ETB)" value={price} onChange={setPrice} required />
           <Choice
             label="Currency"
@@ -352,12 +352,12 @@ function PlanEditor({ value, done }: { value: any; done: () => void }) {
             onChange={() => {}}
             options={[{ value: "ETB", label: "ETB · Ethiopian birr" }]}
           />
-        </div>
+        </FormFields>
         <p className="text-sm text-muted-foreground">
           Use 0 for a complimentary license. Existing sale amounts never change.
         </p>
         <EntitlementsEditor rows={rows} onChange={setRows} />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <FormFields>
           <TextField
             label="Duration days (empty for perpetual)"
             type="number"
@@ -365,7 +365,7 @@ function PlanEditor({ value, done }: { value: any; done: () => void }) {
             onChange={setDays}
           />
           <TextField label="Activation seats" type="number" value={limit} onChange={setLimit} />
-        </div>
+        </FormFields>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -418,19 +418,18 @@ function CatalogImport({ refresh }: { refresh: () => void }) {
             Configuration transfer includes definitions and plans, never secrets. Preview changes
             before applying them.
           </p>
-          <div className="mt-4 flex gap-3">
+          <div className="table-toolbar mt-4">
             <Button
               variant="secondary"
               onClick={() => void action.run(exportCatalog, "Catalog exported.")}
             >
               Export JSON
             </Button>
-            <label htmlFor="catalog-upload" className="text-sm">
-              Load JSON
+            <Field className="console-text-field">
+              <FieldLabel htmlFor="catalog-upload">Load JSON</FieldLabel>
               <Input
                 id="catalog-upload"
                 aria-label="Load catalog JSON"
-                className="mt-1 block"
                 type="file"
                 accept=".json"
                 onChange={(e) => {
@@ -442,7 +441,7 @@ function CatalogImport({ refresh }: { refresh: () => void }) {
                     });
                 }}
               />
-            </label>
+            </Field>
           </div>
           {text && (
             <>

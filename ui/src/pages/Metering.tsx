@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 
 import { fetchAdminConfig, request, productPath } from "../api";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
-import { Button, Card, Modal, TextField, Spinner, ErrorNote } from "../components";
+import { Button, Card, FormFields, Modal, TextField, Spinner, ErrorNote } from "../components";
 import { ActionButton } from "../components/ActionButton";
 import { useListPage, ListPagination } from "../components/ListPagination";
 import UsageReport from "../components/UsageReport";
@@ -207,8 +207,8 @@ export default function Metering() {
                 </form>
               )}
               {secret && (
-                <div className="mt-4 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
-                  <p className="text-sm text-amber-900">
+                <div className="mt-4 space-y-3 rounded-lg border border-warning/30 bg-warning/10 p-4">
+                  <p className="text-sm text-warning">
                     Shown once. Store in the service's secret manager.
                   </p>
                   <code className="block break-all text-xs">{secret}</code>
@@ -303,25 +303,27 @@ function MeterEditor({
           );
         }}
       >
-        <TextField label="Permanent meter ID" value={id} onChange={setId} required />
-        <Select
-          label="Numeric quota entitlement"
-          value={entitlement}
-          onChange={setEntitlement}
-          options={definitions
-            .filter((d) => d.type === "number" && !d.archived)
-            .map((d) => ({ value: d.id, label: d.id }))}
-        />
-        <Select
-          label="Quota period"
-          value={period}
-          onChange={setPeriod}
-          options={["lifetime", "daily", "monthly"].map((v) => ({
-            value: v,
-            label: v === "lifetime" ? "Lifetime" : v + " (UTC)",
-          }))}
-        />
-        <TextField label="Description" value={description} onChange={setDescription} />
+        <FormFields>
+          <TextField label="Permanent meter ID" value={id} onChange={setId} required />
+          <Select
+            label="Numeric quota entitlement"
+            value={entitlement}
+            onChange={setEntitlement}
+            options={definitions
+              .filter((d) => d.type === "number" && !d.archived)
+              .map((d) => ({ value: d.id, label: d.id }))}
+          />
+          <Select
+            label="Quota period"
+            value={period}
+            onChange={setPeriod}
+            options={["lifetime", "daily", "monthly"].map((v) => ({
+              value: v,
+              label: v === "lifetime" ? "Lifetime" : v + " (UTC)",
+            }))}
+          />
+          <TextField label="Description" value={description} onChange={setDescription} />
+        </FormFields>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

@@ -57,7 +57,7 @@ export default function System({ embedded = false }: { embedded?: boolean }) {
       {s.warnings.map((w: string) => (
         <output
           key={w}
-          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+          className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning"
         >
           {w}
         </output>
