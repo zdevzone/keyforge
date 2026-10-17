@@ -49,7 +49,7 @@ try {
   assert.match(await page.evaluate(() => navigator.clipboard.readText()), /vp run license keygen/);
   await page.keyboard.press("Control+k");
   const search = page.getByRole("dialog");
-  await search.getByRole("combobox", { name: "Search all guides" }).fill("randomBytes");
+  await search.getByRole("combobox", { name: "Search all guides" }).fill("secrets:init");
   await search
     .getByRole("option")
     .filter({ hasText: "Beginner guide / Generate secrets" })
