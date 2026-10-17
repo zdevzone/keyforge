@@ -159,6 +159,11 @@ try {
     viewport: { width: 1440, height: 1000 },
   });
   const failures = [];
+  const analyticsRequests = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/_vercel/insights/"))
+      analyticsRequests.push(request.url());
+  });
   page.on("pageerror", (error) => failures.push(error.message));
   const publicAdminRequests = [];
   const recordPublicRequest = (req) => {
@@ -991,6 +996,7 @@ try {
     fullPage: true,
   });
   assert.deepEqual(failures, []);
+  assert.deepEqual(analyticsRequests, [], "Self-hosted builds must not load Vercel Analytics");
   console.log(
     "Console browser checks passed: login, account menu, profile save, support status/reply, customer delivery, manual download, public endpoint upload, independent UTC schedule, archive verification and mobile layout.",
   );

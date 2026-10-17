@@ -135,3 +135,9 @@ vp run backup:restore --file ./JOB_UUID.kfbackup --job JOB_UUID --maintenance --
 Use dedicated recovery environment URLs and matching backup/data keys. Stop all target writers before committing a restore. Portable restoration checks schema and migration versions, restores IDs and sessions, repairs sequences transactionally and never executes SQL from the archive. Verify application behavior afterward.
 
 An application rollback does not undo a fresh-data cutover. Keep Render and its keys/data available during acceptance; old Render data is not synchronized with new Vercel writes. Repointing a custom domain back to Render also requires restoring its canonical URL, DNS and secure-cookie configuration. Handle data reconciliation explicitly if both hosts have accepted writes. Retire Render only after acceptance and explicit owner authorization.
+
+## Web Analytics
+
+Enable Web Analytics in the Vercel project dashboard. Set the non-secret build variable `VITE_KEYFORGE_ANALYTICS=production` in the Production environment only, after enabling Analytics. Leave it unset in Preview and local/self-hosted builds. Tracking is opt-in so cloning this repository does not load a Vercel-only script on an unconfigured host. No analytics API key is needed.
+
+Only the public welcome, documentation and license-request form pages are counted. Documentation slugs are grouped as `/docs/:slug`. Console, sign-in and private customer status pages are excluded, including after client-side navigation. Page URLs omit query strings and fragments, custom events are rejected, and the HTML referrer policy exposes only the origin. Analytics does not receive license keys, customer request secrets or account information. Browser/ad-blocker settings may prevent events from appearing.
