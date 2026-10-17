@@ -80,7 +80,9 @@ jobs:
           sudo apt-get install -y postgresql-client-${{ matrix.client }}
           echo "/usr/lib/postgresql/${{ matrix.client }}/bin" >> "$GITHUB_PATH"
       - run: vp run build
-      - run: vp run test
+      # Better Auth introspects the database-wide catalog. Concurrent fixture
+      # schema drops can invalidate that scan even across isolated schemas.
+      - run: vp run test:postgres
         env:
           TEST_DATABASE_URL: postgres://keyforge:keyforge@localhost:5432/keyforge_test?sslmode=disable
   docker:

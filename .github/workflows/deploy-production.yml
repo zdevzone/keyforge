@@ -1,4 +1,4 @@
-name: Deploy production
+name: Deploy Render production (legacy)
 on:
   workflow_dispatch:
 permissions:

@@ -38,6 +38,7 @@
     "fmt": "vp fmt",
     "check": "vp lint && vp fmt --check && vp run typecheck && vp -C ui run typecheck",
     "test": "tsx --test \"test/**/*.test.ts\"",
+    "test:postgres": "tsx --test --test-concurrency=1 \"test/**/*.test.ts\"",
     "backup:restore": "node --env-file-if-exists=.env.local scripts/restore-backup.mjs",
     "test:console": "node scripts/console-smoke.mjs",
     "test:issuance": "node scripts/issuance-smoke.mjs",

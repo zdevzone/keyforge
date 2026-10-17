@@ -19,7 +19,7 @@ LICENSE_PORT overrides the host's PORT; otherwise 4100. Leave LICENSE_PORT unset
 
 ## Vercel
 
-See [Vercel staging](vercel.md) for PostgreSQL, private external archives, a recovery-verification database and hosted cron. Keep an existing production deployment running until staging acceptance is complete.
+See [Vercel deployment](vercel.md) for a single project with `main` production and `dev` preview, isolated PostgreSQL databases, private external archives, recovery verification and hosted cron. Keep an existing production host running until Vercel acceptance is complete.
 
 ## Docker
 
