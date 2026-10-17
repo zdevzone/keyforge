@@ -551,7 +551,7 @@ export function FinancialReports() {
           Operational reports
         </Link>
       </div>
-      <div className="flex flex-wrap gap-4 print:hidden">
+      <div className="table-toolbar print:hidden">
         <DateField label="From" value={from} onChange={setFrom} placeholder="All dates" />
         <DateField label="Through / as of" value={to} onChange={setTo} />
         <TextField label="Customer" value={customer} onChange={setCustomer} />

@@ -52,7 +52,10 @@ The table is generated from an isolated server's route registration. Product-sco
 | POST | `/admin/backups/destinations` |
 | PUT | `/admin/backups/destinations/:id` |
 | PUT | `/admin/backups/destinations/:id/schedule` |
+| PUT | `/admin/backups/providers/:id` |
+| POST | `/admin/backups/providers/:id/verify` |
 | PUT | `/admin/backups/schedule` |
+| PUT | `/admin/backups/storage-default` |
 | GET | `/admin/config` |
 | GET | `/admin/operators/directory` |
 | GET | `/admin/products` |
@@ -114,6 +117,7 @@ The table is generated from an isolated server's route registration. Product-sco
 | GET | `/v1/meta` |
 | POST | `/v1/products/:productId/activate` |
 | POST | `/v1/products/:productId/deactivate` |
+| PUT | `/v1/products/:productId/installations/:installationId/device-signals` |
 | POST | `/v1/products/:productId/installations/:installationId/licenses/:id/collect` |
 | GET | `/v1/products/:productId/installations/:installationId/notifications` |
 | PUT | `/v1/products/:productId/installations/:installationId/notifications/preferences` |
@@ -147,16 +151,20 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `backup_destination_changed` |
 | `backup_destination_unconfigured` |
 | `backup_encryption_unconfigured` |
+| `backup_operation_unavailable` |
 | `backup_provider_access_denied` |
 | `backup_provider_failed` |
 | `backup_provider_not_found` |
 | `backup_provider_timeout` |
 | `backup_remote_http_error` |
 | `backup_retention_failed` |
+| `backup_storage_missing` |
 | `backup_too_large` |
 | `backup_tool_unavailable` |
 | `backup_unavailable` |
 | `backup_unsupported` |
+| `backup_verification_failed` |
+| `backup_worker_failed` |
 | `backups_disabled` |
 | `bad_credential` |
 | `bad_definition` |
@@ -216,11 +224,18 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `request_closed` |
 | `request_not_found` |
 | `request_pending` |
+| `reset_busy` |
+| `reset_in_progress` |
+| `reset_unavailable` |
+| `reset_unrelated_data` |
 | `revision_conflict` |
 | `revision_required` |
 | `service_unauthorized` |
 | `signing_unavailable` |
+| `storage_credentials_required` |
+| `storage_not_saved` |
 | `support_rate_limited` |
+| `unauthorized` |
 | `unknown_backup` |
 | `unknown_backup_destination` |
 | `unknown_credential` |
@@ -315,3 +330,11 @@ Admin-only `GET /admin/system/reset` returns the retained seeded administrator i
 With `backup:true`, enabled/encrypted local backups are mandatory. The server locks writers, captures the complete pre-reset database, verifies the encrypted archive through the existing restore/integrity checks, and only then deletes data in the same reset transaction. PostgreSQL requires pg_dump/pg_restore and a separate `LICENSE_BACKUP_VERIFY_DATABASE_URL` with temporary-database creation permission. The new verified archive remains downloadable through `/admin/backups/:id/download`. Backup failure aborts deletion; database errors roll back deletion, retaining any already verified backup. External configuration, signing keys, encryption rings and archive files are never deleted. Already-issued offline tokens can remain valid until their original expiry.
 
 Errors: `reset_unavailable` (missing/inactive bootstrap admin or auth, 409/503), `reset_busy` (running backups or requests, 409), `reset_in_progress` (concurrent operation, 409/503), `reset_unrelated_data` (unrelated data/dependencies, 409), `reset_failed` (rolled-back reset, 500), plus existing backup errors and `bad_request` for invalid confirmation/body. Other requests on this server receive 503 with Retry-After during reset, except health checks. Deleted operators must sign in using a newly provisioned account; the retained administrator can continue their original session.
+
+## Database-managed backup storage
+
+Admin-only `PUT /admin/backups/providers/:id` accepts `blob`, `s3`, `r2` or `uploadthing` and a current `revision` (zero for first setup). Blob/UploadThing accept `token`; S3/R2 accept `bucket`, `region`, optional HTTPS `endpoint`, `accessKeyId`, `secretAccessKey` and optional `sessionToken`. Blank secret fields retain saved values; `clearSessionToken:true` removes a temporary token. R2 requires an endpoint. Configuration is encrypted with the external data keyring. Responses expose metadata/credential-presence flags, never credentials or ciphertext. Stale revisions return 409.
+
+`POST /admin/backups/providers/:id/verify` tests upload, byte-exact download and deletion using the saved credentials. It records verification only if that configuration remains current; database archive recovery is a separate verification. `PUT /admin/backups/storage-default` accepts `{destination}` for a configured provider (or persistent-host local storage). The default applies to immediate downloads and reset backups. Settings reset retains storage configuration and historical versions. Jobs keep their original destination version.
+
+Custom destination writes may supply `headerValue` with `headerName` to save an encrypted authorization value, or `keepAuthorization:true` to preserve one during edits. Clear the header name to remove authorization. The legacy restricted `headerValueEnv` contract remains accepted. The listing returns `hasAuthorization`, never the saved value/ciphertext.

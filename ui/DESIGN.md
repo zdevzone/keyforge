@@ -357,3 +357,9 @@ The complete screen inventory, source provenance, preserved behavior and known r
 - Don't invent records, totals, customer models or delivery actions from block demonstrations.
 - Don't expose private signing material or make internal support notes appear customer-visible.
 - Don't replace direct table filtering with global command search or append editing forms below listings.
+
+### Compact listing controls
+
+App-owned `.table-toolbar` and `.data-grid-tools` place filters, selects, dates, counts and table actions in a wrapping row immediately above results. Products supplies its search and status to the shared data-grid toolbar so Columns stays in that row. Short selects and buttons fit their labels; text fields are bounded to 28rem and numeric fields to 12rem, rather than stretching across a whole panel. Long message/token editors retain a readable 72ch bound. At narrow widths, controls wrap in DOM order without page overflow. Generated primitives remain unchanged.
+
+Backup storage uses an admin-only focused dialog on the existing Backups tab. Credential fields are empty on edit, indicate retained values and do not expose saved secrets. Save, connection testing, default selection and archive verification remain distinct operations with feedback.

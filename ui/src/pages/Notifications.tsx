@@ -164,7 +164,7 @@ export default function Notifications({ embedded = false }: { embedded?: boolean
           Notification preferences
         </Link>
       </div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="table-toolbar">
         <Choice
           label="Show notifications"
           searchable={false}

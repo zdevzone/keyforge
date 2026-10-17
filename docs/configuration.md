@@ -65,3 +65,11 @@ Catalog export/import transfers definitions and plan presets only. Preview retur
 A local plaintext HTTP server needs an http://localhost:PORT LICENSE_SERVER_URL; an HTTPS base URL causes secure console cookies to be unavailable over HTTP. The active local database is LICENSE_DB_PATH; BETTER_AUTH_URL and legacy UploadThing secret variables are unnecessary for this setup. Dedicated backup provider settings avoid mixing AWS and R2 credentials.
 
 Use the reset, cleanup, demo seed and bucket setup commands in the [CLI guide](cli.md#reset-cleanup-and-demo-data). They select the same active database as the server. Demo seeding is explicit; normal startup never adds fictional customer records.
+
+## Minimal environment and database-managed storage
+
+Run `vp run secrets:init` to fill missing local secrets and file references in `.env.local`; existing setup requires confirmation. The default private key path is `secrets/license-signing.key`. Never configure both inline and file values for the same key.
+
+Manage backup-provider credentials in **Settings → Backups**, where they are encrypted with the external data keyring. Legacy provider environment settings below remain migration inputs for existing installations; omit them after storage and archive verification. Signing keys, authentication secrets, data/archive encryption rings, database URLs, cron authentication and deployment URLs remain server configuration. They cannot safely depend on an unavailable database during recovery.
+
+For the Vercel deployment, only `DATABASE_URL` is read as the application database connection. The integration aliases `PG*`, `POSTGRES_*`, `DATABASE_URL_UNPOOLED` and `NEON_PROJECT_ID` are not needed by KeyForge. Do not remove an alias that another app sharing the project uses. Keep `LICENSE_BACKUP_VERIFY_DATABASE_URL` separate and retain seed credentials if build-time admin bootstrapping is still required. `VITE_KEYFORGE_ANALYTICS` remains a nonsecret, Production-only build preference. Platform-supplied Vercel variables are platform metadata rather than application configuration.

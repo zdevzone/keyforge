@@ -51,6 +51,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({
   defaultSort,
   emptyMessage = "No records found.",
   pageSize = 20,
+  toolbar,
 }: {
   rows: T[];
   columns: DataColumn<T>[];
@@ -60,6 +61,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({
   emptyMessage?: string;
   pageSize?: number;
   itemName?: { one: string; other: string };
+  toolbar?: ReactNode;
 }) {
   "use no memo";
   const [sorting, setSorting] = useState<SortingState>(
@@ -97,6 +99,7 @@ export function SortableDataTable<T extends Record<string, unknown>>({
   return (
     <div className="data-grid">
       <div className="data-grid-tools">
+        {toolbar}
         <span className="text-xs text-muted-foreground">
           {count} {caption.toLowerCase()}
         </span>

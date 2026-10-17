@@ -18,8 +18,16 @@ import {
   type StorageOptions,
   type RemoteFile,
 } from "./backup-destinations.js";
+import { BackupStorage, storageProvider, storageSettingsSchema } from "./backup-storage.js";
 import { createPostgresPool } from "./database.js";
-import { atomic, DomainError, Vault, type KeyRing, type RecordValue } from "./platform-store.js";
+import {
+  atomic,
+  DomainError,
+  Vault,
+  type KeyRing,
+  type RecordValue,
+  type Records,
+} from "./platform-store.js";
 import { WORKSPACE, type Platform } from "./platform.js";
 import {
   capturePostgresSnapshot,
@@ -52,6 +60,7 @@ export interface BackupJob extends RecordValue {
   destination: string;
   destinationName?: string;
   destinationConfig?: CustomDestination;
+  storageVersion?: string;
   remoteFile?: RemoteFile;
   size?: number;
   checksum?: string;
@@ -93,6 +102,7 @@ export class BackupService {
   vault: Vault;
   directory: string;
   destinations: BackupDestinations;
+  storage: BackupStorage;
   workerError?: string;
   constructor(
     public platform: Platform,
@@ -101,12 +111,60 @@ export class BackupService {
     this.vault = new Vault(options.keyring);
     this.directory = resolve(options.directory ?? "./backups");
     this.destinations = new BackupDestinations(options);
+    this.storage = new BackupStorage(platform, options);
   }
   async custom() {
     return this.platform.records.list<CustomDestination>(WORKSPACE, "backup-destination");
   }
+  async defaultDestination(records = this.platform.records) {
+    return (
+      (
+        await records.get<{ id: string; destination: string }>(
+          WORKSPACE,
+          "backup-settings",
+          "default",
+        )
+      )?.destination ??
+      this.options.defaultDestination ??
+      "local"
+    );
+  }
   async statuses() {
-    return this.destinations.statuses(await this.custom());
+    await this.storage.migrate();
+    const statuses = await this.destinations.statuses(await this.custom());
+    for (const provider of storageProvider.options) {
+      if (!(await this.storage.version(provider))) continue;
+      const manager = new BackupDestinations(await this.storage.resolve(provider));
+      try {
+        const status = (await manager.statuses([])).find((d) => d.id === provider)!;
+        Object.assign(
+          statuses.find((d) => d.id === provider)!,
+          status,
+        );
+      } finally {
+        manager.close();
+      }
+    }
+    return statuses;
+  }
+  async driver(
+    job: Pick<BackupJob, "destination" | "storageVersion" | "destinationConfig">,
+    records?: Records,
+  ) {
+    if (job.storageVersion || (await this.storage.version(job.destination, records)))
+      return this.storage.driver(job.destination, job.storageVersion, records);
+    if (job.destinationConfig?.encryptedHeaderValue) {
+      const value = this.platform.vault.decrypt(
+        job.destinationConfig.encryptedHeaderValue,
+        "backup-custom:" + job.destination,
+      );
+      const manager = new BackupDestinations({}, { LICENSE_BACKUP_CUSTOM_DATABASE: value });
+      return manager.driver(job.destination, {
+        ...job.destinationConfig,
+        headerValueEnv: "LICENSE_BACKUP_CUSTOM_DATABASE",
+      });
+    }
+    return this.destinations.driver(job.destination, job.destinationConfig);
   }
   async preflight(destination: string) {
     if (!this.vault.ring)
@@ -197,6 +255,7 @@ export class BackupService {
       engine: this.platform.options.database.engine,
       destination,
       destinationName: status.name,
+      storageVersion: await this.storage.version(destination),
       createdAt: this.platform.time(),
       ...(status.config ? { destinationConfig: status.config } : {}),
     };
@@ -208,7 +267,7 @@ export class BackupService {
       throw new DomainError("unknown_backup", "No such backup.", 404);
     return join(this.directory, id + ".kfbackup");
   }
-  async bytes(job: BackupJob) {
+  async bytes(job: BackupJob, records?: Records) {
     if (job.pruned || (!job.checksum && job.status !== "completed"))
       throw new DomainError("backup_unavailable", "This backup is not available.", 409);
     let bytes: Buffer | undefined;
@@ -224,7 +283,7 @@ export class BackupService {
           "The local archive is missing. Custom upload-only endpoints require the retained local copy for downloads.",
           404,
         );
-      const driver = await this.destinations.driver(job.destination);
+      const driver = await this.driver(job, records);
       let file = job.remoteFile;
       if (!file && job.destination === "s3" && this.options.s3?.bucket)
         file = {
@@ -348,6 +407,13 @@ export class BackupService {
           phase: "snapshot",
           destination: schedule.destination,
           destinationName: destination?.name ?? schedule.destination,
+          storageVersion: (
+            await r.get<{ id: string; version: string }>(
+              WORKSPACE,
+              "backup-storage-current",
+              schedule.destination,
+            )
+          )?.version,
           engine: this.platform.options.database.engine,
           createdAt: now,
           ...(destination?.config ? { destinationConfig: destination.config } : {}),
@@ -414,7 +480,7 @@ export class BackupService {
           await r.put(WORKSPACE, "backup", updated);
       });
       if (job.destination !== "local") {
-        const driver = await this.destinations.driver(job.destination, job.destinationConfig);
+        const driver = await this.driver(job);
         updated.remoteFile = await driver.upload(job.id, bytes);
       }
       updated = {
@@ -458,7 +524,7 @@ export class BackupService {
       try {
         let remoteRetained = false;
         if (job.destination !== "local" && !job.destination.startsWith("custom-")) {
-          const driver = await this.destinations.driver(job.destination);
+          const driver = await this.driver(job);
           let file = job.remoteFile;
           if (!file && job.destination === "s3" && this.options.s3?.bucket)
             file = {
@@ -505,8 +571,8 @@ export class BackupService {
       }
     }
   }
-  async verify(job: BackupJob, persist = true) {
-    const bytes = await this.bytes(job);
+  async verify(job: BackupJob, persist = true, records?: Records) {
+    const bytes = await this.bytes(job, records);
     if (digest(bytes) !== job.checksum)
       throw new DomainError("backup_corrupt", "Archive checksum mismatch.");
     const archive = JSON.parse(this.vault.decrypt(bytes.toString(), "backup:" + job.id)) as Archive;
@@ -567,8 +633,8 @@ export class BackupService {
       await rm(temp, { recursive: true, force: true });
     }
   }
-  async verifiedResetBackup(preflight = true): Promise<BackupJob> {
-    const destination = this.options.defaultDestination ?? "local";
+  async verifiedResetBackup(preflight = true, records?: Records): Promise<BackupJob> {
+    const destination = await this.defaultDestination(records);
     if (preflight) await this.preflight(destination);
     const job: BackupJob = {
       id: randomUUID(),
@@ -579,6 +645,7 @@ export class BackupService {
       engine: this.platform.options.database.engine,
       destination,
       destinationName: "Before application reset",
+      storageVersion: await this.storage.version(destination, records),
       cacheAvailable: !this.options.remoteOnly,
     };
     try {
@@ -586,13 +653,13 @@ export class BackupService {
       const bytes = Buffer.from(this.vault.encrypt(JSON.stringify(archive), "backup:" + job.id));
       if (!this.options.remoteOnly) await writeFile(this.path(job.id), bytes, { mode: 0o600 });
       if (destination !== "local") {
-        job.remoteFile = await (await this.destinations.driver(destination)).upload(job.id, bytes);
+        job.remoteFile = await (await this.driver(job, records)).upload(job.id, bytes);
         if (!job.remoteFile)
           throw new Error("Reset backup requires a downloadable remote archive.");
       }
       job.size = bytes.length;
       job.checksum = digest(bytes);
-      return await this.verify(job, false);
+      return await this.verify(job, false, records);
     } catch (error) {
       await rm(this.path(job.id), { force: true });
       throw error;
@@ -685,7 +752,50 @@ export async function registerBackups(
       }
     };
   await service.migrateSchedules();
-  const publicJob = ({ destinationConfig: _config, remoteFile: _remote, ...job }: BackupJob) => ({
+  await service.storage.migrate();
+  const publicDestination = (value: CustomDestination) => {
+    const { encryptedHeaderValue: _secret, ...safe } = value;
+    return { ...safe, hasAuthorization: Boolean(_secret || value.headerValueEnv) };
+  };
+  const destinationInput = (
+    body: unknown,
+    id: string,
+    prior?: CustomDestination,
+  ): CustomDestination => {
+    const { headerValue, keepAuthorization, ...fields } = z
+      .object({
+        headerValue: z.string().max(8192).optional(),
+        keepAuthorization: z.boolean().optional(),
+      })
+      .passthrough()
+      .parse(body);
+    if (keepAuthorization && !headerValue && !prior?.encryptedHeaderValue)
+      throw new DomainError(
+        "storage_credentials_required",
+        "Enter the complete authorization header value.",
+      );
+    const input = customDestinationSchema.parse({
+      ...fields,
+      ...(headerValue || keepAuthorization
+        ? { headerValueEnv: "LICENSE_BACKUP_CUSTOM_DATABASE" }
+        : {}),
+    });
+    if (!headerValue && !keepAuthorization) return { ...input, id };
+    const { headerValueEnv: _env, ...config } = input;
+    return {
+      ...config,
+      id,
+      encryptedHeaderValue: headerValue
+        ? platform.vault.encrypt(headerValue, "backup-custom:" + id)
+        : prior!.encryptedHeaderValue,
+    };
+  };
+  const publicJob = ({
+    destinationConfig: _config,
+    storageVersion: _storage,
+    remoteFile: _remote,
+    ...job
+  }: BackupJob) => ({
     ...job,
     canDownload:
       !job.pruned &&
@@ -704,7 +814,16 @@ export async function registerBackups(
           .map(publicJob),
         destinations: destinations
           .filter((d) => !d.archived)
-          .map((d) => ({ ...d, schedule: schedules.find((s) => s.id === d.id) ?? null })),
+          .map((d) => ({
+            ...d,
+            ...(d.config ? { config: publicDestination(d.config) } : {}),
+            schedule: schedules.find((s) => s.id === d.id) ?? null,
+          })),
+        storage: Object.fromEntries(
+          await Promise.all(
+            storageProvider.options.map(async (id) => [id, await service.storage.metadata(id)]),
+          ),
+        ),
         schedule: legacy?.migratedTo
           ? (schedules.find((s) => s.id === legacy.migratedTo) ?? null)
           : (schedules.find((s) => s.id === "local") ?? null),
@@ -714,7 +833,7 @@ export async function registerBackups(
         authSnapshotAvailable: Boolean(options.authDbPath),
         workerError: service.workerError,
         remoteOnly: Boolean(options.remoteOnly),
-        defaultDestination: options.defaultDestination ?? "local",
+        defaultDestination: await service.defaultDestination(),
         scheduleNotice: options.background
           ? "Automatic backups are checked daily around 05:00 UTC. A saved time is the earliest a backup can run. Manual backups start immediately."
           : null,
@@ -726,15 +845,11 @@ export async function registerBackups(
     handler(async (req, reply) => {
       const input = z
         .object({
-          destination: z
-            .string()
-            .min(1)
-            .max(100)
-            .default(options.defaultDestination ?? "local"),
+          destination: z.string().min(1).max(100).optional(),
         })
         .strict()
         .parse(req.body);
-      const job = await service.enqueue(input.destination);
+      const job = await service.enqueue(input.destination ?? (await service.defaultDestination()));
       await platform.audit(req.actor, "backup.create", "default", {
         jobId: job.id,
         destination: job.destination,
@@ -743,16 +858,49 @@ export async function registerBackups(
       return reply.code(202).send({ job: publicJob(job) });
     }),
   );
+  app.put(
+    "/admin/backups/storage-default",
+    handler(async (req) => {
+      const { destination } = z
+        .object({ destination: z.enum(["local", ...storageProvider.options]) })
+        .strict()
+        .parse(req.body);
+      await service.preflight(destination);
+      await atomic(platform.options.database, (r) =>
+        r.put(WORKSPACE, "backup-settings", { id: "default", destination }),
+      );
+      await platform.audit(req.actor, "backup.storage.default", "default", { destination });
+      return { destination };
+    }),
+  );
+  app.put(
+    "/admin/backups/providers/:id",
+    handler(async (req) => {
+      const provider = storageProvider.parse(req.params.id);
+      await service.storage.save(provider, storageSettingsSchema.parse(req.body));
+      await platform.audit(req.actor, "backup.storage.update", "default", { provider });
+      return { settings: await service.storage.metadata(provider) };
+    }),
+  );
+  app.post(
+    "/admin/backups/providers/:id/verify",
+    handler(async (req) => {
+      const provider = storageProvider.parse(req.params.id);
+      await service.storage.verify(provider);
+      await platform.audit(req.actor, "backup.storage.verify", "default", { provider });
+      return { settings: await service.storage.metadata(provider) };
+    }),
+  );
   app.post(
     "/admin/backups/destinations",
     handler(async (req, reply) => {
-      const input = customDestinationSchema.parse(req.body);
+      const input = destinationInput(req.body, "custom-" + randomUUID());
       if (input.revision !== undefined || input.archived)
         throw new DomainError(
           "bad_request",
           "New upload endpoints must be active and cannot carry a revision.",
         );
-      const destination: CustomDestination = { ...input, id: "custom-" + randomUUID() };
+      const destination: CustomDestination = input;
       await atomic(platform.options.database, (r) =>
         r.put(WORKSPACE, "backup-destination", destination),
       );
@@ -760,15 +908,20 @@ export async function registerBackups(
         destinationId: destination.id,
       });
       return reply.code(201).send({
-        destination: await platform.records.get(WORKSPACE, "backup-destination", destination.id),
+        destination: publicDestination(
+          (await platform.records.get<CustomDestination>(
+            WORKSPACE,
+            "backup-destination",
+            destination.id,
+          ))!,
+        ),
       });
     }),
   );
   app.put(
     "/admin/backups/destinations/:id",
     handler(async (req) => {
-      const input = customDestinationSchema.parse(req.body);
-      if (input.revision === undefined)
+      if ((req.body as { revision?: number })?.revision === undefined)
         throw new DomainError("revision_required", "Reload the endpoint before saving.", 409);
       await atomic(platform.options.database, async (r) => {
         const prior = await r.get<CustomDestination>(
@@ -782,6 +935,7 @@ export async function registerBackups(
             "No such custom upload endpoint.",
             404,
           );
+        const input = destinationInput(req.body, prior.id, prior);
         await r.put(WORKSPACE, "backup-destination", { ...input, id: prior.id }, input.revision);
         if (input.archived) {
           const schedule = await r.get<Schedule>(WORKSPACE, "backup-schedule", prior.id);
@@ -790,7 +944,7 @@ export async function registerBackups(
       });
       await platform.audit(req.actor, "backup.destination.update", "default", {
         destinationId: req.params.id,
-        archived: input.archived,
+        archived: (req.body as { archived?: boolean }).archived,
       });
       return { ok: true };
     }),
