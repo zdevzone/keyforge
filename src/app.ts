@@ -1,10 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import rateLimit from "@fastify/rate-limit";
-import staticFiles from "@fastify/static";
 import { fromNodeHeaders } from "better-auth/node";
 import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -37,6 +36,8 @@ export interface BuildLicenseAppOptions {
   auth?: AuthInstance;
   authDbPath?: string;
   uiDir?: string;
+  /** Vercel serves assets through its filesystem router; retain SPA fallback. */
+  serveStaticAssets?: boolean;
   kid?: string;
   keyring?: KeyRing;
   backups?: BackupOptions;
@@ -313,10 +314,19 @@ export async function buildLicenseApp(options: BuildLicenseAppOptions): Promise<
   registerSystemReset(app, platform, backups, gate, resetBarrier);
   const uiDir = options.uiDir ?? join(dirname(fileURLToPath(import.meta.url)), "..", "public");
   if (existsSync(join(uiDir, "index.html"))) {
-    await app.register(staticFiles, { root: uiDir });
+    // Vercel's Node loader cannot require the ESM-only dependency currently
+    // used by @fastify/static. Its CDN already owns static asset delivery.
+    const index =
+      options.serveStaticAssets === false
+        ? readFileSync(join(uiDir, "index.html"), "utf8")
+        : undefined;
+    if (options.serveStaticAssets !== false)
+      await app.register((await import("@fastify/static")).default, { root: uiDir });
     app.setNotFoundHandler(async (req, reply) => {
       if (req.method === "GET" && !/^\/(v1|admin|api)\//.test(req.url))
-        return reply.type("text/html").sendFile("index.html");
+        return index !== undefined
+          ? reply.type("text/html").send(index)
+          : reply.type("text/html").sendFile("index.html");
       return fail(reply, 404, "not_found", "No such route.");
     });
   } else app.setNotFoundHandler((_req, reply) => fail(reply, 404, "not_found", "No such route."));

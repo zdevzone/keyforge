@@ -17,6 +17,10 @@ The entry is dist/src/index.js; the UI is dist/public. The build also writes dis
 
 LICENSE_PORT overrides the host's PORT; otherwise 4100. Leave LICENSE_PORT unset on hosts that assign PORT. Seed the first admin with LICENSE_SEED_ADMIN_EMAIL/PASSWORD, or run vp run admin:create on a shell-enabled host. Boot seeding never resets existing operators.
 
+## Vercel
+
+See [Vercel deployment](vercel.md) for a single project with `main` production and `dev` preview, isolated PostgreSQL databases, private external archives, recovery verification and hosted cron. Keep an existing production host running until Vercel acceptance is complete.
+
 ## Docker
 
 The Dockerfile builds with Vite+, installs only production dependencies into the runtime, includes compatible Postgres dump/restore tools, and starts the compiled Node server. Keep secrets outside the image. Build via docker build -t keyforge . or use docker compose up --build. Ports, volumes and secret mounts are infrastructure commands, not package-manager commands.

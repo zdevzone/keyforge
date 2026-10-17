@@ -39,6 +39,14 @@ export const docCatalog: DocEntry[] = [
     description: "Render, Docker, VPS and other deployment targets.",
   },
   {
+    slug: "vercel",
+    title: "Vercel deployment",
+    group: "Run a server",
+    source: "docs/vercel.md",
+    description: "PostgreSQL, private archives, hosted scheduling and staging acceptance.",
+    optional: true,
+  },
+  {
     slug: "cpanel-guide",
     title: "cPanel deployment",
     group: "Run a server",

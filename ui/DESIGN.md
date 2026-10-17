@@ -244,6 +244,8 @@ components:
 
 ## Overview
 
+The Backups surface adapts to host capabilities without changing Polaris styling. Serverless hosting explains its daily check time and external archive requirement, disables local-only/upload-only actions, and keeps authenticated download and recovery verification in the shared history table. Persistent-host interactions remain unchanged. See `docs/vercel.md` for deployment and recovery details.
+
 **Creative North Star: "The Licensing Operations Workspace"**
 
 The user-selected Polaris theme from @shadcnblocks/theme/polaris, authored by tweakcn, is the visual authority. Cool neutral surfaces, teal actions, amber secondary accents and square geometry support a precise, calm workspace. Google Sans Flex is hosted locally. The application uses paid shadcnblocks source compositions adapted to real Keyforge records and workflows.

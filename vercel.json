@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "bash scripts/vercel-install.sh",
+  "buildCommand": "vp run build:all",
+  "outputDirectory": "dist/public",
+  "regions": ["iad1"],
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 300,
+      "includeFiles": "{dist/src/**,dist/public/**,*.config.json}"
+    }
+  },
+  "routes": [{ "handle": "filesystem" }, { "src": "/(.*)", "dest": "/api/index" }],
+  "crons": [{ "path": "/api/internal/backups/tick", "schedule": "0 5 * * *" }],
+  "git": { "deploymentEnabled": false }
+}

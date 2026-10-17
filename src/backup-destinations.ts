@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { put, get, del } from "@vercel/blob";
 import { UTApi } from "uploadthing/server";
 import type { UTApiOptions } from "uploadthing/types";
 import { z } from "zod";
@@ -17,6 +18,9 @@ export interface ObjectStorageOptions {
   credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
 }
 export interface StorageOptions {
+  blob?: { token: string };
+  /** Ephemeral hosts must not offer local-only or upload-only archives. */
+  remoteOnly?: boolean;
   s3?: ObjectStorageOptions;
   r2?: ObjectStorageOptions;
   uploadthing?: { token: string };
@@ -24,6 +28,7 @@ export interface StorageOptions {
   drivers?: Record<string, BackupDriver>;
 }
 export type RemoteFile =
+  | { type: "blob"; key: string }
   | { type: "object"; bucket: string; key: string; endpoint?: string; region: string }
   | { type: "uploadthing"; key: string };
 export interface BackupDriver {
@@ -35,7 +40,7 @@ export interface BackupDriver {
 export interface DestinationStatus {
   id: string;
   name: string;
-  type: "local" | "s3" | "r2" | "uploadthing" | "custom";
+  type: "local" | "s3" | "r2" | "uploadthing" | "custom" | "blob";
   configured: boolean;
   reason?: string;
   archived?: boolean;
@@ -228,8 +233,25 @@ export class BackupDestinations {
   }
   async statuses(custom: CustomDestination[]): Promise<DestinationStatus[]> {
     const result: DestinationStatus[] = [
-      { id: "local", name: "Local storage", type: "local", configured: true },
+      {
+        id: "local",
+        name: "Local storage",
+        type: "local",
+        configured: !this.options.remoteOnly,
+        ...(this.options.remoteOnly
+          ? { reason: "This host requires durable external backup storage." }
+          : {}),
+      },
     ];
+    result.push({
+      id: "blob",
+      name: "Vercel Blob (private)",
+      type: "blob",
+      configured: Boolean(this.options.blob?.token || this.options.drivers?.blob),
+      ...(!this.options.blob?.token && !this.options.drivers?.blob
+        ? { reason: "Connect a private Blob store and set BLOB_READ_WRITE_TOKEN." }
+        : {}),
+    });
     for (const [id, name] of [
       ["s3", "AWS S3"],
       ["r2", "Cloudflare R2"],
@@ -277,7 +299,12 @@ export class BackupDestinations {
         revision: item.revision,
         config: item,
         configured:
-          !item.archived && (!item.headerValueEnv || Boolean(this.env[item.headerValueEnv])),
+          !this.options.remoteOnly &&
+          !item.archived &&
+          (!item.headerValueEnv || Boolean(this.env[item.headerValueEnv])),
+        ...(this.options.remoteOnly
+          ? { reason: "Upload-only endpoints cannot provide durable downloads on this host." }
+          : {}),
         ...(item.headerValueEnv && !this.env[item.headerValueEnv]
           ? { reason: "The configured authorization environment variable is missing." }
           : {}),
@@ -287,6 +314,45 @@ export class BackupDestinations {
   async driver(id: string, custom?: CustomDestination): Promise<BackupDriver> {
     const override = this.options.drivers?.[id];
     if (override) return override;
+    if (id === "blob" && this.options.blob) {
+      const token = this.options.blob.token;
+      const pathname = (file: RemoteFile) => {
+        if (file.type !== "blob" || !/^keyforge\/[0-9a-f-]{36}\.kfbackup$/.test(file.key))
+          throw new DomainError("backup_unavailable", "Invalid private archive reference.", 409);
+        return file.key;
+      };
+      return {
+        upload: async (id, bytes) => {
+          try {
+            const result = await put("keyforge/" + fileName(id), bytes, {
+              access: "private",
+              token,
+              addRandomSuffix: false,
+              contentType: "application/octet-stream",
+            });
+            return { type: "blob", key: result.pathname };
+          } catch (error) {
+            throw storageError(error);
+          }
+        },
+        download: async (file) => {
+          try {
+            const result = await get(pathname(file), { access: "private", token, useCache: false });
+            if (!result || result.statusCode !== 200) throw Error("Missing archive.");
+            return await readBackupResponse(new Response(result.stream));
+          } catch (error) {
+            throw storageError(error);
+          }
+        },
+        remove: async (file) => {
+          try {
+            await del(pathname(file), { token });
+          } catch (error) {
+            throw storageError(error);
+          }
+        },
+      };
+    }
     const client = this.objects.get(id);
     if (client) {
       const config = this.options[id as "s3" | "r2"]!;
@@ -491,6 +557,7 @@ export function storageOptionsFromEnv(env: NodeJS.ProcessEnv): StorageOptions {
       : undefined;
   const r2Account = env.LICENSE_BACKUP_R2_ACCOUNT_ID ?? env.R2_ACCOUNT_ID;
   return {
+    blob: env.BLOB_READ_WRITE_TOKEN ? { token: env.BLOB_READ_WRITE_TOKEN } : undefined,
     s3: {
       bucket: env.LICENSE_BACKUP_S3_BUCKET,
       region: env.LICENSE_BACKUP_S3_REGION ?? env.AWS_REGION ?? "us-east-1",

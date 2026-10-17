@@ -2,6 +2,8 @@
 
 Admins use **Settings → Backups** to configure destinations, enable independent daily UTC schedules, run **Back up now**, download archives, inspect upload results and verify recovery. All features are available in the self-hosted open-source server. The backup API and console require admin access.
 
+On Vercel, follow [the serverless deployment and recovery guide](vercel.md). That mode requires durable remote archives, supports private Vercel Blob through `BLOB_READ_WRITE_TOKEN`, uses portable PostgreSQL archives, and replaces the continuous worker with authenticated hosted invocations. Local-only/custom upload-only destinations are disabled. Native-tool and persistent-directory instructions below describe persistent-server mode.
+
 ## Destinations and credential detection
 
 | Destination | Server configuration |

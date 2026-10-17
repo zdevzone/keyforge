@@ -16,10 +16,12 @@ Instructions for AI coding agents working in this repository.
 ## Project Layout
 
 - `src/index.ts`: process entrypoint and environment wiring
+- `src/server.ts`: shared server initialization; `api/index.mjs`: Vercel handler
 - `src/config.ts`: zod schema + loader for keyforge.config.json (deployment policy)
 - `src/app.ts`: HTTP/auth wiring; `src/platform.ts`: product-scoped domain routes
 - `src/platform-store.ts`: scoped records, serialized writes and encryption
 - `src/backups.ts`: encrypted jobs, schedules, downloads and verification
+- `src/postgres-archive.ts`: bounded portable application-data archives for serverless hosts
 - `src/token-contract.ts`: license v4 and trial v2 schemas
 - `src/db.ts`: dual-engine historical ledger repository and migrations
 - `src/sign.ts`: Ed25519 signing and token helpers
@@ -61,6 +63,7 @@ Instructions for AI coding agents working in this repository.
 - Listen port is `LICENSE_PORT`, else the platform-assigned `PORT`, else 4100 (`resolveListenPort`). The Dockerfile deliberately leaves `LICENSE_PORT` unset so hosts can assign one.
 - Every Postgres pool comes from `createPostgresPool` (`src/database.ts`): it attaches an `error` listener (an unhandled one crashes the process when a managed database drops an idle client), resolves TLS explicitly instead of inheriting pg's version-dependent `sslmode` handling, and bounds size via `LICENSE_DB_POOL_MAX`. Never construct `new pg.Pool` directly.
 - Boot migrations on Postgres run inside a transaction holding `pg_advisory_xact_lock`, so concurrent instances serialize; transaction-scoped because session-level locks do not survive a transaction pooler.
+- Vercel uses one project: `main` Production and `dev` Preview, each with isolated PostgreSQL, data/archive/session/signing secrets, private external backup storage and a differently named verification database. Preserve existing production keys during host migration; never copy them into Preview. Run `scripts/vercel-prepare.mjs` with the selected environment's actual credentials before deploying; cold starts intentionally skip Better Auth DDL and seeding. The Vercel CDN serves static assets; do not eagerly import `@fastify/static` into the serverless path. Hosted backup work uses `waitUntil` and an authenticated cron endpoint, never a background interval or durable local files. Vercel cron runs only in Production; Preview backups are manual. See `docs/vercel.md`.
 
 ## Safe Change Rules
 
