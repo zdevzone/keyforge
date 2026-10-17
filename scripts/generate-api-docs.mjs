@@ -30,6 +30,7 @@ for (const path of [
   "src/system-reset.ts",
   "src/maintenance.ts",
   "src/backup-destinations.ts",
+  "src/backup-storage.ts",
 ]) {
   const source = await readFile(path, "utf8");
   for (const pattern of [

@@ -50,7 +50,7 @@ export default function Support() {
           private note.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="table-toolbar">
         <TextField label="Search conversations" value={search} onChange={choose(setSearch)} />
         <Choice
           label="Inbox"

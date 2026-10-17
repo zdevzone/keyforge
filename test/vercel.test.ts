@@ -70,7 +70,7 @@ test("Vercel uses an explicit public URL first and refuses ephemeral or unencryp
   );
   assert.throws(
     () => validateVercelEnvironment(parseEnv({})),
-    /DATABASE_URL.*LICENSE_AUTH_SECRET.*BLOB_READ_WRITE_TOKEN/,
+    /DATABASE_URL.*LICENSE_AUTH_SECRET.*LICENSE_BACKUP_VERIFY_DATABASE_URL/,
   );
   assert.throws(() => parsePostgresSnapshot(Buffer.from('{"version":1,"tables":[]}')));
   assert.throws(() =>

@@ -102,7 +102,14 @@ export function Button(
   },
 ) {
   const { variant = "primary", ...native } = props;
-  return <UIButton {...native} type={props.type ?? "button"} variant={buttonVariants[variant]} />;
+  return (
+    <UIButton
+      {...native}
+      className={cn("w-fit max-w-full", props.className)}
+      type={props.type ?? "button"}
+      variant={buttonVariants[variant]}
+    />
+  );
 }
 export function TextField(props: {
   label: string;
@@ -116,7 +123,7 @@ export function TextField(props: {
   if (props.type === "date")
     return <DateField label={props.label} value={props.value} onChange={props.onChange} />;
   return (
-    <Field>
+    <Field className={cn("console-text-field", props.type === "number" && "console-number-field")}>
       <FieldLabel htmlFor={id}>{props.label}</FieldLabel>
       <Input
         id={id}

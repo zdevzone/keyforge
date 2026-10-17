@@ -105,38 +105,40 @@ export default function Products() {
       </div>
       {config.error && <ErrorNote message={(config.error as Error).message} />}
       <Card className="p-5">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-4">
           <div>
             <h2 className="font-medium">Product directory</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Choose a product to work with its licenses, or manage its policy and keys.
             </p>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <label htmlFor="product-filter" className="grid gap-2 text-sm font-medium">
-              Filter products
-              <Input
-                id="product-filter"
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name or product ID"
-              />
-            </label>
-            <Choice
-              label="Product status"
-              value={status}
-              onChange={setStatus}
-              options={[
-                { value: "all", label: "All products" },
-                { value: "active", label: "Active" },
-                { value: "archived", label: "Archived" },
-              ]}
-            />
-          </div>
         </div>
         <div className="arc-theme console-product-table">
           <SortableDataTable
+            toolbar={
+              <>
+                <label htmlFor="product-filter" className="grid gap-2 text-sm font-medium">
+                  Filter products
+                  <Input
+                    id="product-filter"
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Name or product ID"
+                  />
+                </label>
+                <Choice
+                  label="Product status"
+                  value={status}
+                  onChange={setStatus}
+                  options={[
+                    { value: "all", label: "All products" },
+                    { value: "active", label: "Active" },
+                    { value: "archived", label: "Archived" },
+                  ]}
+                />
+              </>
+            }
             rows={rows}
             columns={columns}
             rowKey="id"

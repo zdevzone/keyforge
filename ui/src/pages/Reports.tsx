@@ -163,7 +163,7 @@ export default function Reports() {
       </div>
       <Card className="report-controls p-5">
         <form
-          className="flex flex-wrap items-end gap-4"
+          className="table-toolbar"
           onSubmit={(event) => {
             event.preventDefault();
             if (!invalid) {

@@ -3,7 +3,7 @@ import { CheckCheck } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { fetchAdminConfig, productPath, request } from "../api";
+import { fetchAdminConfig, request } from "../api";
 import {
   Card,
   Table,
@@ -21,16 +21,20 @@ import { ActionButton } from "../components/ActionButton";
 import { Choice } from "../components/Choice";
 import { ListPagination, useListPage } from "../components/ListPagination";
 import IssueLicense from "../IssueLicense";
+import { useProduct } from "../platform-ui";
 
 export default function LicenseRequests() {
+  const product = useProduct();
   const config = useQuery({ queryKey: ["admin-config"], queryFn: fetchAdminConfig });
   const query = useQuery({
-    queryKey: ["license-requests"],
-    queryFn: () => request<any>(productPath("/license-requests")),
+    queryKey: ["license-requests", product.id],
+    queryFn: () =>
+      request<any>("/admin/products/" + encodeURIComponent(product.id) + "/license-requests"),
+    enabled: !product.isPending,
     refetchInterval: 30000,
   });
   const [search, setSearch] = useState(""),
-    [filter, setFilter] = useState("requested"),
+    [filter, setFilter] = useState("all"),
     [issuing, setIssuing] = useState<string | null>(null),
     [copied, setCopied] = useState(false);
   const rows = (query.data?.requests ?? []).filter(
@@ -38,7 +42,7 @@ export default function LicenseRequests() {
       (filter === "all" || v.status === filter) &&
       (v.name + " " + v.email).toLowerCase().includes(search.toLowerCase()),
   );
-  const page = useListPage<any>(rows, search + filter);
+  const page = useListPage<any>(rows, search + filter + product.id);
   if (query.isPending) return <Spinner />;
   if (query.error) return <ErrorNote message={query.error.message} />;
   return (
@@ -67,7 +71,13 @@ export default function LicenseRequests() {
         Back to licenses
       </Link>
       <Card>
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="table-toolbar p-5">
+          <Choice
+            label="Product"
+            value={product.id}
+            onChange={product.select}
+            options={product.products.map((p) => ({ value: p.id, label: p.name }))}
+          />
           <TextField label="Find request" value={search} onChange={setSearch} />
           <Choice
             label="Request status"
@@ -120,7 +130,11 @@ export default function LicenseRequests() {
               ))}
               {!rows.length && (
                 <TableRow>
-                  <TableCell colSpan={5}>No requests match this filter.</TableCell>
+                  <TableCell colSpan={5}>
+                    {query.data?.requests?.length
+                      ? "No requests match this filter."
+                      : "No requests saved for this product. Choose another product above, or share this deployment’s public request link."}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -128,7 +142,15 @@ export default function LicenseRequests() {
         </div>
         <ListPagination {...page} />
       </Card>
-      {issuing && <IssueLicense initialRequestId={issuing} onClose={() => setIssuing(null)} />}
+      {issuing && (
+        <IssueLicense
+          initialRequestId={issuing}
+          onClose={() => {
+            setIssuing(null);
+            void query.refetch();
+          }}
+        />
+      )}
     </div>
   );
 }

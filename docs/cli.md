@@ -6,7 +6,7 @@ Set `LICENSE_SERVER_URL` and `LICENSE_ADMIN_TOKEN` for API commands. Use `--prod
 
 | Command | Purpose |
 | --- | --- |
-| `vp run license keygen` | Generate startup Ed25519 keys; private path follows LICENSE_SIGNING_KEY_FILE. --force overwrites and can invalidate client trust. |
+| `vp run license keygen` | Generate startup Ed25519 keys under secrets/ (or LICENSE_SIGNING_KEY_FILE) and save the path to .env.local. Existing setup asks [Y/n]; --yes confirms automation. --force permits explicit key replacement and can invalidate client trust. |
 | `vp run license keycheck` | Check configured private key, public fingerprint; --expect PEM/file, --token token, --server compare deployment. |
 | `vp run license issue` | Issue from --plan ID with --to name, optional --installation ID or --subject installation/service, and a stable --request-id UUID. Add --paid --method METHOD --reference ID to record full payment. Terms come from the saved plan. |
 | `vp run license list` | First page of selected product licenses. |
@@ -20,7 +20,7 @@ Set `LICENSE_SERVER_URL` and `LICENSE_ADMIN_TOKEN` for API commands. Use `--prod
 | `vp run db mirror` | Copy the configured active ledger to --to file/URL. |
 | `vp run db verify` | Compare --from and --to engine-neutral row contents. |
 | `vp run admin:create` | Create an operator with --email and --password; --name and --role admin/support are optional. |
-| `vp run secrets:init` | Generate independent data and backup encryption rings without overwriting existing files. |
+| `vp run secrets:init` | Initialize missing signing, data/backup encryption, admin, auth and cron secrets; save references/values to .env.local. Existing setup asks [Y/n]; --yes is explicit automation consent. Existing secrets are retained. |
 | `vp run backup:restore` | Explicit maintenance-only restore of an encrypted archive; see backups guide. |
 
 ```sh

@@ -1774,6 +1774,52 @@ body {
 .console-choice {
   min-width: 0;
   gap: 8px;
+  width: fit-content;
+  max-width: min(100%, 28rem);
+  flex: 0 1 auto;
+  align-self: start;
+}
+.console-choice [data-slot="select-trigger"],
+.console-choice [role="combobox"] {
+  width: auto;
+  min-width: 10rem;
+  max-width: 100%;
+}
+.console-text-field {
+  width: min(100%, 28rem);
+  flex: 0 1 auto;
+  align-self: start;
+}
+.console-number-field {
+  width: min(100%, 12rem);
+}
+.console-content form [data-slot="input"] {
+  max-width: 28rem;
+}
+.console-content form [data-slot="textarea"] {
+  max-width: 72ch;
+}
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+}
+.table-toolbar > [data-slot="input"] {
+  width: min(100%, 28rem);
+}
+.table-toolbar [data-slot="field"] {
+  width: fit-content;
+  max-width: 100%;
+}
+.console-date {
+  width: fit-content;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+.console-date [data-slot="button"] {
+  width: auto;
+  min-width: 11rem;
 }
 .console-global-command {
   flex: 1;
@@ -1870,10 +1916,14 @@ body {
 }
 .data-grid-tools {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: end;
+  flex-wrap: wrap;
   gap: 16px;
   padding-block: 12px;
+}
+.data-grid-tools > .text-xs {
+  margin-left: auto;
+  align-self: center;
 }
 .data-grid [data-slot="table-container"] {
   border: 1px solid var(--border);

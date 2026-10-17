@@ -164,7 +164,7 @@ export function registerSystemReset(
               );
             // Configuration lookup uses the main connection, before the reset
             // transaction reserves it (SQLite has a single Kysely connection).
-            await backups.preflight(backups.options.defaultDestination ?? "local");
+            await backups.preflight(await backups.defaultDestination());
           }
           return await atomic(platform.options.database, async (records) => {
             const prior = await records.get<ResetReceipt>(
@@ -195,7 +195,7 @@ export function registerSystemReset(
                   "Enable backups before requesting a reset backup.",
                   503,
                 );
-              backup = await backups.verifiedResetBackup(false);
+              backup = await backups.verifiedResetBackup(false, records);
             }
             await clearApplicationRows(platform.options.database, records, owned, admin.id);
             await platform.bootstrap(records);

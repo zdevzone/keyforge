@@ -18,7 +18,7 @@ Fastify, TypeScript, Better Auth, SQLite/Postgres; React, TanStack Query,
 Tailwind and generated shadcn components.
 
 ## Constraints
-No hosted account required. Secrets remain outside GUI-managed policy.
+No hosted account required. Signing, authentication and encryption keys remain outside GUI-managed policy. Backup-provider credentials are editable by admins and encrypted in the database.
 The public `/welcome` page presents the MIT source download and links to this
 deployment's operator sign-in. Optional Windows, Linux and macOS signals help recognize reported
 machine groups; they do not prove physical-device counts or replace installation identity.

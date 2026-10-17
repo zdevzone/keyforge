@@ -37,7 +37,7 @@ vercel integration add neon --name keyforge-production --plan free_v3 --metadata
 vercel blob create-store keyforge-production-backups --access private --region iad1 --yes --environment production
 ```
 
-Accept provider terms yourself and confirm free-plan availability. Reuse existing resources instead of rerunning provisioning. Neon supplies `DATABASE_URL`; Blob supplies `BLOB_READ_WRITE_TOKEN`. Create separate databases such as `keyforge_staging_verify` and `keyforge_production_verify` on their respective resources; set their direct URLs as each environment's `LICENSE_BACKUP_VERIFY_DATABASE_URL`. Runtime verification does not require database-creation permission. After connecting Preview resources, scope their generated variables to `dev` too.
+Accept provider terms yourself and confirm free-plan availability. Reuse existing resources instead of rerunning provisioning. Neon supplies `DATABASE_URL`; Blob supplies `BLOB_READ_WRITE_TOKEN` for the first encrypted database import. After deploying, test storage and verify an archive in Settings → Backups; remove the token environment variable and redeploy once both pass. Subsequent storage changes happen in Settings. Create separate databases such as `keyforge_staging_verify` and `keyforge_production_verify` on their respective resources; set their direct URLs as each environment's `LICENSE_BACKUP_VERIFY_DATABASE_URL`. Runtime verification does not require database-creation permission. After connecting Preview resources, scope their generated variables to `dev` too.
 
 Set these **server-only** variables independently in each environment. The table describes Preview; Production uses its own values:
 
@@ -45,7 +45,7 @@ Set these **server-only** variables independently in each environment. The table
 | --- | --- |
 | `DATABASE_URL` | Dedicated staging PostgreSQL, preferably pooled. |
 | `LICENSE_BACKUP_VERIFY_DATABASE_URL` | Separate initialized verification database, with a different name. |
-| `BLOB_READ_WRITE_TOKEN` | Private staging archive store with upload/read/delete access. |
+| `BLOB_READ_WRITE_TOKEN` | Optional one-time import of private storage credentials; manage them in Settings → Backups afterward. |
 | `LICENSE_SIGNING_KEY` | Independent staging Ed25519 private PEM. |
 | `LICENSE_AUTH_SECRET` | Independent random session secret; at least 32 bytes recommended. |
 | `LICENSE_DATA_KEYRING` | Staging JSON encryption ring. |
