@@ -52,6 +52,17 @@ import {
  */
 
 const run = promisify(execFile);
+test("the documented startup policy example loads independently of a live configuration", () => {
+  const path = fileURLToPath(
+    new URL("../docs/examples/keyforge.config.example.json", import.meta.url),
+  );
+  const example = loadConfig(path);
+  assert.equal(example.branding.name, "Acme Licensing");
+  assert.equal(example.key.prefix, "ACME");
+  assert.ok(example.licenses.planPresets.standard);
+  assert.deepEqual(example.signingKeys.retired, []);
+});
+
 test("local templates exclude environment variants and Vercel project credentials", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "kf-template-privacy-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -284,7 +295,15 @@ test("scaffolds a working project from a local template", async (t) => {
     assert.equal(existsSync(join(directory, gone)), false, `${gone} should not be scaffolded`);
   }
   // ...and the ones the deployer still needs.
-  for (const kept of ["src", "ui", "test", "LICENSE", "Dockerfile", "docs/keyforge.md"]) {
+  for (const kept of [
+    "src",
+    "ui",
+    "test",
+    "LICENSE",
+    "Dockerfile",
+    "docs/keyforge.md",
+    "docs/examples/keyforge.config.example.json",
+  ]) {
     assert.ok(existsSync(join(directory, kept)), `${kept} should be scaffolded`);
   }
   const readme = await readFile(join(directory, "README.md"), "utf8");
