@@ -10,6 +10,7 @@ const sources = import.meta.glob<string>(
     "../../../docs/getting-started.md",
     "../../../docs/configuration.md",
     "../../../docs/deploy.md",
+    "../../../docs/vercel.md",
     "../../../docs/cpanel-guide.md",
     "../../../docs/backups.md",
     "../../../docs/database.md",

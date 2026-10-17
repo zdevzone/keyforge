@@ -77,6 +77,7 @@ const SKIP_COPY = new Set([
   ".env.local",
   "ui/node_modules",
   "ui/dist",
+  ".vercel",
 ]);
 
 /**
@@ -139,6 +140,7 @@ async function copyDirectory(from, to) {
       return (
         !SKIP_COPY.has(head) &&
         !SKIP_COPY.has(relative) &&
+        !(head.startsWith(".env.") && head !== ".env.example") &&
         !/\.(?:key|pem|keyring\.json)$/i.test(relative)
       );
     },

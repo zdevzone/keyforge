@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 
 import SQLite from "better-sqlite3";
@@ -20,11 +21,21 @@ import {
 import { createPostgresPool } from "./database.js";
 import { atomic, DomainError, Vault, type KeyRing, type RecordValue } from "./platform-store.js";
 import { WORKSPACE, type Platform } from "./platform.js";
+import {
+  capturePostgresSnapshot,
+  parsePostgresSnapshot,
+  restorePostgresSnapshot,
+} from "./postgres-archive.js";
 import { postgresCliConnection } from "./postgres-cli.js";
 
 const execute = promisify(execFile);
 const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 export interface BackupOptions extends StorageOptions {
+  portablePostgres?: boolean;
+  defaultDestination?: string;
+  /** Hosted invocations keep this work alive until completion. */
+  background?: (work: Promise<void>) => void;
+  cronSecret?: string;
   enabled?: boolean;
   authDbPath?: string;
   directory?: string;
@@ -72,7 +83,7 @@ export const backupScheduleSchema = z
   })
   .strict();
 interface Archive {
-  version: 1;
+  version: 1 | 2;
   engine: "sqlite" | "postgres";
   capturedAt: string;
   files: { name: string; checksum: string; capturedAt: string; data: string }[];
@@ -120,17 +131,18 @@ export class BackupService {
           "Postgres connection is unavailable.",
           503,
         );
-      try {
-        await execute("pg_dump", ["--version"], { windowsHide: true, timeout: 15000 });
-      } catch {
-        throw new DomainError(
-          "backup_tool_unavailable",
-          "Install pg_dump on the server to create Postgres backups.",
-          503,
-        );
-      }
+      if (!this.options.portablePostgres)
+        try {
+          await execute("pg_dump", ["--version"], { windowsHide: true, timeout: 15000 });
+        } catch {
+          throw new DomainError(
+            "backup_tool_unavailable",
+            "Install pg_dump on the server to create Postgres backups.",
+            503,
+          );
+        }
     }
-    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    if (!this.options.remoteOnly) await mkdir(this.directory, { recursive: true, mode: 0o700 });
   }
   async migrateSchedules() {
     await atomic(this.platform.options.database, async (r) => {
@@ -235,6 +247,22 @@ export class BackupService {
     return bytes;
   }
   async capture(isolatedSqlite = false): Promise<Archive> {
+    if (this.options.portablePostgres && this.platform.options.database.engine === "postgres") {
+      const bytes = await capturePostgresSnapshot(this.options.databaseUrl!);
+      return {
+        version: 2,
+        engine: "postgres",
+        capturedAt: this.platform.time(),
+        files: [
+          {
+            name: "database.json",
+            checksum: digest(bytes),
+            capturedAt: this.platform.time(),
+            data: bytes.toString("base64"),
+          },
+        ],
+      };
+    }
     const temp = await mkdtemp(join(tmpdir(), "keyforge-backup-"));
     try {
       const files: Archive["files"] = [];
@@ -371,12 +399,12 @@ export class BackupService {
       await this.preflight(job.destination);
       const archive = await this.capture();
       const bytes = Buffer.from(this.vault.encrypt(JSON.stringify(archive), "backup:" + job.id));
-      await writeFile(this.path(job.id), bytes, { mode: 0o600 });
+      if (!this.options.remoteOnly) await writeFile(this.path(job.id), bytes, { mode: 0o600 });
       updated = {
         ...updated,
         size: bytes.length,
         checksum: digest(bytes),
-        cacheAvailable: true,
+        cacheAvailable: !this.options.remoteOnly,
         phase: "upload",
       };
       // Preserve a downloadable archive and progress even if the remote upload fails.
@@ -484,12 +512,23 @@ export class BackupService {
     const archive = JSON.parse(this.vault.decrypt(bytes.toString(), "backup:" + job.id)) as Archive;
     const temp = await mkdtemp(join(tmpdir(), "keyforge-verify-"));
     try {
-      if (archive.version !== 1 || archive.engine !== job.engine)
+      if (
+        ![1, 2].includes(archive.version) ||
+        archive.engine !== job.engine ||
+        (archive.version === 2 && archive.engine !== "postgres")
+      )
         throw new DomainError("backup_corrupt", "Unsupported archive manifest.");
       if (!Array.isArray(archive.files) || archive.files.length !== 1)
         throw new DomainError("backup_corrupt", "Archive must contain one database.");
       for (const file of archive.files) {
-        if (file.name !== (archive.engine === "sqlite" ? "database.sqlite" : "database.dump"))
+        if (
+          file.name !==
+          (archive.engine === "sqlite"
+            ? "database.sqlite"
+            : archive.version === 2
+              ? "database.json"
+              : "database.dump")
+        )
           throw new DomainError("backup_corrupt", "Invalid archive filename.");
         const data = Buffer.from(file.data, "base64");
         if (digest(data) !== file.checksum)
@@ -506,6 +545,18 @@ export class BackupService {
           } finally {
             db.close();
           }
+        } else if (archive.version === 2) {
+          parsePostgresSnapshot(data);
+          if (
+            !this.options.verificationUrl ||
+            samePostgresDatabase(this.options.verificationUrl, this.options.databaseUrl!)
+          )
+            throw new DomainError(
+              "verification_unconfigured",
+              "Configure an independent verification database initialized with this KeyForge release.",
+              503,
+            );
+          await restorePostgresSnapshot(this.options.verificationUrl, data);
         } else await this.verifyPostgres(join(temp, file.name));
       }
       const verified = { ...job, verifiedAt: this.platform.time() };
@@ -517,7 +568,8 @@ export class BackupService {
     }
   }
   async verifiedResetBackup(preflight = true): Promise<BackupJob> {
-    if (preflight) await this.preflight("local");
+    const destination = this.options.defaultDestination ?? "local";
+    if (preflight) await this.preflight(destination);
     const job: BackupJob = {
       id: randomUUID(),
       status: "completed",
@@ -525,14 +577,19 @@ export class BackupService {
       createdAt: this.platform.time(),
       completedAt: this.platform.time(),
       engine: this.platform.options.database.engine,
-      destination: "local",
+      destination,
       destinationName: "Before application reset",
-      cacheAvailable: true,
+      cacheAvailable: !this.options.remoteOnly,
     };
     try {
       const archive = await this.capture(true);
       const bytes = Buffer.from(this.vault.encrypt(JSON.stringify(archive), "backup:" + job.id));
-      await writeFile(this.path(job.id), bytes, { mode: 0o600 });
+      if (!this.options.remoteOnly) await writeFile(this.path(job.id), bytes, { mode: 0o600 });
+      if (destination !== "local") {
+        job.remoteFile = await (await this.destinations.driver(destination)).upload(job.id, bytes);
+        if (!job.remoteFile)
+          throw new Error("Reset backup requires a downloadable remote archive.");
+      }
       job.size = bytes.length;
       job.checksum = digest(bytes);
       return await this.verify(job, false);
@@ -630,7 +687,10 @@ export async function registerBackups(
   await service.migrateSchedules();
   const publicJob = ({ destinationConfig: _config, remoteFile: _remote, ...job }: BackupJob) => ({
     ...job,
-    canDownload: !job.pruned && Boolean(job.checksum || job.status === "completed"),
+    canDownload:
+      !job.pruned &&
+      Boolean(job.checksum || job.status === "completed") &&
+      (!options.remoteOnly || Boolean(_remote)),
   });
   app.get(
     "/admin/backups",
@@ -653,6 +713,11 @@ export async function registerBackups(
         engine: platform.options.database.engine,
         authSnapshotAvailable: Boolean(options.authDbPath),
         workerError: service.workerError,
+        remoteOnly: Boolean(options.remoteOnly),
+        defaultDestination: options.defaultDestination ?? "local",
+        scheduleNotice: options.background
+          ? "Automatic backups are checked daily around 05:00 UTC. A saved time is the earliest a backup can run. Manual backups start immediately."
+          : null,
       };
     }),
   );
@@ -660,7 +725,13 @@ export async function registerBackups(
     "/admin/backups",
     handler(async (req, reply) => {
       const input = z
-        .object({ destination: z.string().min(1).max(100).default("local") })
+        .object({
+          destination: z
+            .string()
+            .min(1)
+            .max(100)
+            .default(options.defaultDestination ?? "local"),
+        })
         .strict()
         .parse(req.body);
       const job = await service.enqueue(input.destination);
@@ -668,7 +739,7 @@ export async function registerBackups(
         jobId: job.id,
         destination: job.destination,
       });
-      void tick();
+      startTick();
       return reply.code(202).send({ job: publicJob(job) });
     }),
   );
@@ -759,10 +830,23 @@ export async function registerBackups(
       if (!job) throw new DomainError("unknown_backup", "No such backup.", 404);
       const bytes = await service.bytes(job);
       await platform.audit(req.actor, "backup.download", "default", { jobId: job.id });
-      return reply
-        .type("application/octet-stream")
-        .header("Content-Disposition", 'attachment; filename="' + job.id + '.kfbackup"')
-        .send(bytes);
+      return (
+        reply
+          .type("application/octet-stream")
+          .header("Content-Disposition", 'attachment; filename="' + job.id + '.kfbackup"')
+          // Streaming avoids Vercel's buffered response size limit while the
+          // archive itself remains checksum-checked and bounded in memory.
+          .send(
+            options.remoteOnly
+              ? Readable.from(
+                  (function* () {
+                    for (let offset = 0; offset < bytes.length; offset += 64 * 1024)
+                      yield bytes.subarray(offset, offset + 64 * 1024);
+                  })(),
+                )
+              : bytes,
+          )
+      );
     }),
   );
   app.post(
@@ -820,17 +904,47 @@ export async function registerBackups(
           .finally(() => {
             running = null;
           }));
-  const timer = setInterval(() => {
-    if (options.enabled) void tick();
-  }, 30000);
-  timer.unref();
+  function startTick() {
+    const work = tick();
+    if (options.background) options.background(work);
+    else void work;
+  }
+  if (options.background)
+    app.get("/api/internal/backups/tick", async (req, reply) => {
+      if (!options.cronSecret || !constantTimeBearer(req.headers.authorization, options.cronSecret))
+        return reply.code(401).send({ error: "unauthorized" });
+      if (!options.enabled) return reply.code(404).send({ error: "backups_disabled" });
+      await tick();
+      if (service.workerError) return reply.code(503).send({ error: "backup_worker_failed" });
+      return { ok: true };
+    });
+  const timer = options.background
+    ? undefined
+    : setInterval(() => {
+        if (options.enabled) void tick();
+      }, 30000);
+  timer?.unref();
   app.addHook("preClose", async () => {
     stopping = true;
-    clearInterval(timer);
+    if (timer) clearInterval(timer);
     await running;
   });
   app.addHook("onClose", async () => {
     service.destinations.close();
   });
   return service;
+}
+
+function samePostgresDatabase(left: string, right: string) {
+  const a = new URL(left),
+    b = new URL(right);
+  return (
+    // Verification is deliberately a differently named database, including
+    // when pooled/direct URLs or DNS aliases point to the same cluster.
+    decodeURIComponent(a.pathname) === decodeURIComponent(b.pathname)
+  );
+}
+function constantTimeBearer(value: string | undefined, secret: string) {
+  const hash = (text: string) => createHash("sha256").update(text).digest();
+  return timingSafeEqual(hash(value ?? ""), hash("Bearer " + secret));
 }

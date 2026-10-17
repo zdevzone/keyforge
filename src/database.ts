@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 
+import { attachDatabasePool } from "@vercel/functions";
 import SQLite from "better-sqlite3";
 import { Kysely, PostgresDialect, SqliteDialect, sql } from "kysely";
 import pg from "pg";
@@ -163,6 +164,7 @@ function safeParseUrl(url: string): URL | null {
  */
 export function createPostgresPool(url: string, env: NodeJS.ProcessEnv = process.env): pg.Pool {
   const pool = new pg.Pool(resolvePostgresOptions(url, env));
+  if (env.VERCEL === "1") attachDatabasePool(pool);
   pool.on("error", (error) => {
     console.warn(`[license-server] idle Postgres client dropped: ${error.message}`);
   });

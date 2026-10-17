@@ -17,6 +17,7 @@ import { promisify } from "node:util";
 import SQLite from "better-sqlite3";
 
 import { Vault } from "../dist/src/platform-store.js";
+import { parsePostgresSnapshot, restorePostgresSnapshot } from "../dist/src/postgres-archive.js";
 import { postgresCliConnection } from "../dist/src/postgres-cli.js";
 import { loadKeyRing } from "../dist/src/secrets.js";
 import { requireOffline } from "./maintenance-common.mjs";
@@ -48,9 +49,13 @@ export async function restore() {
   const archive = JSON.parse(
     new Vault(loadKeyRing("LICENSE_BACKUP_KEYRING")).decrypt(bytes.toString(), "backup:" + job),
   );
-  const names = archive.engine === "sqlite" ? ["database.sqlite"] : ["database.dump"];
+  const names =
+    archive.engine === "sqlite"
+      ? ["database.sqlite"]
+      : [archive.version === 2 ? "database.json" : "database.dump"];
   if (
-    archive.version !== 1 ||
+    ![1, 2].includes(archive.version) ||
+    (archive.version === 2 && archive.engine !== "postgres") ||
     !["sqlite", "postgres"].includes(archive.engine) ||
     !Array.isArray(archive.files) ||
     !archive.files.length ||
@@ -64,6 +69,7 @@ export async function restore() {
       if (!names.includes(file.name)) throw new Error("Unexpected archive file.");
       const data = Buffer.from(file.data, "base64");
       if (digest(data) !== file.checksum) throw new Error("Snapshot checksum mismatch.");
+      if (archive.version === 2) parsePostgresSnapshot(data);
       await writeFile(join(temp, file.name), data, { mode: 0o600 });
       if (archive.engine === "sqlite") {
         const db = new SQLite(join(temp, file.name), { readonly: true });
@@ -83,27 +89,37 @@ export async function restore() {
         throw new Error(
           "Postgres requires an explicit --database target and --replace. Take a target backup first.",
         );
-      const connection = postgresCliConnection(flag("database"));
-      await execute(
-        "pg_restore",
-        [
-          "--no-password",
-          "--exit-on-error",
-          "--single-transaction",
-          "--clean",
-          "--if-exists",
-          "--no-owner",
-          "--no-acl",
-          "--dbname",
-          connection.database,
-          join(temp, "database.dump"),
-        ],
-        {
-          windowsHide: true,
-          timeout: 300000,
-          env: connection.env,
-        },
-      );
+      if (archive.version === 2) {
+        // The exact release's migrations and auth schema must already exist.
+        // Restore is transactional, preserves IDs and sessions, and checks rows.
+        await restorePostgresSnapshot(
+          flag("database"),
+          await readFile(join(temp, "database.json")),
+          true,
+        );
+      } else {
+        const connection = postgresCliConnection(flag("database"));
+        await execute(
+          "pg_restore",
+          [
+            "--no-password",
+            "--exit-on-error",
+            "--single-transaction",
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-acl",
+            "--dbname",
+            connection.database,
+            join(temp, "database.dump"),
+          ],
+          {
+            windowsHide: true,
+            timeout: 300000,
+            env: connection.env,
+          },
+        );
+      }
     } else {
       const target = flag("sqlite");
       if (!target) throw new Error("Specify the SQLite target with --sqlite <file>.");

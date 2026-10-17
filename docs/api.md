@@ -1,5 +1,7 @@
 # API reference
 
+Vercel-only internal worker: `GET /api/internal/backups/tick` requires `Authorization: Bearer CRON_SECRET`; it is not a dependent-app API. It returns `unauthorized` (401) when the credential is absent or incorrect, and `backup_worker_failed` (503) when processing cannot complete. See [Vercel staging](vercel.md) for scheduling and isolation.
+
 For dependent apps, use the [client OpenAPI document](client-openapi.json) and [TypeScript SDK guide](../packages/keyforge-client/README.md). The machine-readable contract covers current public routes and explicitly separates installation, private-request and trusted-backend credentials. Its request/response examples are exercised against the server by `test/client-sdk.test.ts`; regenerate with `vp run docs:client-api`.
 
 This is the fresh product-scoped contract. Legacy unscoped routes are removed. License tokens are v4; trial tokens are v2. All timestamps are ISO 8601. API responses are non-cacheable.

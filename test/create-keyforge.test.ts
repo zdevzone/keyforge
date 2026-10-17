@@ -36,7 +36,7 @@ import {
   platformFiles,
   platformKeeps,
 } from "../packages/create-keyforge/src/platforms.mjs";
-import { resolveTemplate } from "../packages/create-keyforge/src/template.mjs";
+import { resolveTemplate, materializeTemplate } from "../packages/create-keyforge/src/template.mjs";
 import { runtimeConfig } from "../packages/create-keyforge/src/toolchain.mjs";
 import { configSchema, loadConfig } from "../src/config.js";
 import {
@@ -52,6 +52,20 @@ import {
  */
 
 const run = promisify(execFile);
+test("local templates exclude environment variants and Vercel project credentials", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kf-template-privacy-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, "source"),
+    target = join(root, "target");
+  await mkdir(join(source, ".vercel"), { recursive: true });
+  await writeFile(join(source, ".env.vercel-staging.local"), "PRIVATE_TEST_SENTINEL");
+  await writeFile(join(source, ".env.example"), "# Public example");
+  await writeFile(join(source, ".vercel", "project.json"), "PRIVATE_TEST_SENTINEL");
+  await materializeTemplate({ kind: "directory", path: source, label: source }, target);
+  assert.equal(existsSync(join(target, ".env.vercel-staging.local")), false);
+  assert.equal(existsSync(join(target, ".vercel")), false);
+  assert.equal(existsSync(join(target, ".env.example")), true);
+});
 async function matchingFiles(pattern: string, directories: string[]): Promise<string[]> {
   const regex = new RegExp(pattern);
   const result: string[] = [];
