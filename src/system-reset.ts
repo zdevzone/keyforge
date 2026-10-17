@@ -128,7 +128,9 @@ export function registerSystemReset(
         backupAvailable: Boolean(backups.options.enabled && backups.options.keyring),
         backupRequirement:
           platform.options.database.engine === "postgres"
-            ? "Encrypted archive verification requires pg_dump, pg_restore and a separate LICENSE_BACKUP_VERIFY_DATABASE_URL with temporary-database permission."
+            ? backups.options.portablePostgres
+              ? "An encrypted external archive is restored and checked in a separate, initialized verification database before any reset."
+              : "Encrypted archive verification requires pg_dump, pg_restore and a separate LICENSE_BACKUP_VERIFY_DATABASE_URL with temporary-database permission."
             : "An encrypted archive requires LICENSE_BACKUP_KEYRING and enabled backups.",
       };
     }),
@@ -162,7 +164,7 @@ export function registerSystemReset(
               );
             // Configuration lookup uses the main connection, before the reset
             // transaction reserves it (SQLite has a single Kysely connection).
-            await backups.preflight("local");
+            await backups.preflight(backups.options.defaultDestination ?? "local");
           }
           return await atomic(platform.options.database, async (records) => {
             const prior = await records.get<ResetReceipt>(

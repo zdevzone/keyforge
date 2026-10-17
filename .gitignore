@@ -19,3 +19,5 @@ backups/
 .impeccable/review/
 # One authoritative pnpm-lock.yaml is tracked for Vite+ and all workspaces.
 package-lock.json
+
+.vercel

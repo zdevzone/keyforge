@@ -61,6 +61,9 @@ interface BackupState {
   engine: string;
   authSnapshotAvailable: boolean;
   workerError?: string;
+  remoteOnly?: boolean;
+  defaultDestination?: string;
+  scheduleNotice?: string | null;
 }
 
 export default function Backups({ embedded = false }: { embedded?: boolean }) {
@@ -97,7 +100,7 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
   async function createLocalDownload() {
     const result = await request<{ job: Job }>("/admin/backups", {
       method: "POST",
-      body: { destination: "local" },
+      body: { destination: data.defaultDestination ?? "local" },
     });
     setManualJob(result.job.id);
   }
@@ -112,6 +115,9 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
         </p>
       </div>
       {data.workerError && <ErrorNote message={data.workerError} />}
+      {data.scheduleNotice && (
+        <p className="text-sm text-muted-foreground">{data.scheduleNotice}</p>
+      )}
       <Card className="p-6">
         <h2 className="font-semibold">Manual download</h2>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
@@ -157,7 +163,7 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
               Provider credentials are detected on the server. Access is checked when a backup runs.
             </p>
           </div>
-          <Button variant="secondary" onClick={() => setEditing("new")}>
+          <Button variant="secondary" disabled={data.remoteOnly} onClick={() => setEditing("new")}>
             Add upload endpoint
           </Button>
         </div>
@@ -189,8 +195,9 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
           <div>
             <h2 className="font-semibold">Backup history</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              An encrypted local copy is retained for downloads, including when a remote upload
-              fails.
+              {data.remoteOnly
+                ? "Encrypted archives are stored externally. Downloads and verification require a successful upload."
+                : "An encrypted local copy is retained for downloads, including when a remote upload fails."}
             </p>
           </div>
           <Select
@@ -354,6 +361,7 @@ function DestinationPanel({
   const action = useAction(refresh);
   const timeParts = time.split(":").map(Number);
   const settingNames: Record<string, string> = {
+    blob: "BLOB_READ_WRITE_TOKEN from a private Vercel Blob store",
     s3: "LICENSE_BACKUP_S3_BUCKET and AWS credentials (or dedicated backup S3 keys)",
     r2: "LICENSE_BACKUP_R2_BUCKET, account ID or endpoint, and R2 S3 access keys",
     uploadthing: "LICENSE_BACKUP_UPLOADTHING_TOKEN or UPLOADTHING_TOKEN",

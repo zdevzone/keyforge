@@ -37,6 +37,8 @@ import { z } from "zod";
 const nonEmpty = z.string().min(1);
 
 export const envSchema = {
+  BLOB_READ_WRITE_TOKEN: nonEmpty.optional(),
+  CRON_SECRET: z.string().min(32).optional(),
   LICENSE_DATA_KEYRING: nonEmpty.optional(),
   LICENSE_DATA_KEYRING_FILE: nonEmpty.optional(),
   LICENSE_BACKUP_KEYRING: nonEmpty.optional(),
@@ -151,7 +153,10 @@ export function parseEnv(runtimeEnv: Record<string, string | undefined> = proces
     server: envSchema,
     runtimeEnv: {
       ...runtimeEnv,
-      LICENSE_SERVER_URL: runtimeEnv.LICENSE_SERVER_URL || runtimeEnv.RENDER_EXTERNAL_URL,
+      LICENSE_SERVER_URL:
+        runtimeEnv.LICENSE_SERVER_URL ||
+        runtimeEnv.RENDER_EXTERNAL_URL ||
+        (runtimeEnv.VERCEL_URL ? `https://${runtimeEnv.VERCEL_URL}` : undefined),
     },
     emptyStringAsUndefined: true,
     onValidationError: (issues) => {
