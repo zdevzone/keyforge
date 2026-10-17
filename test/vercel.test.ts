@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import Fastify from "fastify";
@@ -19,6 +20,16 @@ import {
 } from "../src/postgres-archive.js";
 import { generateSigningKeyPair } from "../src/sign.js";
 import { validateVercelEnvironment } from "../src/vercel-config.js";
+
+test("Vercel package configuration includes runtime assets and keeps staging deployment manual", () => {
+  const config = JSON.parse(readFileSync("vercel.json", "utf8"));
+  const fn = config.functions["api/index.mjs"];
+  assert.equal(typeof fn.includeFiles, "string", "Vercel requires one glob string, not an array");
+  assert.ok(fn.includeFiles.includes("dist/src/**") && fn.includeFiles.includes("dist/public/**"));
+  assert.equal(fn.maxDuration, 300);
+  assert.equal(config.git.deploymentEnabled, false);
+  assert.deepEqual(config.crons, [{ path: "/api/internal/backups/tick", schedule: "0 5 * * *" }]);
+});
 
 test("Vercel uses an explicit public URL first and refuses ephemeral or unencrypted setup", () => {
   assert.equal(
