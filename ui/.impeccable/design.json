@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-17T17:40:01.963Z",
+  "generatedAt": "2026-10-17T18:06:56.965Z",
   "title": "Design System: Keyforge Console — Polaris",
   "extensions": {
     "colorMeta": {
@@ -1210,7 +1210,7 @@
       "refersTo": "input",
       "description": "Labels stay above bounded controls; focus uses one continuous 2px stroke without a second ring.",
       "html": "<label class=\"ds-field\">Customer<input class=\"ds-input\" placeholder=\"Customer name\" /></label>",
-      "css": ".ds-field{font-family:var(--font-sans);display:grid;gap:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-input{font-family:var(--font-sans);min-height:40px;border:1px solid var(--input);border-radius:var(--radius);padding:4px 12px;background:var(--card);color:var(--foreground);font-size:14px}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:focus-visible{outline:2px solid var(--ring);outline-offset:-1px;border-color:var(--ring);box-shadow:none}.ds-input:disabled{opacity:.5;cursor:not-allowed}@media(max-width:767px){.ds-input{font-size:16px}}"
+      "css": ".ds-field{font-family:var(--font-sans);display:grid;gap:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-input{font-family:var(--font-sans);min-height:40px;border:1px solid var(--input);border-radius:var(--radius);padding:4px 12px;background:var(--card);color:var(--foreground);font-size:14px;font-weight:400}.ds-input::placeholder{color:var(--muted-foreground)}.ds-input:focus-visible{outline:2px solid var(--ring);outline-offset:-1px;border-color:var(--ring);box-shadow:none}.ds-input:disabled{opacity:.5;cursor:not-allowed}@media(max-width:767px){.ds-input{font-size:16px}}"
     },
     {
       "name": "Active navigation",
@@ -1242,7 +1242,7 @@
       "refersTo": "input",
       "description": "Choice uses short Select lists or a Command/Popover catalog; values remain supplied options.",
       "html": "<label class=\"ds-choice-label\" for=\"ds-choice\">Product</label><button id=\"ds-choice\" class=\"ds-choice\" type=\"button\" role=\"combobox\" aria-expanded=\"false\"><span>Keyforge</span><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
-      "css": ".ds-choice-label{font-family:var(--font-sans);display:block;margin-bottom:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-choice{font-family:var(--font-sans);display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-size:14px;cursor:pointer}.ds-choice:hover{background:var(--muted)}.ds-choice:focus-visible{outline:2px solid var(--ring);outline-offset:-1px}.ds-choice:disabled{opacity:.5;cursor:not-allowed}"
+      "css": ".ds-choice-label{font-family:var(--font-sans);display:block;margin-bottom:8px;color:var(--foreground);font-size:14px;font-weight:500}.ds-choice{font-family:var(--font-sans);display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:40px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-size:14px;font-weight:400;cursor:pointer}.ds-choice:hover{background:var(--muted)}.ds-choice:focus-visible{outline:2px solid var(--ring);outline-offset:3px}.ds-choice:disabled{opacity:.5;cursor:not-allowed}"
     },
     {
       "name": "Operational data table",
@@ -1265,7 +1265,7 @@
       "kind": "custom",
       "description": "Related fields share columns when each can fit 15rem; labels remain above the controls.",
       "html": "<div class=\"ds-form\"><label class=\"ds-field\">Permanent key<input class=\"ds-control\" placeholder=\"imports\" /></label><label class=\"ds-field\">Description<input class=\"ds-control\" placeholder=\"Imported records\" /></label></div>",
-      "css": ".ds-form{font-family:var(--font-sans);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));align-items:start;gap:20px;max-width:40rem}.ds-field{display:flex;flex-direction:column;gap:8px;color:var(--foreground);font-size:14px;font-weight:500;min-width:0}.ds-control{font:inherit;min-height:40px;box-sizing:border-box;width:100%;min-width:0;padding:4px 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:none}.ds-control:focus-visible{border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-control::placeholder{color:var(--muted-foreground)}"
+      "css": ".ds-form{font-family:var(--font-sans);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));align-items:start;gap:20px;max-width:40rem}.ds-field{display:flex;flex-direction:column;gap:8px;color:var(--foreground);font-size:14px;font-weight:500;min-width:0}.ds-control{font:inherit;font-weight:400;min-height:40px;box-sizing:border-box;width:100%;min-width:0;padding:4px 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:none}.ds-control:focus-visible{border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-control::placeholder{color:var(--muted-foreground)}"
     },
     {
       "name": "Operator role badge",
@@ -1286,7 +1286,7 @@
       "kind": "custom",
       "description": "Search, status and Columns align above results and wrap in order on narrow screens.",
       "html": "<div class=\"ds-toolbar\"><label class=\"ds-field\">Filter products<input class=\"ds-control\" placeholder=\"Name or product ID\" /></label><label class=\"ds-field\">Product status<select class=\"ds-control\"><option>All products</option><option>Active</option><option>Archived</option></select></label><button class=\"ds-columns\">Columns</button></div>",
-      "css": ".ds-form{font-family:var(--font-sans);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));align-items:start;gap:20px;max-width:40rem}.ds-field{display:flex;flex-direction:column;gap:8px;color:var(--foreground);font-size:14px;font-weight:500;min-width:0}.ds-control{font:inherit;min-height:40px;box-sizing:border-box;width:100%;min-width:0;padding:4px 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:none}.ds-control:focus-visible{border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-control::placeholder{color:var(--muted-foreground)}.ds-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:16px;font-family:var(--font-sans)}.ds-toolbar>.ds-field{max-width:100%}.ds-columns{font:inherit;padding:8px 12px;border:1px solid var(--border);background:var(--background);color:var(--foreground);border-radius:var(--radius);cursor:pointer}.ds-columns:hover{background:var(--muted)}.ds-columns:focus-visible{outline:2px solid var(--ring);outline-offset:3px}"
+      "css": ".ds-form{font-family:var(--font-sans);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));align-items:start;gap:20px;max-width:40rem}.ds-field{display:flex;flex-direction:column;gap:8px;color:var(--foreground);font-size:14px;font-weight:500;min-width:0}.ds-control{font:inherit;font-weight:400;min-height:40px;box-sizing:border-box;width:100%;min-width:0;padding:4px 12px;border:1px solid var(--input);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:none}.ds-control:focus-visible{border-color:var(--ring);outline:2px solid var(--ring);outline-offset:-1px;box-shadow:none}.ds-control::placeholder{color:var(--muted-foreground)}.ds-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:16px;font-family:var(--font-sans)}.ds-toolbar>.ds-field{max-width:100%}.ds-columns{font:inherit;padding:8px 12px;border:1px solid var(--border);background:var(--background);color:var(--foreground);border-radius:var(--radius);cursor:pointer}.ds-columns:hover{background:var(--muted)}.ds-columns:focus-visible{outline:2px solid var(--ring);outline-offset:3px}"
     }
   ],
   "narrative": {
