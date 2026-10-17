@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { Badge } from "@/components/ui/badge";
+
 import { fetchAdminConfig, type AdminFeature, type OperatorRole } from "../api";
 import { authClient } from "../auth-client";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
@@ -50,17 +52,7 @@ function roleLabel(role: string | null | undefined): OperatorRole {
 
 function RoleBadge(props: { role: string | null | undefined }) {
   const role = roleLabel(props.role);
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-        role === "admin"
-          ? "bg-slate-900 text-white ring-slate-900"
-          : "bg-slate-50 text-muted-foreground ring-slate-300"
-      }`}
-    >
-      {role}
-    </span>
-  );
+  return <Badge variant={role === "admin" ? "secondary" : "outline"}>{role}</Badge>;
 }
 
 export default function Operators() {
@@ -118,8 +110,8 @@ export default function Operators() {
         <div>
           <h1 className="text-xl font-semibold">Operators</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Who can sign in to this console. <strong>admin</strong> runs the counter and manages
-            operators; <strong>support</strong> reads everything and can release activations.
+            Manage console access. <strong>Admin</strong> manages licenses, finances and operators;
+            <strong> support</strong> handles conversations, diagnostics and seat releases.
           </p>
         </div>
         {scope.has("operators") && <Button onClick={() => setCreating(true)}>Add operator</Button>}
@@ -152,7 +144,7 @@ export default function Operators() {
                       {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
                     </div>
                     {operator.banned && (
-                      <div className="text-xs text-red-600">
+                      <div className="text-xs text-destructive">
                         banned{operator.banReason ? `: ${operator.banReason}` : ""}
                       </div>
                     )}

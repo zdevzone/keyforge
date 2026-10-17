@@ -10,7 +10,7 @@ import {
   type IssuedLicense,
   type AdminConfig,
 } from "./api";
-import { Button, ErrorNote, Modal, TextField, Spinner } from "./components";
+import { Button, ErrorNote, FormFields, Modal, TextField, Spinner } from "./components";
 import { Checkbox } from "./components/Checkbox";
 import { Choice } from "./components/Choice";
 import { PaymentFields } from "./components/PaymentFields";
@@ -143,28 +143,30 @@ function IssueForm({
             </p>
           </>
         )}
-        <Choice
-          label="License subject"
-          value={subjectKind}
-          onChange={(v) => setSubjectKind(v as typeof subjectKind)}
-          options={[
-            { value: "installation", label: "Application installation" },
-            { value: "service", label: "Service deployment" },
-          ]}
-        />
-        <Choice
-          label="Plan"
-          value={plan}
-          onChange={(value) => {
-            setPlan(value);
-            setPaid(false);
-          }}
-          required
-          options={Object.keys(config.licenses.planPresets).map((value) => ({
-            value,
-            label: value,
-          }))}
-        />
+        <FormFields>
+          <Choice
+            label="License subject"
+            value={subjectKind}
+            onChange={(v) => setSubjectKind(v as typeof subjectKind)}
+            options={[
+              { value: "installation", label: "Application installation" },
+              { value: "service", label: "Service deployment" },
+            ]}
+          />
+          <Choice
+            label="Plan"
+            value={plan}
+            onChange={(value) => {
+              setPlan(value);
+              setPaid(false);
+            }}
+            required
+            options={Object.keys(config.licenses.planPresets).map((value) => ({
+              value,
+              label: value,
+            }))}
+          />
+        </FormFields>
         {selected ? (
           <section aria-label="Selected plan terms" className="rounded-md bg-muted p-4">
             <p className="font-medium break-words">

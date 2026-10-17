@@ -3,6 +3,7 @@ import { Download, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState, useId } from "react";
 
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 import { request } from "../api";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
@@ -154,7 +155,7 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
         <Feedback action={manualAction} />
       </Card>
       {!data.archiveEncryption && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <p className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
           Configure the backup encryption key ring to upload or schedule archives. Immediate SQLite
           downloads remain available.
         </p>
@@ -266,9 +267,9 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
                     <span
                       className={
                         j.status === "failed"
-                          ? "font-medium text-red-700"
+                          ? "font-medium text-destructive"
                           : j.status === "completed"
-                            ? "font-medium text-emerald-700"
+                            ? "font-medium text-success"
                             : "text-slate-700"
                       }
                     >
@@ -282,9 +283,9 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
                               : "Creating snapshot"
                             : "Queued"}
                     </span>
-                    {j.error && <p className="mt-2 text-sm text-red-700">{j.error}</p>}
+                    {j.error && <p className="mt-2 text-sm text-destructive">{j.error}</p>}
                     {j.retentionError && (
-                      <p className="mt-2 text-sm text-amber-800">Retention: {j.retentionError}</p>
+                      <p className="mt-2 text-sm text-warning">Retention: {j.retentionError}</p>
                     )}
                   </TableCell>
                   <TableCell className="px-5 py-4">
@@ -293,9 +294,7 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
                       : j.size
                         ? Math.ceil(j.size / 1024) + " KiB"
                         : "—"}
-                    {j.verifiedAt && (
-                      <p className="mt-1 text-xs text-emerald-700">Restore verified</p>
-                    )}
+                    {j.verifiedAt && <p className="mt-1 text-xs text-success">Restore verified</p>}
                     {j.remoteRetained && (
                       <p className="mt-1 text-xs text-muted-foreground">
                         Endpoint manages remote retention
@@ -401,7 +400,7 @@ function DestinationPanel({
             <span
               className={
                 "rounded px-2 py-1 text-xs font-medium " +
-                (d.configured ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-700")
+                (d.configured ? "bg-success/10 text-success" : "bg-muted text-foreground")
               }
             >
               {d.configured ? "Configured" : "Not configured"}
@@ -550,18 +549,15 @@ function DestinationPanel({
             }}
           >
             <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium">
-                <input
-                  className="peer sr-only"
-                  role="switch"
-                  aria-checked={enabled}
-                  type="checkbox"
+              <label
+                htmlFor={controlId + "-enabled"}
+                className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium"
+              >
+                <Switch
+                  id={controlId + "-enabled"}
+                  aria-label="Scheduled backups"
                   checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
-                />
-                <span
-                  aria-hidden="true"
-                  className="relative h-6 w-11 rounded-full bg-slate-300 peer-checked:bg-slate-900 peer-focus-visible:ring-2 peer-focus-visible:ring-slate-600 peer-focus-visible:ring-offset-2 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"
+                  onCheckedChange={setEnabled}
                 />
                 Scheduled backups
               </label>
