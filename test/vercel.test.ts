@@ -25,7 +25,7 @@ import {
 import { generateSigningKeyPair } from "../src/sign.js";
 import { validateVercelEnvironment } from "../src/vercel-config.js";
 
-test("Vercel package configuration includes runtime assets and keeps staging deployment manual", () => {
+test("Vercel package configuration includes runtime assets and keeps native automatic deployments disabled", () => {
   const config = JSON.parse(readFileSync("vercel.json", "utf8"));
   const fn = config.functions["api/index.mjs"];
   assert.equal(typeof fn.includeFiles, "string", "Vercel requires one glob string, not an array");

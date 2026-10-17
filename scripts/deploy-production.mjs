@@ -59,10 +59,11 @@ export async function deployVercel(
     });
     // Provider errors can contain configuration; never print response bodies.
     assert.ok(response.ok, `Deployment API request failed: HTTP ${response.status}`);
-    return response.json();
+    const responseText = await response.text();
+    return responseText.trim() ? JSON.parse(responseText) : {};
   }
-  const github = (path) =>
-    json(`https://api.github.com/repos/${repository}`, path, env.GITHUB_TOKEN);
+  const github = (path, body) =>
+    json(`https://api.github.com/repos/${repository}`, path, env.GITHUB_TOKEN, body);
   const vercel = (path, body) =>
     json(
       "https://api.vercel.com",
@@ -198,6 +199,28 @@ export async function deployVercel(
     "Domain has not switched to the new deployment; inspect Vercel before retrying",
   );
   await healthy(publicURL, !production);
+  if (!production) {
+    // workflow_run uses main as GITHUB_SHA. Record the actual tested dev SHA
+    // explicitly, instead of GitHub's default environment deployment object.
+    const record = await github("/deployments", {
+      ref: sha,
+      environment: "preview",
+      description: "KeyForge Preview (dev) on Vercel",
+      auto_merge: false,
+      required_contexts: [],
+      production_environment: false,
+      transient_environment: false,
+      payload: { branch, vercelDeploymentId: ready.id },
+    });
+    assert.ok(Number.isSafeInteger(record.id), "GitHub did not record the Preview deployment");
+    await github(`/deployments/${record.id}/statuses`, {
+      state: "success",
+      environment_url: previewURL,
+      log_url: `https://github.com/${repository}/actions/runs/${env.GITHUB_RUN_ID || ci.id}`,
+      description: "Verified KeyForge Preview; isolated dev environment",
+      auto_inactive: true,
+    });
+  }
   const result = {
     deploymentId: ready.id,
     commit: sha,
