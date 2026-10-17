@@ -89,10 +89,11 @@ export async function inspectArchives(directory, execute = run, options = {}) {
     assert.equal(packed.name, name);
     assert.equal(packed.version, version);
     if (options.sourceSha) {
-      assert.deepEqual(packed.keyforgeRelease, {
-        channel: options.channel,
-        sourceSha: options.sourceSha,
-      });
+      if (name === "create-keyforge")
+        assert.deepEqual(packed.keyforgeRelease, {
+          channel: options.channel,
+          sourceSha: options.sourceSha,
+        });
       if (name === "create-keyforge-client") {
         const sdk = JSON.parse(
           await readFile(join(root, "packages/keyforge-client/package.json"), "utf8"),
@@ -207,7 +208,10 @@ async function main() {
         await cp(join(source, entry), join(target, entry), { recursive: true });
       await cp(join(root, "LICENSE"), join(target, "LICENSE"));
       pkg.version = releaseVersion(pkg.version, options);
-      pkg.keyforgeRelease = { channel: options.channel, sourceSha: options.sourceSha };
+      // Only the server generator needs a moving source pin. Unchanged stable
+      // SDK/client archives must remain byte-identical across server releases.
+      if (name === "create-keyforge")
+        pkg.keyforgeRelease = { channel: options.channel, sourceSha: options.sourceSha };
       if (pkg.scripts) delete pkg.scripts.prepack;
       if (name === "create-keyforge-client") {
         const version = releaseVersion(sdk.version, options);

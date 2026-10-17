@@ -26,6 +26,8 @@ async function fixture(options: { channel?: string; betaId?: string } = {}) {
       repository: { url: string };
       exports?: Record<string, Record<string, string>>;
       bin?: Record<string, string>;
+      keyforgeRelease?: { channel: string; sourceSha: string };
+      keyforgeSdkVersion?: string;
     }
   >();
   const integrities = new Map<string, string>();
@@ -252,6 +254,23 @@ test("rerunning a publish job preserves checked beta versions and rejects unrela
     { sourceSha: "b".repeat(40) },
   ])
     assert.throws(() => releases.assertPackedContext({ ...packed, ...change }, current));
+});
+
+test("stable SDK/client archives can be reused across server source updates", async () => {
+  const f = await fixture();
+  const options = { channel: "stable", sourceSha: "a".repeat(40) };
+  const server = f.packages.get("create-keyforge")!;
+  server.keyforgeRelease = options;
+  const original = await releases.inspectArchives(f.directory, f.execute, options);
+  const next = { ...options, sourceSha: "b".repeat(40) };
+  await assert.rejects(releases.inspectArchives(f.directory, f.execute, next));
+  server.keyforgeRelease = next;
+  const updated = await releases.inspectArchives(f.directory, f.execute, next);
+  for (const name of ["@zdevzone/keyforge-client", "create-keyforge-client"])
+    assert.deepEqual(
+      updated.find((item: { name: string }) => item.name === name),
+      original.find((item: { name: string }) => item.name === name),
+    );
 });
 
 // Keep upstream-only deployment checks in the file legacy scaffolders already prune.
