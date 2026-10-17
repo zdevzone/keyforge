@@ -135,6 +135,13 @@ test("online reset preserves the original seeded identity, current password and 
     f.database.db,
   );
   await writeFile(join(f.root, "signing.key"), "external key material stays outside reset");
+  const storage = await f.app.inject({
+    method: "PUT",
+    url: "/admin/backups/providers/blob",
+    headers: f.headers,
+    payload: { revision: 0, token: "preserved-storage-fixture" },
+  });
+  assert.equal(storage.statusCode, 200, storage.body);
   const requestId = randomUUID();
   const response = await f.reset(false, requestId, f.second);
   assert.equal(response.statusCode, 200, response.body);
@@ -170,7 +177,21 @@ test("online reset preserves the original seeded identity, current password and 
     .select("kind")
     .distinct()
     .execute();
-  assert.ok(kinds.every((r) => ["product", "plan", "definition", "system-reset"].includes(r.kind)));
+  assert.ok(
+    kinds.every((r) =>
+      [
+        "product",
+        "plan",
+        "definition",
+        "system-reset",
+        "backup-storage",
+        "backup-storage-current",
+      ].includes(r.kind),
+    ),
+  );
+  const savedStorage = (await f.app.inject({ url: "/admin/backups", headers: f.headers })).json();
+  assert.equal(savedStorage.storage.blob.source, "database");
+  assert.equal(savedStorage.storage.blob.hasCredentials, true);
   assert.equal(
     await readFile(join(f.root, "signing.key"), "utf8"),
     "external key material stays outside reset",

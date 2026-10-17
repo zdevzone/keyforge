@@ -46,6 +46,7 @@ test("domain error codes are documented across all route modules", () => {
     "src/system-reset.ts",
     "src/maintenance.ts",
     "src/backup-destinations.ts",
+    "src/backup-storage.ts",
   ])
     for (const pattern of [
       /new DomainError\(\s*"([a-z_]+)"/g,

@@ -328,6 +328,22 @@ try {
   await page.getByLabel("Filter products", { exact: true }).fill("");
   await page.getByRole("button", { name: /Sort by Product/ }).click();
   await page.screenshot({ path: join(artifacts, "products-desktop.png"), fullPage: true });
+  const searchBounds = await page.getByLabel("Filter products", { exact: true }).boundingBox();
+  const statusBounds = await page
+    .getByRole("combobox", { name: "Product status", exact: true })
+    .boundingBox();
+  const columnsBounds = await page
+    .getByRole("button", { name: "Columns", exact: true })
+    .boundingBox();
+  assert.ok(
+    Math.abs(searchBounds.y + searchBounds.height - statusBounds.y - statusBounds.height) < 5,
+    "Product search and status share a toolbar row",
+  );
+  assert.ok(
+    Math.abs(searchBounds.y + searchBounds.height - columnsBounds.y - columnsBounds.height) < 5,
+    "Columns stays beside filters",
+  );
+  assert.ok(statusBounds.width < 300, "Status picker fits its content");
   const productPicker = page.getByRole("combobox", { name: "Active product", exact: true });
   const initialProduct = "Keyforge";
   await productPicker.click();
@@ -734,6 +750,59 @@ try {
     await page.screenshot({ path: join(artifacts, route + "-desktop.png"), fullPage: true });
   }
   await page.goto(origin + "/backups");
+  const blobPanel = page.getByRole("region", {
+    name: "Vercel Blob (private) backup destination",
+    exact: true,
+  });
+  await blobPanel.getByRole("button", { name: "Configure storage", exact: true }).click();
+  const storageDialog = page.getByRole("dialog", {
+    name: "Vercel Blob (private) storage settings",
+    exact: true,
+  });
+  await storageDialog
+    .getByLabel("Private Blob read/write token", { exact: true })
+    .fill("local-browser-provider-fixture");
+  await page.screenshot({ path: join(artifacts, "storage-settings-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(artifacts, "storage-settings-mobile.png"), fullPage: true });
+  assert.equal(await storageDialog.evaluate((e) => e.scrollWidth > e.clientWidth), false);
+  await storageDialog.getByRole("button", { name: "Save storage settings", exact: true }).click();
+  await storageDialog.waitFor({ state: "hidden" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await blobPanel.getByRole("button", { name: "Configure storage", exact: true }).click();
+  assert.equal(
+    await storageDialog.getByLabel("Private Blob read/write token", { exact: true }).inputValue(),
+    "",
+  );
+  const storageBefore = (await app.inject({ url: "/admin/backups", headers })).json().storage.blob;
+  const storagePoll = page.waitForResponse(
+    async (response) =>
+      response.url().endsWith("/admin/backups") &&
+      response.request().method() === "GET" &&
+      response.status() === 200 &&
+      (await response.json()).storage.blob.revision > storageBefore.revision,
+  );
+  const concurrentStorage = await app.inject({
+    method: "PUT",
+    url: "/admin/backups/providers/blob",
+    headers,
+    payload: { revision: storageBefore.revision, token: "concurrent-browser-provider-fixture" },
+  });
+  assert.equal(concurrentStorage.statusCode, 200, concurrentStorage.body);
+  await storagePoll;
+  const staleSave = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/admin/backups/providers/blob") &&
+      response.request().method() === "PUT",
+  );
+  await storageDialog.getByRole("button", { name: "Save storage settings", exact: true }).click();
+  assert.equal(
+    (await staleSave).status(),
+    409,
+    "Polling must not silently refresh an open editor's concurrency revision",
+  );
+  await storageDialog.getByRole("alert").waitFor();
+  await storageDialog.getByRole("button", { name: "Cancel", exact: true }).click();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: /Download database now/ }).click();
   const download = await downloadEvent;

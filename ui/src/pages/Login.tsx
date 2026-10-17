@@ -73,7 +73,7 @@ export default function Login() {
             />
           </label>
           {error && <ErrorNote message={error} />}
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" disabled={submitting}>
             {submitting ? "Signing in…" : "Sign in"}
           </Button>
         </form>

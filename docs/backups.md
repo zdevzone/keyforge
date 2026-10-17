@@ -2,9 +2,19 @@
 
 Admins use **Settings → Backups** to configure destinations, enable independent daily UTC schedules, run **Back up now**, download archives, inspect upload results and verify recovery. All features are available in the self-hosted open-source server. The backup API and console require admin access.
 
-On Vercel, follow [the serverless deployment and recovery guide](vercel.md). That mode requires durable remote archives, supports private Vercel Blob through `BLOB_READ_WRITE_TOKEN`, uses portable PostgreSQL archives, and replaces the continuous worker with authenticated hosted invocations. Local-only/custom upload-only destinations are disabled. Native-tool and persistent-directory instructions below describe persistent-server mode.
+On Vercel, follow [the serverless deployment and recovery guide](vercel.md). That mode requires durable remote archives, supports private Vercel Blob configured in Settings (or imported once from `BLOB_READ_WRITE_TOKEN`), uses portable PostgreSQL archives, and replaces the continuous worker with authenticated hosted invocations. Local-only/custom upload-only destinations are disabled. Native-tool and persistent-directory instructions below describe persistent-server mode.
 
-## Destinations and credential detection
+## Bring your own storage (BYOC)
+
+Use **Configure storage** in Settings → Backups for private Vercel Blob, S3, R2 or UploadThing. Enter dedicated upload/read/delete credentials, save, then choose **Test connection**. The test uploads random verification bytes, downloads and compares them, then deletes the test object. It does not prove database recovery; also create and verify an archive. Credentials are never returned by the settings API; blank secret fields retain their saved values. Nonsecret bucket/region/endpoint fields remain editable. Only admins may configure or test storage.
+
+Provider settings are stored as versioned, authenticated ciphertext in the application database, using the external **data** keyring. Jobs pin the credential version used when created; later edits do not retarget older archives. Retain old credentials at the provider while those archives are needed. The **backup** keyring still encrypts archives and remains external, as do signing/authentication keys. Application reset retains storage configuration so its verified backup remains accessible. Keep independent recovery copies of provider credentials and keyrings: a completely unavailable database cannot supply its own recovery credentials.
+
+On upgrade, explicitly configured environment credentials are imported once, without overwriting existing database settings. This requires a data keyring. After an upload/download/delete test and archive verification, remove the imported variables and redeploy; future changes need no restart. Automatic cloud credential chains remain a compatibility fallback, and are not copied from temporary instance roles into the database.
+
+Custom upload endpoints accept an optional complete authorization header value directly; it is encrypted in the database too. Legacy environment references remain accepted for existing installations. These endpoints still require a persistent local archive and are unavailable on ephemeral Vercel hosts.
+
+## Legacy environment imports
 
 | Destination | Server configuration |
 | --- | --- |
@@ -66,3 +76,5 @@ For raw unified SQLite downloads, validate integrity and foreign keys, stop conn
 Before restarting, restore matching data/signing keys from separate secure storage and verify the backend selection. Check health, operator login, products, licenses, bindings, support and metering. A restore can roll back revocation and quota consumption; reconcile those events with your application records.
 
 See [Database setup and demo data](database.md) for the shared database and demo reset commands.
+
+Choose **Use as default** on a configured provider to use it for immediate archive downloads and pre-reset backups. This preference is database-stored and retained by application reset. Each destination still has its own schedule. Blank session-token fields retain an existing token; use **Remove saved session token** when switching away from temporary credentials.

@@ -49,29 +49,24 @@ The backup key is a **key ring**, not the signing key or a reusable user passwor
 
 ## Generate secrets
 
-With `.env.local` already copied, run:
+Run this once from the project root (a pre-existing environment file is optional):
 
 ```sh
-vp run license keygen
 vp run secrets:init
 ```
 
-`keygen` writes the private key to the configured `LICENSE_SIGNING_KEY_FILE` and prints its public half. It refuses to overwrite a key unless explicitly forced. Save the public key for client configuration. `secrets:init` creates independent `secrets/data.keyring.json` and `secrets/backup.keyring.json` files and retains existing files. Match the environment file paths to those files.
+This creates an Ed25519 private key at `secrets/license-signing.key`, independent data and backup keyrings, an administrative API token, a session secret and a cron secret. It appends the matching settings to the ignored `.env.local` file without printing secret values. The public verification key may be shared with dependent apps. Configure your deployment URL, database and administrator separately; provider credentials are entered in **Settings → Backups**.
 
-For each of `LICENSE_AUTH_SECRET` and, if you want administrative CLI access, `LICENSE_ADMIN_TOKEN`, run this command separately and paste its output into your **local secret file or host secret manager**:
+On an existing setup, confirm the **[Y/n]** prompt before the file is updated. Existing keys and configured secrets are retained. For reviewed, noninteractive automation, pass `--yes`; a pipe without that flag cannot silently change an existing environment file. Recognized example placeholders are replaced, while real configured values are retained.
 
-```sh
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
-```
-
-This prints a real secret in your terminal: do not record or share the output. Use different generated values. Replace the example placeholders; leaving a descriptive placeholder is not secure configuration. If CLI access is unnecessary, remove `LICENSE_ADMIN_TOKEN` rather than using a sample value.
+Keep `vp run license keygen` for explicitly generating a signing key, or `vp run license keygen --force` for a deliberate replacement. It also saves `LICENSE_SIGNING_KEY_FILE` in `.env.local`, asks before updating an existing file, and refuses to replace an existing key without `--force`. An inline signing key must be removed explicitly before switching to a newly generated file. Rotation changes client trust; distribute public keys deliberately. Never rotate production keys just to complete setup.
 
 ## Configure a local server
 
 Edit `.env.local`, retaining your actual generated secrets:
 
 ```dotenv
-LICENSE_SIGNING_KEY_FILE=./license/license-signing.key
+LICENSE_SIGNING_KEY_FILE=./secrets/license-signing.key
 LICENSE_AUTH_SECRET=<your-generated-console-secret>
 LICENSE_ADMIN_TOKEN=<your-separately-generated-optional-admin-token>
 LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json

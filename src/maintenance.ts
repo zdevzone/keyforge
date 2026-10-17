@@ -128,7 +128,15 @@ export async function clearApplicationRows(
       await records.db
         .deleteFrom("platform_records")
         .where((eb) =>
-          eb.or([eb("scope", "!=", "workspace:default"), eb("kind", "!=", "system-reset")]),
+          eb.or([
+            eb("scope", "!=", "workspace:default"),
+            eb("kind", "not in", [
+              "system-reset",
+              "backup-storage",
+              "backup-storage-current",
+              "backup-settings",
+            ]),
+          ]),
         )
         .execute();
     else if (owned.includes(table.name))

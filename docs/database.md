@@ -35,3 +35,5 @@ The reset removes demo users, sessions and application records, recreates the sc
 The demo seeder requires signing keys, `LICENSE_AUTH_SECRET` and the data encryption ring. It writes credentials and fixture IDs to `.artifacts/demo/manifest.json`; keep this private. Repeating `vp run demo:seed --maintenance` reuses the current dataset. A reset creates a new one. `--clean-local` removes recognized obsolete app databases and demo backup archives; unrelated files are retained.
 
 Old split-file data and split archives are not imported. Remove obsolete demo files after stopping their writers and checking their paths. Production backups still use the regular [backup and restore workflow](backups.md), with one SQLite snapshot containing both authentication and licensing.
+
+Application-level Settings reset retains encrypted backup storage configurations, their historical credential versions and the default destination, alongside the original seeded administrator. A full schema/database drop remains a different administrative operation and removes database-managed configuration too. Retain independent provider-credential recovery copies before a full drop.

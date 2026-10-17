@@ -13,12 +13,14 @@
  * The signing keypair is the whole trust model: the public half is pasted into
  * `server/license.ts` and ships with every copy of the app; the private half
  * stays with the license service and nowhere else. `keygen` writes it to
- * LICENSE_SIGNING_KEY_FILE (default ./license-signing.key), which is
+ * LICENSE_SIGNING_KEY_FILE (default ./secrets/license-signing.key), which is
  * gitignored — move it somewhere safer than a working copy.
  */
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
+import { confirmLocalUpdate, readLocalEnv, saveLocalEnv } from "./local-env.mjs";
 
 const [, , command, ...rest] = process.argv;
 
@@ -46,10 +48,10 @@ function flag(name, fallback = undefined) {
 function usage() {
   console.log(`License tool
 
-  vp run license keygen [--force]
+  vp run license keygen [--force] [--yes]
       Generate the Ed25519 signing keypair. Prints the public key to embed in
       server/license.ts; writes LICENSE_SIGNING_KEY_FILE (default
-      ./license-signing.key) — KEEP PRIVATE, gitignored.
+      ./secrets/license-signing.key) — KEEP PRIVATE, gitignored.
 
   vp run license keycheck [--expect <pem-or-file>] [--token <token>] [--server]
       Validate the signing key this deployment is configured with and print its
@@ -114,20 +116,41 @@ async function admin(path, options = {}) {
   return payload;
 }
 
-function keygen() {
+async function keygen() {
   // Write where the deployment says the key lives, so `keygen` and the
   // service agree without anyone moving a file by hand.
-  const keyPath = env("LICENSE_SIGNING_KEY_FILE") ?? "license-signing.key";
+  const local = await readLocalEnv();
+  const keyPath =
+    env("LICENSE_SIGNING_KEY_FILE") ??
+    local.values.LICENSE_SIGNING_KEY_FILE ??
+    "./secrets/license-signing.key";
+  if (env("LICENSE_SIGNING_KEY") || local.values.LICENSE_SIGNING_KEY)
+    throw new Error(
+      "An inline signing key is configured. Remove it explicitly before generating a file-based replacement.",
+    );
   if (existsSync(keyPath) && flag("force") !== true) {
     console.error(`${keyPath} already exists. Pass --force to overwrite — this INVALIDATES every`);
     console.error("license ever signed with the old key. You almost never want that.");
     process.exit(1);
   }
+  if (
+    local.exists &&
+    !(await confirmLocalUpdate(
+      "Generate a signing key and update LICENSE_SIGNING_KEY_FILE in .env.local?",
+      flag("yes") === true,
+    ))
+  )
+    return;
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const publicPem = publicKey.export({ type: "spki", format: "pem" }).toString();
   const privatePem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   mkdirSync(dirname(keyPath), { recursive: true });
-  writeFileSync(keyPath, privatePem, "utf8");
+  writeFileSync(keyPath, privatePem, {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: flag("force") === true ? "w" : "wx",
+  });
+  await saveLocalEnv({ LICENSE_SIGNING_KEY_FILE: keyPath });
   console.log(`Private key written to ${keyPath} — keep it with the license service only.`);
   console.log("  Deploy it as LICENSE_SIGNING_KEY_FILE (or inline as LICENSE_SIGNING_KEY).\n");
   console.log(
@@ -260,7 +283,7 @@ function inspect(input) {
 
 switch (command) {
   case "keygen":
-    keygen();
+    await keygen();
     break;
   case "keycheck":
     await keycheck();

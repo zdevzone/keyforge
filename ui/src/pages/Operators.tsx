@@ -114,7 +114,7 @@ export default function Operators() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="table-toolbar justify-between">
         <div>
           <h1 className="text-xl font-semibold">Operators</h1>
           <p className="mt-1 text-sm text-muted-foreground">

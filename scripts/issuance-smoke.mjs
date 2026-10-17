@@ -91,6 +91,7 @@ try {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("link", { name: "License requests", exact: true }).click();
   await page.getByText("buyer@example.test", { exact: true }).waitFor();
+  await page.screenshot({ path: join(artifacts, "request-list-desktop.png"), fullPage: true });
   await page.getByRole("button", { name: "Issue license", exact: true }).click();
   await page.getByRole("region", { name: "Selected plan terms" }).waitFor();
   assert.equal(
@@ -130,6 +131,13 @@ try {
   assert.equal(financial.received, 150000);
   assert.equal(financial.salesValue, 150000);
   assert.equal(financial.outstanding, 0);
+  await page.goto(origin + "/license-requests");
+  await page.getByText("buyer@example.test", { exact: true }).waitFor();
+  await page.getByRole("cell", { name: "Issued", exact: true }).waitFor();
+  await choose(page, "Request status", "Awaiting issuance");
+  assert.equal(await page.getByText("buyer@example.test", { exact: true }).count(), 0);
+  await choose(page, "Request status", "All");
+  await page.getByText("buyer@example.test", { exact: true }).waitFor();
   // A longer recipient list uses the searchable picker. Its manual-delivery
   // option deliberately has an empty ID and must still satisfy required choice.
   for (let index = 0; index < 8; index++) {

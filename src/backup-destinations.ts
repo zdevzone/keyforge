@@ -99,7 +99,8 @@ export const customDestinationSchema = z
       ].includes(v.headerName.toLowerCase()),
     "Use an authorization or API-key header.",
   );
-export type CustomDestination = z.infer<typeof customDestinationSchema> & RecordValue;
+export type CustomDestination = z.infer<typeof customDestinationSchema> &
+  RecordValue & { encryptedHeaderValue?: string; hasAuthorization?: boolean };
 export function nextBackupTime(now: Date, hour: number, minute = 0) {
   const next = new Date(now);
   next.setUTCHours(hour, minute, 0, 0);
@@ -249,7 +250,7 @@ export class BackupDestinations {
       type: "blob",
       configured: Boolean(this.options.blob?.token || this.options.drivers?.blob),
       ...(!this.options.blob?.token && !this.options.drivers?.blob
-        ? { reason: "Connect a private Blob store and set BLOB_READ_WRITE_TOKEN." }
+        ? { reason: "Connect a private Blob store, then enter its token using Configure storage." }
         : {}),
     });
     for (const [id, name] of [
@@ -261,7 +262,7 @@ export class BackupDestinations {
       const config = this.options[id],
         client = this.objects.get(id);
       if (!configured && !config?.bucket)
-        reason = "Set the backup bucket and provider credentials on the server.";
+        reason = "Enter the backup bucket and provider credentials using Configure storage.";
       else if (!configured && !client)
         reason = "Set the R2 endpoint (or account ID), access key ID and secret access key.";
       else if (!configured && client) {
@@ -285,8 +286,8 @@ export class BackupDestinations {
       ...(!utReady
         ? {
             reason: this.utInvalid
-              ? "Invalid UploadThing token. Use the app's current UPLOADTHING_TOKEN."
-              : "Set LICENSE_BACKUP_UPLOADTHING_TOKEN or UPLOADTHING_TOKEN on the server.",
+              ? "Invalid UploadThing token. Enter the provider's current app token in Configure storage."
+              : "Enter your UploadThing app token using Configure storage.",
           }
         : {}),
     });
@@ -301,7 +302,9 @@ export class BackupDestinations {
         configured:
           !this.options.remoteOnly &&
           !item.archived &&
-          (!item.headerValueEnv || Boolean(this.env[item.headerValueEnv])),
+          (Boolean(item.encryptedHeaderValue) ||
+            !item.headerValueEnv ||
+            Boolean(this.env[item.headerValueEnv])),
         ...(this.options.remoteOnly
           ? { reason: "Upload-only endpoints cannot provide durable downloads on this host." }
           : {}),

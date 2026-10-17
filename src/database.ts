@@ -164,6 +164,13 @@ function safeParseUrl(url: string): URL | null {
  */
 export function createPostgresPool(url: string, env: NodeJS.ProcessEnv = process.env): pg.Pool {
   const pool = new pg.Pool(resolvePostgresOptions(url, env));
+  pool.on("connect", (client) => {
+    // pg forwards failures to the pool only while a client is idle. A checked-out
+    // backup/transaction client can fail between queries too. Handle its error
+    // event so the process survives; pg still rejects current/subsequent queries
+    // and discards the broken connection on release. Never retry writes here.
+    client.on("error", () => {});
+  });
   if (env.VERCEL === "1") attachDatabasePool(pool);
   pool.on("error", (error) => {
     console.warn(`[license-server] idle Postgres client dropped: ${error.message}`);

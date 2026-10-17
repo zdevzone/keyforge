@@ -105,5 +105,5 @@ test("search indexes actual body/code content and duplicate formatted headings h
   assert.deepEqual(searchDocs([article], "notpresentanywhere"), []);
   assert.equal(docPath(""), "/docs");
   assert.equal(docPath("getting-started"), "/docs/getting-started");
-  assert.ok(searchDocs(articles, "randomBytes").some((r) => r.article.slug === "getting-started"));
+  assert.ok(searchDocs(articles, "secrets:init").some((r) => r.article.slug === "getting-started"));
 });

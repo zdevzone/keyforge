@@ -228,7 +228,7 @@ export function buildEnvLocal(answers) {
     "# set the same variables in your host's dashboard when you deploy.",
     "",
     `# The trust root. Generate the pair with: ${commands(answers.packageManager).run("license")} keygen`,
-    "LICENSE_SIGNING_KEY_FILE=./license-signing.key",
+    "LICENSE_SIGNING_KEY_FILE=./secrets/license-signing.key",
     "LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json",
     "LICENSE_BACKUP_KEYRING_FILE=./secrets/backup.keyring.json",
     "",
@@ -273,7 +273,7 @@ export function buildEnvExample(answers) {
   const lines = [
     `# ${answers.productName} license service — copy to .env.local and fill in.`,
     `# Generate the signing key pair with: ${commands(answers.packageManager).run("license")} keygen`,
-    "LICENSE_SIGNING_KEY_FILE=./license-signing.key",
+    "LICENSE_SIGNING_KEY_FILE=./secrets/license-signing.key",
     "LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json",
     "LICENSE_BACKUP_KEYRING_FILE=./secrets/backup.keyring.json",
     '# LICENSE_SIGNING_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"',
@@ -601,7 +601,7 @@ export function nextSteps(answers) {
   const steps = [
     `cd ${answers.relativeDirectory}`,
     ...(answers.installed ? [] : [run.install]),
-    `${run.run("license")} keygen`.padEnd(29) + "# writes the signing key pair into db/",
+    `${run.run("license")} keygen`.padEnd(29) + "# writes the signing key pair into secrets/",
   ];
   if (answers.database === "postgres") {
     steps.push("# point DATABASE_URL at your Postgres instance in .env.local");

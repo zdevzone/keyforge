@@ -8,6 +8,7 @@ import { request } from "../api";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components";
 import { Button, Card, Modal, ErrorNote, Spinner, TextField, formatDateTime } from "../components";
 import { ActionButton } from "../components/ActionButton";
+import { BackupStorageEditor, type StorageMetadata } from "../components/BackupStorageEditor";
 import { useListPage, ListPagination } from "../components/ListPagination";
 import { download, Feedback, Select, useAction } from "../platform-ui";
 
@@ -26,6 +27,7 @@ interface Endpoint {
   fileField: string;
   headerName?: string;
   headerValueEnv?: string;
+  hasAuthorization?: boolean;
   archived: boolean;
   revision?: number;
 }
@@ -55,6 +57,7 @@ interface Job {
   remoteRetained?: boolean;
 }
 interface BackupState {
+  storage: Record<string, StorageMetadata>;
   destinations: Destination[];
   jobs: Job[];
   archiveEncryption: boolean;
@@ -77,6 +80,7 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
   const [manualJob, setManualJob] = useState<string | null>(null),
     [editing, setEditing] = useState<Destination | "new" | null>(null),
     [filter, setFilter] = useState("all");
+  const [storageEditing, setStorageEditing] = useState<Destination | null>(null);
   const processed = useRef<string | null>(null);
   useEffect(() => {
     const job = query.data?.jobs.find((j) => j.id === manualJob);
@@ -160,7 +164,8 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
           <div>
             <h2 className="font-semibold">Backup destinations</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Provider credentials are detected on the server. Access is checked when a backup runs.
+              Bring your own storage. Manage encrypted credentials here and test access before
+              scheduling backups.
             </p>
           </div>
           <Button variant="secondary" disabled={data.remoteOnly} onClick={() => setEditing("new")}>
@@ -175,10 +180,25 @@ export default function Backups({ embedded = false }: { embedded?: boolean }) {
               encryption={data.archiveEncryption}
               refresh={() => void query.refetch()}
               edit={() => setEditing(d)}
+              storage={data.storage?.[d.id]}
+              configure={() => setStorageEditing(d)}
+              isDefault={data.defaultDestination === d.id}
             />
           ))}
         </div>
       </Card>
+      {storageEditing && data.storage?.[storageEditing.id] && (
+        <BackupStorageEditor
+          id={storageEditing.id}
+          name={storageEditing.name}
+          settings={data.storage[storageEditing.id]}
+          done={() => {
+            setStorageEditing(null);
+            void query.refetch();
+          }}
+          close={() => setStorageEditing(null)}
+        />
+      )}
       {editing && (
         <EndpointEditor
           key={typeof editing === "string" ? "new" : editing.id}
@@ -343,11 +363,17 @@ function DestinationPanel({
   encryption,
   refresh,
   edit,
+  storage,
+  configure,
+  isDefault,
 }: {
   destination: Destination;
   encryption: boolean;
   refresh: () => void;
   edit: () => void;
+  storage?: StorageMetadata;
+  configure: () => void;
+  isDefault: boolean;
 }) {
   const controlId = useId();
   const [scheduling, setScheduling] = useState(false);
@@ -394,6 +420,51 @@ function DestinationPanel({
           {!d.configured && <p className="mt-2 text-sm text-muted-foreground">{d.reason}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {(storage || d.type === "local") && (
+            <Button
+              variant="secondary"
+              disabled={isDefault || !d.configured || action.busy}
+              onClick={() =>
+                void action.run(
+                  () =>
+                    request("/admin/backups/storage-default", {
+                      method: "PUT",
+                      body: { destination: d.id },
+                    }),
+                  "Default backup destination updated.",
+                )
+              }
+            >
+              {isDefault ? "Default destination" : "Use as default"}
+            </Button>
+          )}
+          {storage && (
+            <>
+              <Button
+                variant="secondary"
+                disabled={!storage.editable || action.busy}
+                onClick={configure}
+              >
+                Configure storage
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={storage.source !== "database" || action.busy}
+                onClick={() =>
+                  void action.run(
+                    () =>
+                      request("/admin/backups/providers/" + d.id + "/verify", {
+                        method: "POST",
+                        body: {},
+                      }),
+                    "Storage upload, download and deletion verified.",
+                  )
+                }
+              >
+                Test connection
+              </Button>
+            </>
+          )}
           {d.config && (
             <Button variant="secondary" onClick={edit}>
               Edit endpoint
@@ -412,14 +483,27 @@ function DestinationPanel({
           </Button>
         </div>
       </div>
-      {settingNames[d.id] && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-slate-700">Server configuration</summary>
-          <p className="mt-2 break-words text-muted-foreground">
-            Set {settingNames[d.id]}, then restart the server. Credentials are never returned to
-            this page.
-          </p>
-        </details>
+      {storage ? (
+        <p className="text-sm text-muted-foreground">
+          {storage.source === "database"
+            ? "Credentials encrypted in the database."
+            : "No database credentials saved."}
+          {storage.verifiedAt
+            ? " Last connection test: " + formatDateTime(storage.verifiedAt)
+            : " Connection not yet tested."}
+          {!storage.editable &&
+            " Configure the external data encryption keyring to enable editing."}
+        </p>
+      ) : (
+        settingNames[d.id] && (
+          <details className="text-sm">
+            <summary className="cursor-pointer text-slate-700">Server configuration</summary>
+            <p className="mt-2 break-words text-muted-foreground">
+              Set {settingNames[d.id]}, then restart the server. Credentials are never returned to
+              this page.
+            </p>
+          </details>
+        )
       )}
       {(d.configured || d.schedule) && (
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -549,7 +633,7 @@ function EndpointEditor({
     [format, setFormat] = useState<string>(config?.format || "multipart"),
     [field, setField] = useState(config?.fileField || "file"),
     [header, setHeader] = useState(config?.headerName || ""),
-    [secretEnv, setSecretEnv] = useState(config?.headerValueEnv || "");
+    [headerValue, setHeaderValue] = useState("");
   const action = useAction();
   function body(archived = false) {
     return {
@@ -560,7 +644,14 @@ function EndpointEditor({
       fileField: field,
       archived,
       ...(header ? { headerName: header } : {}),
-      ...(secretEnv ? { headerValueEnv: secretEnv } : {}),
+      ...(headerValue
+        ? { headerValue }
+        : header && config?.hasAuthorization && !config.headerValueEnv
+          ? { keepAuthorization: true }
+          : {}),
+      ...(header && !headerValue && config?.headerValueEnv
+        ? { headerValueEnv: config.headerValueEnv }
+        : {}),
       ...(config?.revision ? { revision: config.revision } : {}),
     };
   }
@@ -633,14 +724,17 @@ function EndpointEditor({
               placeholder="Authorization"
             />
             <TextField
-              label="Secret environment variable"
-              value={secretEnv}
-              onChange={setSecretEnv}
-              placeholder="LICENSE_BACKUP_CUSTOM_BOX_TOKEN"
+              label="Authorization header value"
+              type="password"
+              value={headerValue}
+              onChange={setHeaderValue}
+              placeholder={
+                config?.hasAuthorization ? "Leave blank to keep saved authorization" : "Bearer …"
+              }
             />
             <p className="text-muted-foreground">
-              Set the complete header value on the server in a LICENSE_BACKUP_CUSTOM_ environment
-              variable. Leave both fields empty for public endpoints.
+              Enter the complete header value. It is encrypted in the database. Leave the value
+              blank to keep existing authorization; clear the header name to remove authorization.
             </p>
           </div>
         </details>

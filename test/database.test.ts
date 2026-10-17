@@ -157,6 +157,45 @@ test("a dropped idle client is survived, not fatal", () => {
     void pool.end().catch(() => {});
   }
 });
+test("checked-out clients have an error listener before a database disconnect", async () => {
+  const pool = createPostgresPool(NEON);
+  const client = new pg.Client();
+  try {
+    pool.emit("connect", client);
+    assert.ok(client.listenerCount("error") > 0);
+    assert.doesNotThrow(() => client.emit("error", new Error("read ECONNRESET")));
+  } finally {
+    await pool.end();
+  }
+});
+test(
+  "a terminated checked-out Postgres client rejects queries without crashing the process",
+  { timeout: 15000 },
+  async (t) => {
+    if (!process.env.TEST_DATABASE_URL)
+      return t.skip("set TEST_DATABASE_URL to exercise a real dropped client");
+    const pool = createPostgresPool(process.env.TEST_DATABASE_URL);
+    const client = await pool.connect();
+    try {
+      const pid = (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]
+        .pid;
+      const dropped = new Promise<void>((resolve) => client.once("error", () => resolve()));
+      assert.equal(
+        (
+          await pool.query<{ stopped: boolean }>("SELECT pg_terminate_backend($1) AS stopped", [
+            pid,
+          ])
+        ).rows[0].stopped,
+        true,
+      );
+      await dropped;
+      await assert.rejects(client.query("SELECT 1"));
+    } finally {
+      client.release(true);
+      await pool.end();
+    }
+  },
+);
 
 test("no DATABASE_URL means SQLite, which is still the default", async (t) => {
   assert.equal(isPostgresUrl(undefined), false);

@@ -7,7 +7,6 @@ export function validateVercelEnvironment(env: ReturnType<typeof parseEnv>) {
     "LICENSE_AUTH_SECRET",
     "LICENSE_SERVER_URL",
     "CRON_SECRET",
-    "BLOB_READ_WRITE_TOKEN",
     "LICENSE_BACKUP_VERIFY_DATABASE_URL",
   ] as const;
   const missing: string[] = required.filter((name) => !env[name]);
