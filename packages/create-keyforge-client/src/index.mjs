@@ -1,10 +1,12 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { cp, mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { cancel, isCancel, text } from "@clack/prompts";
+
+const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 const usage = `Create a KeyForge Node.js client starter.
 
@@ -111,7 +113,7 @@ export async function main(argv = process.argv.slice(2), io = process.stdout) {
           demo: "node --env-file-if-exists=.env.local --import tsx src/index.ts --demo",
           typecheck: "tsc --noEmit",
         },
-        dependencies: { "@zdevzone/keyforge-client": "^0.1.0" },
+        dependencies: { "@zdevzone/keyforge-client": manifest.keyforgeSdkVersion },
         devDependencies: { "@types/node": "^24.19.2", tsx: "^4.23.15", typescript: "^7.0.2" },
         engines: { node: "^22.18.0 || ^24.11.0 || ^26.0.0" },
       },

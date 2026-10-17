@@ -1,0 +1,34 @@
+# Select this file when creating a separate Render Blueprint.
+# Provision a dedicated persistent PostgreSQL database separately; do not reuse production.
+services:
+  - type: web
+    name: keyforge-staging
+    runtime: node
+    branch: dev
+    autoDeployTrigger: checksPass
+    buildCommand: set -o pipefail && curl -fsSL https://vite.plus | VP_HOME="$HOME/.vite-plus" VP_VERSION=1.1.0 VP_NODE_MANAGER=no bash && export PATH="$HOME/.vite-plus/bin:$PATH" && NODE_ENV=development vp install --frozen-lockfile && vp run build:all
+    startCommand: node dist/src/index.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: NODE_ENV
+        value: production
+      - key: LICENSE_HOST
+        value: 0.0.0.0
+      - key: DATABASE_URL
+        sync: false
+      - key: LICENSE_SIGNING_KEY
+        sync: false
+      - key: LICENSE_AUTH_SECRET
+        sync: false
+      - key: LICENSE_ADMIN_TOKEN
+        sync: false
+      - key: LICENSE_DATA_KEYRING
+        sync: false
+      - key: LICENSE_BACKUP_KEYRING
+        sync: false
+      - key: LICENSE_SEED_ADMIN_EMAIL
+        sync: false
+      - key: LICENSE_SEED_ADMIN_PASSWORD
+        sync: false
