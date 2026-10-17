@@ -18,6 +18,8 @@ Use short-lived feature branches and pull requests into `dev`. People outside th
 
 For urgent fixes, branch from `main`, use a PR and CI, then merge `main` back into `dev` through a PR. Production deployment still requires the same source contents to have passed staging. Do not bypass testing by enabling auto-deploy.
 
+For a disposable PostgreSQL test database, set `TEST_DATABASE_URL` and run `vp run test:postgres`. It executes the complete suite with test files in sequence: Better Auth scans the database-wide catalog, so concurrently dropping other fixtures' schemas can invalidate introspection. Never use a production or shared Preview database as the test target.
+
 Dependabot targets `dev`. Review grouped minor/patch changes and individual major updates normally; there is no blanket dependency auto-merge. Report vulnerabilities privately using [SECURITY.md](https://github.com/zdevzone/keyforge/blob/main/SECURITY.md).
 
 ## Vercel production and testing
