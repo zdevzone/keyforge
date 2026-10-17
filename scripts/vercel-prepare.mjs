@@ -4,8 +4,8 @@ import { validateVercelEnvironment } from "../dist/src/vercel-config.js";
 
 const env = parseEnv(process.env);
 validateVercelEnvironment(env);
-// Only run against the explicitly selected staging database. No Render
-// configuration or production credentials are read by this script.
+// Only run against the explicitly selected environment database. Render is
+// never contacted; select production or preview credentials deliberately.
 const verification = new URL(env.LICENSE_BACKUP_VERIFY_DATABASE_URL);
 const source = new URL(env.DATABASE_URL);
 if (verification.pathname === source.pathname)

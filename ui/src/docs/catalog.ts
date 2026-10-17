@@ -40,7 +40,7 @@ export const docCatalog: DocEntry[] = [
   },
   {
     slug: "vercel",
-    title: "Vercel staging",
+    title: "Vercel deployment",
     group: "Run a server",
     source: "docs/vercel.md",
     description: "PostgreSQL, private archives, hosted scheduling and staging acceptance.",
