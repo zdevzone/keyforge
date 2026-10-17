@@ -12,7 +12,7 @@ Previously published stable versions remain available until a deliberate stable 
 
 ## GitHub Actions releases (recommended)
 
-[release.yml](../.github/workflows/release.yml), **Release npm packages**, is manually dispatched only in the public repository. Choose a channel and branch:
+[release.yml](https://github.com/zdevzone/keyforge/blob/main/.github/workflows/release.yml), **Release npm packages**, is manually dispatched only in the public repository. Choose a channel and branch:
 
 | Channel | Branch | npm tag | Version |
 | --- | --- | --- | --- |
@@ -60,7 +60,7 @@ In the GitHub UI select **Actions → Release npm packages → Run workflow**, c
 
 ### Version updates and recovery
 
-Bump changed package manifests and the client starter's `keyforgeSdkVersion` together, run the required checks, and merge the change through `dev`. Use a promotion PR for a stable release. Beta packaging appends the current run ID/attempt to those next-stable versions. It does not push commits or tags.
+Bump changed package manifests and the client starter's `keyforgeSdkVersion` together. Also bump the server CLI whenever its default server-source commit changes, because that pin is part of its immutable package. Unchanged stable SDK/client archives can be reused without adding unrelated source metadata. Then run the required checks, and merge the change through `dev`. Use a promotion PR for a stable release. Beta packaging appends the current run ID/attempt to those next-stable versions. It does not push commits or tags.
 
 All archives and existing versions are inspected before the first publish. A matching existing archive is skipped; a different integrity stops the release. Publication is not atomic across three packages. If a later package fails, keep earlier successes published. A failed publish job can be rerun using its existing checked artifacts and original beta attempt: the workflow records that attempt with the artifacts. Rerunning all jobs creates a new beta attempt and therefore new beta versions. Stable reruns use the same manifest versions and must have identical archives. Already published versions are not retagged automatically.
 

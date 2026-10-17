@@ -1,12 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directories:
-      - /
-      - /ui
-      - /packages/keyforge-client
-      - /packages/create-keyforge
-      - /packages/create-keyforge-client
+    # pnpm-workspace.yaml discovers ui/ and packages/* with one lockfile.
+    # Listing workspace directories again creates duplicate update PRs.
+    directory: /
     target-branch: dev
     schedule:
       interval: weekly

@@ -13,11 +13,12 @@ Use short-lived feature branches and pull requests into `dev`. People outside th
 3. Inspect the diff and CI results, then squash-merge the feature PR. Delete its feature branch.
 4. Let the separate Render staging service deploy `dev` after checks pass. Test the changed workflows there.
 5. Open a promotion PR from `dev` into `main` and use **Create a merge commit**, not squash. This preserves shared history between the persistent branches.
-6. After main CI passes, manually deploy production and/or release packages as needed. Merging alone does not authorize a production deployment or npm publication.
+6. Open a synchronization PR from `main` back into `dev` and merge it with **Create a merge commit**. This carries the promotion commit back into dev so the next promotion satisfies the up-to-date branch requirement. Keep both persistent branches; never delete dev after merging.
+7. After main CI passes, manually deploy production and/or release packages as needed. Merging alone does not authorize a production deployment or npm publication.
 
 For urgent fixes, branch from `main`, use a PR and CI, then merge `main` back into `dev` through a PR. Production deployment still requires the same source contents to have passed staging. Do not bypass testing by enabling auto-deploy.
 
-Dependabot targets `dev`. Review grouped minor/patch changes and individual major updates normally; there is no blanket dependency auto-merge. Report vulnerabilities privately using [SECURITY.md](../SECURITY.md).
+Dependabot targets `dev`. Review grouped minor/patch changes and individual major updates normally; there is no blanket dependency auto-merge. Report vulnerabilities privately using [SECURITY.md](https://github.com/zdevzone/keyforge/blob/main/SECURITY.md).
 
 ## Set up a separate Render testing service
 
@@ -30,6 +31,8 @@ Creating infrastructure can incur charges. Choose plans in Render yourself; no w
 5. Configure a separate private backup bucket/prefix and credentials using [backups](backups.md). Keep encryption-key recovery copies outside Render. A local backup directory on ephemeral hosting is not durable storage. Configure a separate verification database if PostgreSQL backup verification is enabled.
 6. Let Render supply its public URL automatically; use `LICENSE_SERVER_URL` only for an explicit custom domain. Use staging's URL and public signing keys in test clients.
 7. Confirm `/healthz`, sign-in, license issuance, activation, payments, backup download/verification, and that production data remains unchanged. Seed demo data only against staging, explicitly checking its URL/database before maintenance commands.
+
+If production still follows the earlier private repository, keep that service running during setup. First turn Auto-Deploy off, then change the existing service’s repository to `zdevzone/keyforge` and its branch to `main` in Render Settings. Preserve its database, keys, domain, and backup configuration. Do not create a replacement production database just to switch repositories.
 
 Existing production settings are not automatically replaced by the Blueprint. In the production service dashboard, select branch `main` and set **Auto-Deploy: Off**, preserving its database, domain and keys. Review Blueprint diffs before applying them to an existing service. The root template's SQLite path needs persistent storage if used in a real deployment; changing to PostgreSQL requires a separately planned full-data migration.
 
