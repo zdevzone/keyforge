@@ -45,8 +45,13 @@ try {
   assert.ok(
     await page.locator("#generate-secrets").evaluate((el) => el.getBoundingClientRect().top >= 70),
   );
-  await page.getByRole("button", { name: "Copy code", exact: true }).nth(2).click();
-  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /vp run license keygen/);
+  await page
+    .locator(".docs-code-block")
+    .filter({ hasText: "vp run secrets:init" })
+    .first()
+    .getByRole("button", { name: "Copy code", exact: true })
+    .click();
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /vp run secrets:init/);
   await page.keyboard.press("Control+k");
   const search = page.getByRole("dialog");
   await search.getByRole("combobox", { name: "Search all guides" }).fill("secrets:init");
