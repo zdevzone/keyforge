@@ -70,7 +70,9 @@ export default function Inspect() {
               <div key={label}>
                 <dt className="text-sm text-muted-foreground">{label}</dt>
                 <dd
-                  className={"mt-1 font-medium " + (!result.signatureValid ? "text-red-700" : "")}
+                  className={
+                    "mt-1 font-medium " + (!result.signatureValid ? "text-destructive" : "")
+                  }
                 >
                   {String(value)}
                 </dd>

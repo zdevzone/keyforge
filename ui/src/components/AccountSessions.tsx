@@ -23,7 +23,7 @@ export function AccountSessions() {
         Review active sessions and revoke access from another device.
       </p>
       {sessions.error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           {(sessions.error as Error).message}
         </p>
       )}

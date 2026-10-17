@@ -2,6 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { Input } from "@/components/ui/input";
+
 import { request } from "../api";
 import { Button, Card, ErrorNote, Spinner, TextField } from "../components";
 import { Choice } from "../components/Choice";
@@ -128,12 +130,7 @@ export function RequestStatus() {
         </p>
         <label className="grid gap-2 text-sm font-medium">
           Private status link
-          <input
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            readOnly
-            value={link}
-            onFocus={(e) => e.target.select()}
-          />
+          <Input readOnly value={link} onFocus={(e) => e.target.select()} />
         </label>
         <Button
           variant="secondary"

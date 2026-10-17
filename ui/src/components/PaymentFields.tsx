@@ -1,4 +1,4 @@
-import { TextField } from "../components";
+import { FormFields, TextField } from "../components";
 import { Choice } from "./Choice";
 import { DateField } from "./DateField";
 
@@ -20,18 +20,26 @@ export function PaymentFields({
   return (
     <fieldset className="flex min-w-0 flex-col gap-4">
       <legend className="mb-3 text-sm font-medium">Payment received</legend>
-      <Choice
-        label="Payment method"
-        required
-        value={method}
-        onChange={onMethod}
-        options={[
-          { value: "Bank transfer", label: "Bank transfer" },
-          { value: "Cash", label: "Cash" },
-          { value: "Mobile money", label: "Mobile money" },
-          { value: "Other", label: "Other" },
-        ]}
-      />
+      <FormFields>
+        <Choice
+          label="Payment method"
+          required
+          value={method}
+          onChange={onMethod}
+          options={[
+            { value: "Bank transfer", label: "Bank transfer" },
+            { value: "Cash", label: "Cash" },
+            { value: "Mobile money", label: "Mobile money" },
+            { value: "Other", label: "Other" },
+          ]}
+        />
+        <TextField
+          label="Transaction reference"
+          value={reference}
+          onChange={onReference}
+          required
+        />
+      </FormFields>
       {onDate ? (
         <DateField
           label="Payment date (UTC)"
@@ -42,7 +50,6 @@ export function PaymentFields({
       ) : (
         <p className="text-sm text-muted-foreground">Payment date: {date} (UTC)</p>
       )}
-      <TextField label="Transaction reference" value={reference} onChange={onReference} required />
     </fieldset>
   );
 }

@@ -12,6 +12,7 @@ import { createAuth, ensureAuthSchema, closeAuth, seedOperator } from "../dist/s
 import { configSchema } from "../dist/src/config.js";
 import { LicenseDatabase } from "../dist/src/db.js";
 import { generateSigningKeyPair } from "../dist/src/sign.js";
+import { auditConsoleUI } from "./ui-consistency-audit.mjs";
 
 const temp = await mkdtemp(join(tmpdir(), "keyforge-console-"));
 const artifacts = resolve(".artifacts/console-smoke");
@@ -977,9 +978,15 @@ try {
       fullPage: true,
     });
   }
+  await auditConsoleUI(
+    page,
+    origin,
+    { licenseId: issue.json().license.id, supportId: ticket.json().request.id },
+    join(artifacts, "consistency"),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(origin + "/settings?tab=preferences");
   await page.getByRole("heading", { name: "Appearance", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Switch to dark theme", exact: true }).click();
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );

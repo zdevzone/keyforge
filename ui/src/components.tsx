@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button as UIButton } from "@/components/ui/button";
 import { Card as UICard } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { TableCell as UITableCell, TableHead as UITableHead } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -117,6 +117,7 @@ export function TextField(props: {
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  disabled?: boolean;
   placeholder?: string;
 }) {
   const id = useId();
@@ -129,12 +130,18 @@ export function TextField(props: {
         id={id}
         type={props.type ?? "text"}
         required={props.required}
+        disabled={props.disabled}
         placeholder={props.placeholder}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
       />
     </Field>
   );
+}
+
+/** Related controls share a responsive row, with labels consistently above them. */
+export function FormFields({ children }: { children: ReactNode }) {
+  return <FieldGroup className="console-form-grid">{children}</FieldGroup>;
 }
 
 /** "allowance=200,000 · pro=true" — compact display of a license's entitlements. */
