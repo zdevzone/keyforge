@@ -1,0 +1,5 @@
+# Ownership routes reviews; it does not require self-approval.
+* @zdevzone
+/.github/ @zdevzone
+/scripts/release-packages.mjs @zdevzone
+/scripts/deploy-production.mjs @zdevzone

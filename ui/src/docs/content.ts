@@ -23,6 +23,8 @@ const sources = import.meta.glob<string>(
     "../../../docs/dependent-app-ai-context.md",
     "../../../docs/integration-review.md",
     "../../../docs/documentation-site.md",
+    "../../../docs/publishing.md",
+    "../../../docs/maintaining.md",
     "../../../packages/keyforge-client/README.md",
     "../../../packages/create-keyforge/README.md",
   ],

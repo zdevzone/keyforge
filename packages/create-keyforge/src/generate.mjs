@@ -516,7 +516,7 @@ export function retargetWorkflow(contents, packageManager) {
   // One preparation step per job, immediately after the setup-node step that
   // puts npm and corepack on the runner in the first place.
   return rewritten.replaceAll(
-    /^(\s*)- uses: actions\/setup-node@v[0-9.]+\n((?:\1  .*\n)*)/gm,
+    /^(\s*)- uses: actions\/setup-node@[^\s]+(?:[ \t]+#[^\n]*)?\n((?:\1  .*\n)*)/gm,
     (match, indent, _block) =>
       `${match}${indent}- name: Enable ${packageManager}\n${indent}  run: ${prepare}\n`,
   );

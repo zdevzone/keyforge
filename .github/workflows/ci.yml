@@ -1,10 +1,13 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     strategy:
@@ -14,8 +17,10 @@ jobs:
         node: ["22.23.3", "24.21.0"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: voidzero-dev/setup-vp@v1.21.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
           version: "1.1.0"
           node-version: ${{ matrix.node }}
@@ -56,8 +61,10 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: voidzero-dev/setup-vp@v1.21.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
           version: "1.1.0"
           node-version: "24.21.0"
@@ -79,16 +86,31 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: docker build -t keyforge .
   render:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
       - name: Build with Render configuration
         run: set -o pipefail && curl -fsSL https://vite.plus | VP_HOME="$HOME/.vite-plus" VP_VERSION=1.1.0 VP_NODE_MANAGER=no bash && export PATH="$HOME/.vite-plus/bin:$PATH" && NODE_ENV=development vp install --frozen-lockfile && vp run build:all
         env:
           NODE_ENV: production
+  gate:
+    name: CI passed
+    if: always()
+    needs: [test, postgres, docker, render]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e 'length == 4 and all(.[]; .result == "success")'

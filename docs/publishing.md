@@ -1,63 +1,78 @@
 # Publishing KeyForge packages
 
-Release packages from the public [zdevzone/keyforge](https://github.com/zdevzone/keyforge) repository. The root application is intentionally `private: true`; never publish it.
+Release from the public [zdevzone/keyforge](https://github.com/zdevzone/keyforge) repository. The root app is private and must never be published. The public repository is now authoritative; no private-to-public synchronization step is needed.
 
-| Order | Directory | npm package | Current version |
+| Order | Package | Next stable version |
+| --- | --- | --- |
+| 1 | `@zdevzone/keyforge-client` | `0.1.1` |
+| 2 | `create-keyforge` | `1.0.2` |
+| 3 | `create-keyforge-client` | `0.1.1` |
+
+Previously published stable versions remain available until a deliberate stable release. `@keyforge/client` is unrelated to this project; do not publish to it. Never unpublish packages to repair a release or reuse an old version.
+
+## GitHub Actions releases (recommended)
+
+[release.yml](../.github/workflows/release.yml), **Release npm packages**, is manually dispatched only in the public repository. Choose a channel and branch:
+
+| Channel | Branch | npm tag | Version |
 | --- | --- | --- | --- |
-| 1 | `packages/keyforge-client` | `@zdevzone/keyforge-client` | `0.1.0` |
-| 2 | `packages/create-keyforge` | `create-keyforge` | `1.0.1` |
-| 3 | `packages/create-keyforge-client` | `create-keyforge-client` | `0.1.0` |
+| stable | main | latest | Committed manifest version |
+| beta | dev | beta | `<next-stable>-beta.<run-id>.<attempt>` |
 
-The SDK must be available before the client generator installs it. Publish only versions you own that have not already been used. `@keyforge/client` belongs to an unrelated project; our SDK uses `@zdevzone/keyforge-client`.
+Wrong branch/channel combinations fail before building or publishing. **Dry run** defaults to true. A beta never changes `latest`. Beta versions are generated in temporary packaging copies; committed versions remain stable. The client starter installs its exact beta SDK, while stable starters use a compatible stable range. Server starter archives pin their default template to the tested source commit. An explicit `--template` remains available.
 
-The original `create-keyforge@1.0.0` was unpublished. npm requires a **24-hour wait after fully unpublishing a package** and never allows reusing a published version, even after removal. Keep the corrected generator at `1.0.1` or a later unused version. Tags do not bypass the hold. See [npm's unpublish policy](https://docs.npmjs.com/policies/unpublish/#considerations).
+Before publication the workflow requires successful branch CI, including its database and operating-system checks, then runs lint/format/typechecks, builds, Node tests, package smoke checks and all three browser suites. It packs all three archives, verifies their contents and release metadata, and exercises those exact archives through both generators. The publish job downloads the checked archives without rebuilding. Archives are retained for seven days.
 
-## GitHub Actions release
+Only the publish job receives `id-token: write`. npm trusted publishing provides OIDC authentication and provenance; no `NPM_TOKEN` is needed. Package versions are published in SDK → server CLI → client CLI order. Each must become visible with matching SHA-512 integrity before the next starts; registry processing is allowed up to five minutes plus request time.
 
-The workflow is [release.yml](../.github/workflows/release.yml), named **Release npm packages**. It runs only when manually dispatched on `main` in `zdevzone/keyforge`; pushes, pull requests, forks and the development repository cannot publish. Dry run is enabled by default.
+### Trusted publisher and approval setup
 
-Before publication it installs the frozen lockfile, runs lint/format/typechecks, builds the server/UI/SDK, runs all Node tests, exercises both generators against a temporary registry, and runs the console, issuance and docs browser suites. It then packs and inspects all three release archives. The publish job downloads those exact archives; it does not rebuild them. Artifacts are retained for seven days.
+All three packages must configure the same relationship in npm **Settings → Trusted publishing**:
 
-The workflow uses npm's OIDC trusted publishing with provenance, without a stored npm token. Only the publish job receives `id-token: write`. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
+| Field | Value |
+| --- | --- |
+| Organization/user | zdevzone |
+| Repository | keyforge |
+| Workflow filename | release.yml |
+| Environment | npm |
+| Permission | Publish |
 
-### One-time setup
+Inspect existing entries before adding one; preserve unrelated intentional relationships. Use the filename only, not `.github/workflows/release.yml`. npm configuration requires package write access and account two-factor authentication. New unvalidated trust configurations must be exercised promptly; see [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
-1. Sync this workflow and the packages to the public repository's `main` branch.
-2. If a package does not exist on npm yet, publish its initial version using the manual commands below. Then configure trusted publishing for later releases. The account must control `@zdevzone` and both unscoped CLI names.
-3. In GitHub repository **Settings → Environments**, create `npm`. Restrict deployment branches to `main`; optional reviewers can be configured here.
-4. For **each of the three npm packages**, open **Settings → Trusted publishing** and add GitHub Actions with these exact values:
+The GitHub environment `npm` permits only the protected `main` and `dev` branches and requires the owner's manual approval. Self-approval is allowed for a solo maintainer. A real maintainer team should require independent review instead. Do not put a personal npm token in Actions secrets.
 
-   | Field | Value |
-   | --- | --- |
-   | Organization or user | `zdevzone` |
-   | Repository | `keyforge` |
-   | Workflow filename | `release.yml` |
-   | Environment | `npm` |
-   | Allowed action | Permit direct `npm publish` |
-
-   Do not enter `.github/workflows/release.yml` in the filename field. Complete a release promptly after configuring trust; npm documents expiration for new, unvalidated configurations. No `NPM_TOKEN` repository secret is needed.
-5. For a new release, bump the changed packages' manifest versions, update the client starter's SDK dependency range when needed, run `vp install` to update the lockfile, commit, sync to public `main`, and confirm normal CI is green. The release workflow reads manifest versions and does not bump versions, push commits or create tags.
-
-### Run a release
-
-In **Actions → Release npm packages → Run workflow**, select `main`. Leave **Check and pack only** checked for the first dry run. Review the logs and download the `npm-release-<commit>` artifact. Run again with the checkbox cleared to publish.
-
-With [GitHub CLI](https://cli.github.com/), these commands work in Bash and PowerShell:
+The following commands work in **Bash and Windows PowerShell**:
 
 ```sh
-# Checks and archives only: no npm publication.
-gh workflow run release.yml --repo zdevzone/keyforge --ref main -F dry_run=true
-
-# Inspect the run before publishing.
+# Check and pack without publication.
+gh workflow run release.yml --repo zdevzone/keyforge --ref dev -f channel=beta -F dry_run=true
+# After reviewing a successful dry run, request a beta and approve its npm environment job.
+gh workflow run release.yml --repo zdevzone/keyforge --ref dev -f channel=beta -F dry_run=false
+# Stable releases are a separate deliberate action after promotion and checks.
+gh workflow run release.yml --repo zdevzone/keyforge --ref main -f channel=stable -F dry_run=true
+gh workflow run release.yml --repo zdevzone/keyforge --ref main -f channel=stable -F dry_run=false
+# Find the run ID, then inspect or watch it.
 gh run list --repo zdevzone/keyforge --workflow release.yml --limit 5
-
-# Actual publication, after npm trusted publishing is configured.
-gh workflow run release.yml --repo zdevzone/keyforge --ref main -F dry_run=false
+gh run watch RUN_ID --repo zdevzone/keyforge --exit-status
 ```
 
-Find the new run ID using `gh run list`, then monitor it with `gh run watch RUN_ID --repo zdevzone/keyforge --exit-status`.
+In the GitHub UI select **Actions → Release npm packages → Run workflow**, choose the branch/channel, and leave dry run checked initially. A successful dry run does not validate OIDC; an actual approved beta release does. Package publishing does not deploy the website.
 
-Only one release runs at a time. All archives and existing npm versions are checked before the first publication. Existing versions are skipped **only when their SHA-512 archive integrity matches exactly**, allowing a partially completed release to resume on the same commit. Conflicting contents, registry errors, publishing failures, or a package not becoming visible stop the release before the next package. npm cannot publish three packages atomically; an earlier successful package stays published if a later one fails. Do not unpublish it to retry. Rerun the same commit after resolving the error; if contents changed, bump the affected versions first. An already-published version is not retagged automatically.
+### Version updates and recovery
+
+Bump changed package manifests and the client starter's `keyforgeSdkVersion` together, run the required checks, and merge the change through `dev`. Use a promotion PR for a stable release. Beta packaging appends the current run ID/attempt to those next-stable versions. It does not push commits or tags.
+
+All archives and existing versions are inspected before the first publish. A matching existing archive is skipped; a different integrity stops the release. Publication is not atomic across three packages. If a later package fails, keep earlier successes published. A failed publish job can be rerun using its existing checked artifacts and original beta attempt: the workflow records that attempt with the artifacts. Rerunning all jobs creates a new beta attempt and therefore new beta versions. Stable reruns use the same manifest versions and must have identical archives. Already published versions are not retagged automatically.
+
+Verify registry metadata and both generators before announcing a release:
+
+```sh
+vp add @zdevzone/keyforge-client@beta
+vp create keyforge@beta
+vp create keyforge-client@beta
+```
+
+Use a separate disposable directory and the matching staging server/public keys. `@beta` is explicitly opt-in. Plain `vp add @zdevzone/keyforge-client` and `vp create keyforge` continue using `latest`.
 
 ## Manual release: Bash on Linux or macOS
 
@@ -81,9 +96,9 @@ vp -C packages/keyforge-client pm pack --pack-destination ../../.artifacts
 vp -C packages/create-keyforge pm pack --pack-destination ../../.artifacts
 vp -C packages/create-keyforge-client pm pack --pack-destination ../../.artifacts
 
-tar -tzf .artifacts/zdevzone-keyforge-client-0.1.0.tgz
-tar -tzf .artifacts/create-keyforge-1.0.1.tgz
-tar -tzf .artifacts/create-keyforge-client-0.1.0.tgz
+tar -tzf .artifacts/zdevzone-keyforge-client-0.1.1.tgz
+tar -tzf .artifacts/create-keyforge-1.0.2.tgz
+tar -tzf .artifacts/create-keyforge-client-0.1.1.tgz
 ```
 
 Review the archives before continuing. The SDK must include `package/dist/index.js`, declarations and Windows/Linux/macOS/automatic device-signal modules. A README-and-skill-only archive is broken: stop. Never disable lifecycle scripts. No signing keys, environment files, databases or credentials belong in these archives.
@@ -91,15 +106,15 @@ Review the archives before continuing. The SDK must include `package/dist/index.
 ```bash
 # 1. SDK
 vp -C packages/keyforge-client pm publish --access public --tag latest --registry=https://registry.npmjs.org/
-npm view @zdevzone/keyforge-client@0.1.0 version --registry=https://registry.npmjs.org/
+npm view @zdevzone/keyforge-client@0.1.1 version --registry=https://registry.npmjs.org/
 
 # 2. Server CLI
 vp -C packages/create-keyforge pm publish --access public --tag latest --registry=https://registry.npmjs.org/
-npm view create-keyforge@1.0.1 version --registry=https://registry.npmjs.org/
+npm view create-keyforge@1.0.2 version --registry=https://registry.npmjs.org/
 
 # 3. Client CLI
 vp -C packages/create-keyforge-client pm publish --access public --tag latest --registry=https://registry.npmjs.org/
-npm view create-keyforge-client@0.1.0 version --registry=https://registry.npmjs.org/
+npm view create-keyforge-client@0.1.1 version --registry=https://registry.npmjs.org/
 ```
 
 ## Manual release: Windows PowerShell
@@ -133,9 +148,9 @@ Invoke-Checked vp @('-C', 'packages/keyforge-client', 'pm', 'pack', '--pack-dest
 Invoke-Checked vp @('-C', 'packages/create-keyforge', 'pm', 'pack', '--pack-destination', '../../.artifacts')
 Invoke-Checked vp @('-C', 'packages/create-keyforge-client', 'pm', 'pack', '--pack-destination', '../../.artifacts')
 
-Invoke-Checked tar.exe @('-tzf', '.artifacts/zdevzone-keyforge-client-0.1.0.tgz')
-Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-1.0.1.tgz')
-Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-client-0.1.0.tgz')
+Invoke-Checked tar.exe @('-tzf', '.artifacts/zdevzone-keyforge-client-0.1.1.tgz')
+Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-1.0.2.tgz')
+Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-client-0.1.1.tgz')
 ```
 
 Review the archives as described above, then publish in order. Complete npm's sign-in or two-factor prompts when requested.
@@ -143,15 +158,15 @@ Review the archives as described above, then publish in order. Complete npm's si
 ```powershell
 # 1. SDK
 Invoke-Checked vp @('-C', 'packages/keyforge-client', 'pm', 'publish', '--access', 'public', '--tag', 'latest', '--registry=https://registry.npmjs.org/')
-Invoke-Checked npm.cmd @('view', '@zdevzone/keyforge-client@0.1.0', 'version', '--registry=https://registry.npmjs.org/')
+Invoke-Checked npm.cmd @('view', '@zdevzone/keyforge-client@0.1.1', 'version', '--registry=https://registry.npmjs.org/')
 
 # 2. Server CLI
 Invoke-Checked vp @('-C', 'packages/create-keyforge', 'pm', 'publish', '--access', 'public', '--tag', 'latest', '--registry=https://registry.npmjs.org/')
-Invoke-Checked npm.cmd @('view', 'create-keyforge@1.0.1', 'version', '--registry=https://registry.npmjs.org/')
+Invoke-Checked npm.cmd @('view', 'create-keyforge@1.0.2', 'version', '--registry=https://registry.npmjs.org/')
 
 # 3. Client CLI
 Invoke-Checked vp @('-C', 'packages/create-keyforge-client', 'pm', 'publish', '--access', 'public', '--tag', 'latest', '--registry=https://registry.npmjs.org/')
-Invoke-Checked npm.cmd @('view', 'create-keyforge-client@0.1.0', 'version', '--registry=https://registry.npmjs.org/')
+Invoke-Checked npm.cmd @('view', 'create-keyforge-client@0.1.1', 'version', '--registry=https://registry.npmjs.org/')
 ```
 
 The listed archive filenames and version checks match the current manifests. Update those examples to your new versions on subsequent releases. The SDK's `prepack` hook builds and verifies exports automatically for manual publication; GitHub Actions publishes the verified archives directly.
@@ -161,8 +176,8 @@ The listed archive filenames and version checks match the current manifests. Upd
 From a separate directory outside the repository, test both generators:
 
 ```sh
-vp create keyforge@1.0.1
-vp create keyforge-client@0.1.0
+vp create keyforge@1.0.2
+vp create keyforge-client@0.1.1
 ```
 
 These same commands work in PowerShell. Interactive choices support Up/Down, Enter and Ctrl+C. Vite+ should finish at the generated project's root, without looking for removed upstream workspaces.

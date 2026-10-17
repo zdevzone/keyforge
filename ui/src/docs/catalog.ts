@@ -141,6 +141,20 @@ export const docCatalog: DocEntry[] = [
     source: "docs/documentation-site.md",
     description: "Source files, publishing, rendering and documentation checks.",
   },
+  {
+    slug: "publishing",
+    title: "Package releases",
+    group: "Reference",
+    source: "docs/publishing.md",
+    description: "Stable and beta SDK/CLI releases with npm trusted publishing.",
+  },
+  {
+    slug: "maintaining",
+    title: "Maintainer guide",
+    group: "Reference",
+    source: "docs/maintaining.md",
+    description: "Contributions, staging, production promotion and recovery.",
+  },
 ];
 export function docPath(slug: string) {
   return slug ? "/docs/" + slug : "/docs";

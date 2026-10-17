@@ -1,6 +1,6 @@
 **What this changes**
 
-<!-- One or two sentences. -->
+<!-- One or two sentences. Feature PRs target dev; promotions target main. -->
 
 **Why**
 
@@ -20,3 +20,6 @@
 
 <!-- Behavior you were unsure about, a trade-off you made, a test you could not
 write. Saying so is not a weakness in a PR; discovering it in review is worse. -->
+
+- [ ] Target branch is correct; main promotions preserve history with a merge commit.
+- [ ] Relevant docs and package versions are updated; no credentials or customer data included.
