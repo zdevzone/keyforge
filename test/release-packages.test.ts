@@ -169,7 +169,8 @@ test("release workflow is opt-in, checks first, and limits OIDC to the publish j
   assert.deepEqual(workflow.on.workflow_dispatch.inputs.channel.options, ["stable", "beta"]);
   assert.equal(workflow.jobs.publish.needs, "checks");
   assert.match(workflow.jobs.publish.if, /!inputs.dry_run/);
-  assert.equal(workflow.jobs.publish.environment, "npm");
+  assert.equal(workflow.jobs.publish.environment.name, "npm");
+  assert.equal(workflow.jobs.publish.environment.deployment, false);
   assert.equal(workflow.jobs.publish.permissions["id-token"], "write");
   assert.equal(workflow.jobs.checks.permissions.actions, "read");
   const runSteps = workflow.jobs.checks.steps
@@ -346,6 +347,8 @@ function deploymentFixture(production = true) {
       },
     ],
     ["/v13/deployments", { id: "dpl_test" }],
+    ["/deployments", { id: 77 }],
+    ["/deployments/77/statuses", {}],
     [
       "/v13/deployments/dpl_test",
       {
@@ -462,7 +465,12 @@ test("failed health, wrong source or Vercel failure never promotes or creates a 
 test("preview deploys only dev with preview settings and never promotes production", async () => {
   const f = deploymentFixture(false);
   await deployPreview(f.env, f);
-  assert.equal(f.posts.length, 1);
+  assert.equal(f.posts.length, 3);
+  assert.equal((f.posts[1].body as Record<string, unknown>).ref, sha);
+  assert.equal(
+    (f.posts[2].body as Record<string, unknown>).environment_url,
+    f.env.VERCEL_PREVIEW_URL,
+  );
   const body = f.posts[0].body as Record<string, any>;
   assert.equal(body.target, undefined);
   assert.equal(body.gitSource.ref, "dev");
@@ -503,6 +511,9 @@ test("workflows pin actions, protect credentials, and gate all existing CI jobs"
       assert.equal(workflow.jobs.production.environment.name, "production");
       assert.equal(workflow.jobs.production.environment.url, "${{ vars.VERCEL_PRODUCTION_URL }}");
       assert.equal(workflow.jobs.preview.environment.name, "preview");
+      assert.equal(workflow.jobs.preview.environment.deployment, false);
+      assert.equal(workflow.jobs.preview.permissions.deployments, "write");
+      assert.equal(workflow.jobs.production.permissions.deployments, undefined);
       assert.equal(workflow.jobs.preview.environment.url, "${{ vars.VERCEL_PREVIEW_URL }}");
       assert.match(workflow.jobs.production.if, /workflow_dispatch/);
       assert.match(workflow.jobs.production.if, /refs\/heads\/main/);
