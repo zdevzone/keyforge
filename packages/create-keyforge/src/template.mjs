@@ -38,6 +38,9 @@ const PRUNE = [
   "test/client-sdk.test.ts",
   "test/scaffold-prompts.test.ts",
   "scripts/package-smoke.mjs",
+  "scripts/release-packages.mjs",
+  "test/release-packages.test.ts",
+  ".github/workflows/release.yml",
   "examples/keyforge-node.ts",
   // Upstream's own community files. They name Keyforge's maintainer, its
   // security mailbox and its advisory URL, none of which belong in someone

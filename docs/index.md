@@ -19,6 +19,7 @@ Deploy your own license server, issue licenses from priced plans, and connect yo
 - [Licenses, requests and payments](license-sales.md): plans, automatic ETB sales, unpaid balances, payment recording and delivery.
 - [CLI reference](cli.md): key generation, diagnostics, issuance, revocation, seat release and maintenance commands.
 - [API reference](api.md): authentication, permissions, routes, request bodies and errors.
+- [Package publishing](publishing.md): GitHub Actions releases and manual Bash/Windows PowerShell commands for the SDK and both CLIs.
 
 ## Connect an application
 
