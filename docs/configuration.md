@@ -54,6 +54,10 @@ All backup providers can be configured simultaneously. Each owns an independent 
 
 `keyforge.config.json` is deployment policy, validated at startup: branding, key formatting, rate limits, registry privacy, audit/backups switches and operator administration scope. Its plan presets, grace window and retired public keys seed the default product once. Once imported, the database catalog is authoritative. Editing JSON does not overwrite later GUI changes.
 
+The optional [example policy](examples/keyforge.config.example.json) lives in `docs/examples/` and is not loaded automatically. To try it on a fresh setup, copy it to the repository root as `keyforge.config.json`, review the illustrative values, then restart the server. Alternatively, point `LICENSE_CONFIG` to a customized copy. The application uses built-in defaults when no policy file exists. Keep private signing keys and other secrets out of this JSON; add only real retired **public** keys to `signingKeys.retired` when needed. Plan prices and current product policies are managed in the console.
+
+This file is **not** the input for **Entitlements → Import or export catalog**. That workflow accepts a catalog exported from the console, containing definitions and plans. The configuration example is a server policy reference, not a license or customer-data import.
+
 Manage products, trial policy, signing rotation, definitions, plans and meters in the console. Plan values are defaults copied into a newly issued license, not live references. Editing a plan leaves existing license entitlements, seats and expiry unchanged. Definitions constrain explicit grants; a definition's default is an editor suggestion, not a grant to every license. Archived plans/definitions cannot be used for new grants.
 
 Catalog export/import transfers definitions and plan presets only. Preview returns a fingerprint; apply requires that fingerprint and fails if the catalog changed. Secrets and live licenses are excluded.

@@ -1,17 +1,11 @@
 {
-  "$comment": "Copy to keyforge.config.json (or set LICENSE_CONFIG to its path). Everything here is optional; these are illustrative values, not the defaults.",
+  "$comment": "Server startup policy example, not a console catalog import. Copy to the repository root as keyforge.config.json (or set LICENSE_CONFIG to its path). Everything here is optional; these are illustrative values, not the defaults.",
   "branding": { "name": "Acme Licensing" },
   "key": { "prefix": "ACME", "groupLength": 5, "groups": 4 },
   "tokens": { "offlineGraceDays": 14 },
   "signingKeys": {
     "$comment": "Public halves of keys this service no longer signs with. Tokens carry a kid, so a rotated-away key must stay findable while tokens it signed are still in the field. The active key comes from LICENSE_SIGNING_KEY and is named by LICENSE_SIGNING_KID.",
-    "retired": [
-      {
-        "kid": "2025-11",
-        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
-        "retiredAt": "2026-08-01T00:00:00.000Z"
-      }
-    ]
+    "retired": []
   },
   "limits": {
     "enabled": true,
