@@ -25,12 +25,13 @@ import {
 import { generateSigningKeyPair } from "../src/sign.js";
 import { validateVercelEnvironment } from "../src/vercel-config.js";
 
-test("Vercel package configuration includes runtime assets and keeps staging deployment manual", () => {
+test("Vercel package configuration includes runtime assets and keeps native automatic deployments disabled", () => {
   const config = JSON.parse(readFileSync("vercel.json", "utf8"));
   const fn = config.functions["api/index.mjs"];
   assert.equal(typeof fn.includeFiles, "string", "Vercel requires one glob string, not an array");
   assert.ok(fn.includeFiles.includes("dist/src/**") && fn.includeFiles.includes("dist/public/**"));
   assert.equal(fn.maxDuration, 300);
+  assert.ok(config.buildCommand.startsWith("VITE_KEYFORGE_ANALYTICS=$VERCEL_ENV "));
   assert.match(config.buildCommand, /node scripts\/vercel-prepare.mjs$/);
   assert.equal(config.git.deploymentEnabled, false);
   assert.deepEqual(config.crons, [{ path: "/api/internal/backups/tick", schedule: "0 5 * * *" }]);
