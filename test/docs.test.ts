@@ -74,8 +74,8 @@ test("project documentation uses Vite+ commands", () => {
   const offenders: string[] = [];
   function walk(dir: string) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      // Ignored validation artifacts can contain third-party documentation.
-      if (["node_modules", ".git", "dist", ".artifacts"].includes(entry.name)) continue;
+      // Local agent tools and ignored validation artifacts can contain third-party guides.
+      if (["node_modules", ".git", "dist", ".artifacts", ".agents"].includes(entry.name)) continue;
       const file = join(dir, entry.name);
       if (entry.isDirectory()) walk(file);
       else if (

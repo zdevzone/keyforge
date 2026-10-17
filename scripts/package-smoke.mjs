@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -11,8 +12,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runFile = promisify(execFile);
 await mkdir(join(root, ".artifacts"), { recursive: true });
 const artifact = await mkdtemp(join(root, ".artifacts", "package-smoke-"));
-// A sibling keeps vp create outside this monorepo and on the project's disk.
-const workspace = await mkdtemp(join(dirname(root), "keyforge-packages-"));
+// Run generators outside the monorepo without leaving extra project folders beside it.
+const workspace = await mkdtemp(join(tmpdir(), "keyforge-packages-"));
 async function run(command, args, cwd, env = process.env) {
   try {
     return await runFile(command, args, {
@@ -209,8 +210,10 @@ if (![KeyForgeClient, MemoryStorage, createDeviceSignalsProvider, createWindowsD
     }
     console.log(`Actual vp create ${name} completed at the correct root; ${directory} verified.`);
   }
-  console.log("Package smoke checks passed; temporary projects: " + workspace);
+  console.log("Package smoke checks passed.");
 } finally {
   registry.closeAllConnections();
   await new Promise((resolve) => registry.close(resolve));
+  assert.equal(dirname(resolve(workspace)), resolve(tmpdir()), "Only remove our OS-temp workspace");
+  await rm(workspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
