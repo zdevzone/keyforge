@@ -9,6 +9,8 @@ KeyForge is an MIT-licensed license server with an admin console, REST API and T
 - Sales, payments, customer support and financial reports.
 - Operator permissions, audit history and encrypted backups.
 
+[Live app](https://keyforge.1hubengineering.com) · [Online documentation](https://keyforge.1hubengineering.com/docs) · [Source releases](https://github.com/zdevzone/keyforge/releases)
+
 ## Getting started
 
 ### Requirements
@@ -34,6 +36,18 @@ vp node packages/create-keyforge/bin/create-keyforge.mjs ../my-license-server --
 
 Follow the generator's printed steps or the [setup guide](docs/getting-started.md) to configure secrets, create an administrator and start the server. The console runs at `http://localhost:4100`; docs are served at `/docs`.
 
+## Packages
+
+Published on npm; GitHub source releases are separate from package versions.
+
+| Package | Purpose |
+| --- | --- |
+| [@zdevzone/keyforge-client](https://www.npmjs.com/package/@zdevzone/keyforge-client) | TypeScript SDK for dependent apps. |
+| [create-keyforge](https://www.npmjs.com/package/create-keyforge) | Generate a self-hosted server project. |
+| [create-keyforge-client](https://www.npmjs.com/package/create-keyforge-client) | Generate a Node.js client integration starter. |
+
+See [publishing and beta testing](docs/publishing.md) for release channels.
+
 ## Development
 
 Build output is generated, not tracked. Run `vp run build:all` before deployment.
@@ -54,7 +68,7 @@ For UI development, run `vp -C ui run dev` alongside the server. See [contributi
 - [Client integration](docs/dependent-app-integration.md) · [TypeScript SDK](packages/keyforge-client/README.md) · [Client starter](packages/create-keyforge-client/README.md) · [OpenAPI](docs/client-openapi.json)
 - [CLI](packages/create-keyforge/README.md) · [Backups](docs/backups.md) · [Database upgrades](docs/database.md#upgrade-existing-installations)
 - [Security](SECURITY.md) · [Known limitations](docs/integration-review.md) · [Package releases](docs/publishing.md)
-- [Maintainer guide](docs/maintaining.md): contributions, Render staging, production promotion and recovery.
+- [Maintainer guide](docs/maintaining.md): contributions, Vercel Preview, production promotion and recovery.
 
 ## License
 
