@@ -114,6 +114,7 @@ export async function createLicenseServer(serverless = false) {
     }
 
     const app = await buildLicenseApp({
+      serveStaticAssets: !serverless,
       privateKey,
       signingKey,
       kid,

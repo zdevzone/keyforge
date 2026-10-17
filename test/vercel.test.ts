@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import Fastify from "fastify";
 
+import { buildLicenseApp } from "../src/app.js";
 import { createAuth, ensureAuthSchema, closeAuth, seedOperator } from "../src/auth.js";
 import { BackupService, registerBackups, type BackupJob } from "../src/backups.js";
 import { configSchema } from "../src/config.js";
@@ -29,6 +33,28 @@ test("Vercel package configuration includes runtime assets and keeps staging dep
   assert.equal(fn.maxDuration, 300);
   assert.equal(config.git.deploymentEnabled, false);
   assert.deepEqual(config.crons, [{ path: "/api/internal/backups/tick", schedule: "0 5 * * *" }]);
+});
+
+test("CDN asset mode retains public SPA deep links without serving API misses as HTML", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "kf-cdn-ui-"));
+  await writeFile(join(directory, "index.html"), "<!doctype html><title>KeyForge fixture</title>");
+  const database = await LicenseDatabase.open({ sqlitePath: ":memory:" });
+  const app = await buildLicenseApp({
+    database,
+    privateKey: generateSigningKeyPair().privateKey,
+    uiDir: directory,
+    serveStaticAssets: false,
+  });
+  t.after(async () => {
+    await app.close();
+    await database.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const page = await app.inject("/docs/vercel");
+  assert.equal(page.statusCode, 200);
+  assert.match(page.headers["content-type"]!, /text\/html/);
+  assert.equal((await app.inject("/api/not-a-route")).statusCode, 404);
+  assert.equal((await app.inject("/v1/not-a-route")).statusCode, 404);
 });
 
 test("Vercel uses an explicit public URL first and refuses ephemeral or unencrypted setup", () => {
