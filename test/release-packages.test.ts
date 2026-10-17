@@ -500,8 +500,10 @@ test("workflows pin actions, protect credentials, and gate all existing CI jobs"
     }
     if (name === "deploy-production") {
       assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch", "workflow_run"]);
-      assert.equal(workflow.jobs.production.environment, "production");
-      assert.equal(workflow.jobs.preview.environment, "preview");
+      assert.equal(workflow.jobs.production.environment.name, "production");
+      assert.equal(workflow.jobs.production.environment.url, "${{ vars.VERCEL_PRODUCTION_URL }}");
+      assert.equal(workflow.jobs.preview.environment.name, "preview");
+      assert.equal(workflow.jobs.preview.environment.url, "${{ vars.VERCEL_PREVIEW_URL }}");
       assert.match(workflow.jobs.production.if, /workflow_dispatch/);
       assert.match(workflow.jobs.production.if, /refs\/heads\/main/);
       assert.match(workflow.jobs.preview.if, /workflow_run.event == 'push'/);
