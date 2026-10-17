@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, readFileSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve, relative as relativePath } from "node:path";
@@ -7,7 +7,9 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 /** Where `npx create-keyforge` gets the server from when nothing is passed. */
-export const DEFAULT_TEMPLATE = "zdevzone/keyforge#main";
+const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+export const DEFAULT_TEMPLATE =
+  "zdevzone/keyforge#" + (manifest.keyforgeRelease?.sourceSha ?? "main");
 
 /**
  * Files that belong to the Keyforge project rather than to a deployment: git
@@ -41,6 +43,13 @@ const PRUNE = [
   "scripts/release-packages.mjs",
   "test/release-packages.test.ts",
   ".github/workflows/release.yml",
+  ".github/workflows/deploy-production.yml",
+  ".github/workflows/codeql.yml",
+  ".github/CODEOWNERS",
+  "scripts/deploy-production.mjs",
+  "test/deployment.test.ts",
+  "render.staging.yaml",
+  "docs/maintaining.md",
   "examples/keyforge-node.ts",
   // Upstream's own community files. They name Keyforge's maintainer, its
   // security mailbox and its advisory URL, none of which belong in someone

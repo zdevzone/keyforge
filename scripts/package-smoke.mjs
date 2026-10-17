@@ -44,8 +44,19 @@ for (const original of [
   join(root, "packages/create-keyforge-client"),
 ]) {
   let directory = original;
-  const pkg = JSON.parse(await readFile(join(original, "package.json"), "utf8"));
-  if (pkg.bin) {
+  let pkg = JSON.parse(await readFile(join(original, "package.json"), "utf8"));
+  if (process.env.RELEASE_ARCHIVES) {
+    const files = await readdir(process.env.RELEASE_ARCHIVES);
+    const prefix = pkg.name.replace(/^@/, "").replaceAll("/", "-") + "-";
+    const matches = files.filter(
+      (file) =>
+        file.startsWith(prefix) && /^\d/.test(file.slice(prefix.length)) && file.endsWith(".tgz"),
+    );
+    assert.equal(matches.length, 1, `Expected one release archive for ${pkg.name}`);
+    const path = join(process.env.RELEASE_ARCHIVES, matches[0]);
+    pkg = JSON.parse((await run("tar", ["-xOf", path, "package/package.json"], root)).stdout);
+    await cp(path, join(artifact, matches[0]));
+  } else if (pkg.bin) {
     directory = join(artifact, "source/packages", pkg.name);
     await mkdir(directory, { recursive: true });
     for (const entry of pkg.files)
@@ -54,7 +65,8 @@ for (const original of [
     pkg.version += "-smoke." + Date.now();
     await writeFile(join(directory, "package.json"), JSON.stringify(pkg));
   }
-  await run("vp", ["pm", "pack", "--pack-destination", artifact], directory);
+  if (!process.env.RELEASE_ARCHIVES)
+    await run("vp", ["pm", "pack", "--pack-destination", artifact], directory);
   const filename = pkg.name.replace(/^@/, "").replaceAll("/", "-") + "-" + pkg.version + ".tgz";
   const bytes = await readFile(join(artifact, filename));
   const entries = (await run("tar", ["-tzf", join(artifact, filename)], root)).stdout;
@@ -87,7 +99,8 @@ let origin;
 const registry = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url, "http://local").pathname).slice(1);
   if (process.env.PACKAGE_SMOKE_DEBUG) console.log("Registry request: " + path);
-  if (path === "zdevzone/keyforge/tar.gz/main") {
+  const templateRef = packages.get("create-keyforge").pkg.keyforgeRelease?.sourceSha ?? "main";
+  if (path === "zdevzone/keyforge/tar.gz/" + templateRef) {
     res.end(templateBytes);
     return;
   }
