@@ -512,6 +512,7 @@ test("workflows pin actions, protect credentials, and gate all existing CI jobs"
       assert.equal(workflow.jobs.production.environment.url, "${{ vars.VERCEL_PRODUCTION_URL }}");
       assert.equal(workflow.jobs.preview.environment.name, "preview");
       assert.equal(workflow.jobs.preview.environment.deployment, false);
+      assert.equal(workflow.jobs.preview.steps[0].with.ref, "${{ github.workflow_sha }}");
       assert.equal(workflow.jobs.preview.permissions.deployments, "write");
       assert.equal(workflow.jobs.production.permissions.deployments, undefined);
       assert.equal(workflow.jobs.preview.environment.url, "${{ vars.VERCEL_PREVIEW_URL }}");
