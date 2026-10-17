@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
 // @ts-expect-error Maintainer tooling is plain ESM, consumed directly by Node.
-import { deployProduction } from "../scripts/deploy-production.mjs";
+import { deployProduction, deployPreview } from "../scripts/deploy-production.mjs";
 // @ts-expect-error Release tooling is plain ESM, consumed directly by Node.
 import * as releases from "../scripts/release-packages.mjs";
 
@@ -277,22 +277,31 @@ test("stable SDK/client archives can be reused across server source updates", as
 const sha = "a".repeat(40);
 const stagedSha = "b".repeat(40);
 const tree = "c".repeat(40);
-function deploymentFixture() {
+function deploymentFixture(production = true) {
+  const branch = production ? "main" : "dev";
   const env = {
     GITHUB_ACTIONS: "true",
     GITHUB_REPOSITORY: "zdevzone/keyforge",
-    GITHUB_REF: "refs/heads/main",
+    GITHUB_REF: "refs/heads/" + branch,
+    GITHUB_EVENT_NAME: "workflow_dispatch",
     GITHUB_SHA: sha,
     GITHUB_TOKEN: "github-test",
-    RENDER_API_KEY: "render-test",
-    RENDER_STAGING_SERVICE_ID: "srv-stage",
-    RENDER_PRODUCTION_SERVICE_ID: "srv-prod",
+    VERCEL_TOKEN: "vercel-test",
+    VERCEL_PROJECT_ID: "prj_test",
+    VERCEL_TEAM_ID: "team_test",
+    VERCEL_AUTOMATION_BYPASS_SECRET: "test-preview-access",
+    VERCEL_PRODUCTION_URL: "https://production.example.test",
+    VERCEL_PREVIEW_URL: "https://dev.example.test",
   };
   const replies = new Map<string, unknown>([
-    ["/git/ref/heads/main", { object: { sha } }],
+    ["/git/ref/heads/" + branch, { object: { sha } }],
     [
       `/actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&per_page=100`,
-      { workflow_runs: [{ id: 42, head_branch: "main", head_sha: sha, conclusion: "success" }] },
+      {
+        workflow_runs: [
+          { id: 42, event: "push", head_branch: branch, head_sha: sha, conclusion: "success" },
+        ],
+      },
     ],
     [
       "/actions/runs/42/jobs?per_page=100",
@@ -300,27 +309,72 @@ function deploymentFixture() {
     ],
     [`/git/commits/${sha}`, { tree: { sha: tree } }],
     [`/git/commits/${stagedSha}`, { tree: { sha: tree } }],
-    ["srv-stage", { branch: "dev", repo: "https://github.com/zdevzone/keyforge" }],
     [
-      "srv-prod",
+      "/v9/projects/prj_test",
       {
-        branch: "main",
-        repo: "https://github.com/zdevzone/keyforge",
-        autoDeployTrigger: "off",
-        serviceDetails: { url: "https://example.onrender.com" },
+        id: "prj_test",
+        name: "keyforge",
+        link: {
+          type: "github",
+          org: "zdevzone",
+          repo: "keyforge",
+          repoId: 123,
+          productionBranch: "main",
+        },
       },
     ],
-    ["srv-stage/deploys?limit=100", [{ deploy: { status: "live", commit: { id: stagedSha } } }]],
-    ["srv-prod/deploys", { id: "dep-tested" }],
-    ["srv-prod/deploys/dep-tested", { status: "live", commit: { id: sha } }],
-    ["/healthz", { ok: true }],
+    [
+      "/v9/projects/prj_test/domains",
+      {
+        domains: [
+          { name: "production.example.test", verified: true },
+          { name: "dev.example.test", gitBranch: "dev", verified: true },
+        ],
+      },
+    ],
+    [
+      "/v6/deployments?projectId=prj_test&state=READY&limit=100",
+      {
+        deployments: [
+          {
+            id: "dpl_preview",
+            projectId: "prj_test",
+            url: "preview-check.vercel.app",
+            meta: { githubCommitRef: "dev", githubCommitSha: stagedSha },
+          },
+        ],
+      },
+    ],
+    ["/v13/deployments", { id: "dpl_test" }],
+    [
+      "/v13/deployments/dpl_test",
+      {
+        id: "dpl_test",
+        projectId: "prj_test",
+        url: "release-check.vercel.app",
+        target: production ? "production" : null,
+        readyState: "READY",
+        meta: { githubCommitSha: sha, githubCommitRef: branch },
+      },
+    ],
+    ["/v10/projects/prj_test/promote/dpl_test", {}],
+    ["/v4/aliases/production.example.test", { projectId: "prj_test", deploymentId: "dpl_test" }],
+    ["/v4/aliases/dev.example.test", { projectId: "prj_test", deploymentId: "dpl_test" }],
+    ...[
+      "https://preview-check.vercel.app",
+      "https://release-check.vercel.app",
+      env.VERCEL_PRODUCTION_URL,
+      env.VERCEL_PREVIEW_URL,
+    ].map((url) => [url + "/healthz", { ok: true }] as [string, unknown]),
   ]);
   const posts: { path: string; body: unknown }[] = [];
   const request = async (url: string | URL, options: RequestInit = {}) => {
-    const path = String(url)
+    const parsed = new URL(url);
+    parsed.searchParams.delete("teamId");
+    const path = parsed
+      .toString()
       .replace("https://api.github.com/repos/zdevzone/keyforge", "")
-      .replace("https://api.render.com/v1/services/", "")
-      .replace("https://example.onrender.com", "");
+      .replace("https://api.vercel.com", "");
     if (options.method === "POST") posts.push({ path, body: JSON.parse(String(options.body)) });
     assert.ok(replies.has(path), `Unexpected request ${path}`);
     return Response.json(replies.get(path));
@@ -332,26 +386,37 @@ test("production requires green CI and staged source contents, then pins the dep
   const f = deploymentFixture();
   await deployProduction(f.env, f);
   assert.deepEqual(f.posts, [
-    { path: "srv-prod/deploys", body: { commitId: sha, clearCache: "do_not_clear" } },
+    {
+      path: "/v13/deployments",
+      body: {
+        name: "keyforge",
+        project: "prj_test",
+        target: "production",
+        autoAssignCustomDomains: false,
+        gitSource: { type: "github", repoId: 123, ref: "main", sha },
+        meta: { keyforgeWorkflow: "github-actions", keyforgeCommit: sha },
+      },
+    },
+    { path: "/v10/projects/prj_test/promote/dpl_test", body: {} },
   ]);
 });
 
-test("production fails closed before deployment for wrong branch, missing CI, staging mismatch, or auto-deploy", async () => {
+test("production fails closed before deployment for wrong branch, missing CI, project, staging or domain mismatch", async () => {
   for (const variant of [
     "branch",
     "credentials",
-    "same-service",
+    "event",
     "ci",
     "gate",
     "tree",
     "staging",
-    "auto",
+    "domain",
     "repo",
   ]) {
     const f = deploymentFixture();
     if (variant === "branch") f.env.GITHUB_REF = "refs/heads/dev";
-    if (variant === "credentials") f.env.RENDER_API_KEY = "";
-    if (variant === "same-service") f.env.RENDER_STAGING_SERVICE_ID = "srv-prod";
+    if (variant === "credentials") f.env.VERCEL_TOKEN = "";
+    if (variant === "event") f.env.GITHUB_EVENT_NAME = "workflow_run";
     if (variant === "ci")
       f.replies.set(`/actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&per_page=100`, {
         workflow_runs: [],
@@ -360,27 +425,52 @@ test("production fails closed before deployment for wrong branch, missing CI, st
     if (variant === "tree")
       f.replies.set(`/git/commits/${stagedSha}`, { tree: { sha: "d".repeat(40) } });
     if (variant === "staging")
-      f.replies.set("srv-stage/deploys?limit=100", [{ deploy: { status: "build_failed" } }]);
-    if (variant === "auto")
-      f.replies.set("srv-prod", {
-        branch: "main",
-        repo: "https://github.com/zdevzone/keyforge",
-        autoDeployTrigger: "commit",
+      f.replies.set("/v6/deployments?projectId=prj_test&state=READY&limit=100", {
+        deployments: [],
       });
+    if (variant === "domain") f.replies.set("/v9/projects/prj_test/domains", { domains: [] });
     if (variant === "repo")
-      f.replies.set("srv-stage", { branch: "dev", repo: "https://github.com/other/repo" });
+      f.replies.set("/v9/projects/prj_test", {
+        id: "prj_test",
+        link: { type: "github", org: "other", repo: "repo" },
+      });
     await assert.rejects(deployProduction(f.env, f), Error, variant);
     assert.equal(f.posts.length, 0, variant);
   }
 });
 
-test("failed health or Render deployment never triggers a second deployment", async () => {
-  for (const path of ["/healthz", "srv-prod/deploys/dep-tested"]) {
+test("failed health, wrong source or Vercel failure never promotes or creates a duplicate deployment", async () => {
+  for (const variant of ["health", "failed", "sha", "project"]) {
     const f = deploymentFixture();
-    f.replies.set(path, path === "/healthz" ? { ok: false } : { status: "build_failed" });
+    const ready = f.replies.get("/v13/deployments/dpl_test") as Record<string, unknown>;
+    if (variant === "health")
+      f.replies.set("https://release-check.vercel.app/healthz", { ok: false });
+    else
+      f.replies.set("/v13/deployments/dpl_test", {
+        ...ready,
+        ...(variant === "failed"
+          ? { readyState: "ERROR" }
+          : variant === "sha"
+            ? { meta: { githubCommitSha: stagedSha } }
+            : { projectId: "prj_other" }),
+      });
     await assert.rejects(deployProduction(f.env, f));
     assert.equal(f.posts.length, 1);
   }
+});
+
+test("preview deploys only dev with preview settings and never promotes production", async () => {
+  const f = deploymentFixture(false);
+  await deployPreview(f.env, f);
+  assert.equal(f.posts.length, 1);
+  const body = f.posts[0].body as Record<string, any>;
+  assert.equal(body.target, undefined);
+  assert.equal(body.gitSource.ref, "dev");
+  assert.equal(body.gitSource.sha, sha);
+  const wrong = deploymentFixture(false);
+  wrong.env.GITHUB_REF = "refs/heads/feature";
+  await assert.rejects(deployPreview(wrong.env, wrong));
+  assert.equal(wrong.posts.length, 0);
 });
 
 test("workflows pin actions, protect credentials, and gate all existing CI jobs", async () => {
@@ -409,8 +499,14 @@ test("workflows pin actions, protect credentials, and gate all existing CI jobs"
       );
     }
     if (name === "deploy-production") {
-      assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch"]);
-      assert.equal(workflow.jobs.deploy.environment, "production");
+      assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch", "workflow_run"]);
+      assert.equal(workflow.jobs.production.environment, "production");
+      assert.equal(workflow.jobs.preview.environment, "preview");
+      assert.match(workflow.jobs.production.if, /workflow_dispatch/);
+      assert.match(workflow.jobs.production.if, /refs\/heads\/main/);
+      assert.match(workflow.jobs.preview.if, /workflow_run.event == 'push'/);
+      assert.match(workflow.jobs.preview.if, /head_repository.full_name == 'zdevzone\/keyforge'/);
+      assert.match(workflow.jobs.preview.if, /head_branch == 'dev'/);
     }
   }
   const staging = parse(await readFile(new URL("../render.staging.yaml", import.meta.url), "utf8"));
@@ -422,4 +518,19 @@ test("workflows pin actions, protect credentials, and gate all existing CI jobs"
     staging.services[0].envVars.find((item: { key: string }) => item.key === "DATABASE_URL"),
     { key: "DATABASE_URL", sync: false },
   );
+});
+
+test("a healthy old domain cannot make a new release pass before alias assignment", async () => {
+  for (const production of [true, false]) {
+    const f = deploymentFixture(production);
+    f.replies.set("/v4/aliases/" + (production ? "production" : "dev") + ".example.test", {
+      projectId: "prj_test",
+      deploymentId: "dpl_old",
+    });
+    await assert.rejects(
+      (production ? deployProduction : deployPreview)(f.env, f),
+      /Domain has not switched/,
+    );
+    assert.equal(f.posts.filter((item) => item.path === "/v13/deployments").length, 1);
+  }
 });

@@ -54,7 +54,7 @@ For UI development, run `vp -C ui run dev` alongside the server. See [contributi
 - [Client integration](docs/dependent-app-integration.md) · [TypeScript SDK](packages/keyforge-client/README.md) · [Client starter](packages/create-keyforge-client/README.md) · [OpenAPI](docs/client-openapi.json)
 - [CLI](packages/create-keyforge/README.md) · [Backups](docs/backups.md) · [Database upgrades](docs/database.md#upgrade-existing-installations)
 - [Security](SECURITY.md) · [Known limitations](docs/integration-review.md) · [Package releases](docs/publishing.md)
-- [Maintainer guide](docs/maintaining.md): contributions, Render staging, production promotion and recovery.
+- [Maintainer guide](docs/maintaining.md): contributions, Vercel Preview, production promotion and recovery.
 
 ## License
 

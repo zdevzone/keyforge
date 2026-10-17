@@ -1,14 +1,59 @@
-name: Deploy Render production (legacy)
+name: Deploy Vercel
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Preview requires dev; production requires main and approval
+        type: choice
+        options: [preview, production]
+        default: preview
+        required: true
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
 permissions:
   contents: read
 concurrency:
-  group: render-production
+  group: vercel-${{ github.event_name == 'workflow_run' && 'preview' || inputs.target }}
   cancel-in-progress: false
 jobs:
-  deploy:
-    if: github.repository == 'zdevzone/keyforge' && github.ref == 'refs/heads/main'
+  preview:
+    if: >-
+      github.repository == 'zdevzone/keyforge' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.target == 'preview' && github.ref == 'refs/heads/dev') ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev' &&
+        github.event.workflow_run.head_repository.full_name == 'zdevzone/keyforge'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: preview
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Deploy exact CI-tested dev commit and verify preview
+        run: node scripts/deploy-production.mjs
+        env:
+          DEPLOY_ENV: preview
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_PRODUCTION_URL: ${{ vars.VERCEL_PRODUCTION_URL }}
+          VERCEL_PREVIEW_URL: ${{ vars.VERCEL_PREVIEW_URL }}
+  production:
+    if: github.repository == 'zdevzone/keyforge' && github.event_name == 'workflow_dispatch' && inputs.target == 'production' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -23,10 +68,14 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - name: Verify CI and staging, deploy exact commit, and check health
+      - name: Verify CI and matching preview, build production, check health, then promote
         run: node scripts/deploy-production.mjs
         env:
+          DEPLOY_ENV: production
           GITHUB_TOKEN: ${{ github.token }}
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_STAGING_SERVICE_ID: ${{ vars.RENDER_STAGING_SERVICE_ID }}
-          RENDER_PRODUCTION_SERVICE_ID: ${{ vars.RENDER_PRODUCTION_SERVICE_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_PRODUCTION_URL: ${{ vars.VERCEL_PRODUCTION_URL }}
+          VERCEL_PREVIEW_URL: ${{ vars.VERCEL_PREVIEW_URL }}

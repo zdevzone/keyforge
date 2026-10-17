@@ -1,6 +1,6 @@
 # Vercel deployment
 
-KeyForge runs as a Node.js Vercel Function with PostgreSQL and private external backup storage. Use one Vercel project named `keyforge`: `main` is Production and `dev` is Preview. Keep Render running until the replacement production deployment is verified. Never give preview deployments production keys, databases or backup credentials.
+KeyForge runs as a Node.js Vercel Function with PostgreSQL and private external backup storage. Use one Vercel project named `keyforge`: `main` is Production and `dev` is Preview. This installation's Render service is now suspended following production acceptance. Never give preview deployments production keys, databases or backup credentials.
 
 ## One project, two environments
 
@@ -79,11 +79,11 @@ vp run test:docs
 vercel deploy
 ```
 
-Preparation migrates the explicitly selected database, seeds the initial operator idempotently, and initializes its verification schema. Subsequent function cold starts do not run Better Auth schema migrations or recreate operators. Prepare each release before deploying, after checking schema compatibility with the previous release. Do not run preparation against Preview using Production credentials or the reverse.
+Preparation migrates the explicitly selected database, seeds the initial operator idempotently, and initializes its verification schema. Subsequent function cold starts do not run Better Auth schema migrations or recreate operators. The Vercel build command runs this preparation after compiling, with the selected environment's actual secrets. Local preparation remains available for initial setup and recovery. Review schema compatibility and verify a backup before each schema-changing release. Do not run preparation against Preview using Production credentials or the reverse.
 
 Vercel does not export sensitive values: an environment pull may write `[SENSITIVE]` placeholders. Replace those locally using the selected environment's secure recovery copies before preparation; never commit the file. Local migration recovery files belong in the ignored `secrets/` directory. Prefer an organization password manager for ongoing operations. Never copy a development `.env` file and assume it contains the live production keys.
 
-The checked-in configuration builds through Vite+, sets a 300-second function limit and disables automatic Git deployments. Branch URLs and the Production branch still apply to deliberate CLI deployments. Deploy only after the exact commit's **CI passed** result succeeds. Production stays manual; do not enable automatic production deployment just to obtain preview URLs.
+The checked-in configuration builds through Vite+, prepares the selected database, sets a 300-second function limit and disables native automatic Git deployments. The **Deploy Vercel** GitHub workflow automatically deploys the current `dev` commit after successful push CI. Production stays manual on `main`, with environment approval and a matching healthy dev Preview required. Both paths pin branch and SHA and verify the deployed source and health. See [maintaining KeyForge](maintaining.md) for environment credentials and Bash/PowerShell dispatch commands. Fork and PR checks never receive deployment secrets.
 
 ## Fresh production cutover from Render
 
@@ -105,7 +105,7 @@ vercel deploy --prod --skip-domain
 5. Verify the resulting Production deployment's health, public signing key, seeded admin sign-in, empty business records, private backup upload/download/recovery, protected routes and canonical origin. Deployment Protection may require Vercel authentication while testing the unique deployment URL. Do not weaken that protection to test it.
 6. Assign the existing production domain only after verification, using `vercel promote PRODUCTION_DEPLOYMENT_URL`. Here this command assigns domains to a deployment **already built with Production variables**; it must not promote the dev Preview. Verify again on the canonical domain, including secure cookie login, profile upload and client calls. Keep Render available as the fallback until the owner retires it explicitly.
 
-The existing **Deploy Render production (legacy)** GitHub workflow remains Render-specific. Do not use it for Vercel releases. Until a dedicated Vercel deployment workflow is configured, use the deliberate, CI-checked CLI procedure above. npm release workflows are independent.
+For future releases use **Deploy Vercel**, following the [maintainer guide](maintaining.md). The old Render deployment workflow has been replaced. The manual CLI procedure above is an operator recovery/bootstrap alternative, not a second automatic deployment path. npm release workflows remain independent.
 
 ## Backups and scheduling
 

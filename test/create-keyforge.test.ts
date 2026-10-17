@@ -873,14 +873,18 @@ test("the runtime version is stated once and agrees everywhere", () => {
   assert.equal(String(nodeVersion?.value), runtimeConfig(answers.runtime).version);
 });
 
-test("Render bootstraps Vite+ and CI executes the deployed build command", async () => {
+test("Render self-host templates retain the Vite+ build while CI verifies Vercel without credentials", async () => {
   const blueprint = parseYaml(await readFile(join(REPO, "render.yaml"), "utf8"));
   const workflow = parseYaml(await readFile(join(REPO, ".github/workflows/ci.yml"), "utf8"));
   const service = blueprint.services[0];
-  const build = workflow.jobs.render.steps.find(
-    (step: { name?: string }) => step.name === "Build with Render configuration",
+  const build = workflow.jobs.vercel.steps.find(
+    (step: { name?: string }) =>
+      step.name === "Build with Vercel configuration without deployment credentials",
   );
-  assert.equal(build.run, service.buildCommand);
+  assert.match(build.run, /bash scripts\/vercel-install.sh/);
+  assert.match(build.run, /vp run build:all/);
+  assert.match(build.run, /node --check api\/index.mjs/);
+  assert.doesNotMatch(build.run, /secrets\.|VERCEL_TOKEN/);
   assert.equal(build.env.NODE_ENV, "production");
   assert.match(service.buildCommand, /VP_VERSION=1\.1\.0/);
   assert.match(service.buildCommand, /NODE_ENV=development vp install --frozen-lockfile/);
