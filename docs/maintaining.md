@@ -84,6 +84,6 @@ See [publishing](publishing.md) for stable/beta channels, trusted publishers, pa
 
 ## Repository presentation
 
-The repository About website points to the live production app. GitHub Deployments lists Production and dev Preview with their environment URLs. Historical GitHub Pages entries are inactive; npm entries describe package publishing rather than app hosting. Keep the `npm`, `preview` and `production` environment names stable because publisher trust and approval policies reference them.
+The repository About website points to the live production app. GitHub Deployments lists Production and dev Preview with their environment URLs. Historical GitHub Pages and npm entries are inactive. Package publishing keeps its `npm` environment approval and OIDC identity without creating app deployment records. Preview records explicitly use the deployed dev commit, since `workflow_run` itself runs in the default-branch context. Keep the `npm`, `preview` and `production` environment names stable because publisher trust and approval policies reference them.
 
 Create an explicit GitHub source release only after the selected main commit passes CI. Source tags and downloadable source archives do not publish npm packages. Link the three npm packages in the README and release notes; GitHub’s Packages panel lists GitHub-hosted registries and does not import npm listings.
