@@ -716,7 +716,7 @@ export async function registerBackups(
         remoteOnly: Boolean(options.remoteOnly),
         defaultDestination: options.defaultDestination ?? "local",
         scheduleNotice: options.background
-          ? "Hosted scheduling runs when the authenticated cron endpoint is invoked. The staging Hobby deployment checks once daily at 05:00 UTC; configured times are earliest-run times, not guaranteed execution times."
+          ? "Automatic backups are checked daily around 05:00 UTC. A saved time is the earliest a backup can run. Manual backups start immediately."
           : null,
       };
     }),
