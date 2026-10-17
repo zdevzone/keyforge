@@ -81,3 +81,9 @@ For application rollback, first assess database compatibility, then select a pre
 ## npm releases and security
 
 See [publishing](publishing.md) for stable/beta channels, trusted publishers, package order and safe retries. Stable uses `main` and `latest`; beta uses `dev` and `beta`. Both require manual dispatch and approval. Keep personal accounts protected by two-factor authentication and save recovery codes. Review collaborators, environment tokens, trusted publishers, dependency alerts and workflow changes regularly. Report vulnerabilities privately through [SECURITY.md](https://github.com/zdevzone/keyforge/blob/main/SECURITY.md).
+
+## Repository presentation
+
+The repository About website points to the live production app. GitHub Deployments lists Production and dev Preview with their environment URLs. Historical GitHub Pages entries are inactive; npm entries describe package publishing rather than app hosting. Keep the `npm`, `preview` and `production` environment names stable because publisher trust and approval policies reference them.
+
+Create an explicit GitHub source release only after the selected main commit passes CI. Source tags and downloadable source archives do not publish npm packages. Link the three npm packages in the README and release notes; GitHub’s Packages panel lists GitHub-hosted registries and does not import npm listings.

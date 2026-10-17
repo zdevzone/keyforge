@@ -19,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preview:
+    name: KeyForge Preview (dev)
     if: >-
       github.repository == 'zdevzone/keyforge' &&
       ((github.event_name == 'workflow_dispatch' && inputs.target == 'preview' && github.ref == 'refs/heads/dev') ||
@@ -27,7 +28,9 @@ jobs:
         github.event.workflow_run.head_repository.full_name == 'zdevzone/keyforge'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: preview
+    environment:
+      name: preview
+      url: ${{ vars.VERCEL_PREVIEW_URL }}
     permissions:
       contents: read
       actions: read
@@ -53,10 +56,13 @@ jobs:
           VERCEL_PRODUCTION_URL: ${{ vars.VERCEL_PRODUCTION_URL }}
           VERCEL_PREVIEW_URL: ${{ vars.VERCEL_PREVIEW_URL }}
   production:
+    name: KeyForge Production (main)
     if: github.repository == 'zdevzone/keyforge' && github.event_name == 'workflow_dispatch' && inputs.target == 'production' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production
+    environment:
+      name: production
+      url: ${{ vars.VERCEL_PRODUCTION_URL }}
     permissions:
       contents: read
       actions: read
