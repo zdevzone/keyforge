@@ -195,7 +195,6 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `idempotency_conflict` |
 | `import_account_missing` |
 | `import_account_required` |
-| `import_migration_required` |
 | `initial_sale_exists` |
 | `installation_unauthorized` |
 | `insufficient_role` |
@@ -213,7 +212,6 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `invalid_request_secret` |
 | `invalid_support_request` |
 | `key_already_staged` |
-| `key_mismatch` |
 | `key_required` |
 | `license_` |
 | `license_expired` |
@@ -299,7 +297,7 @@ Financial routes require an admin session or privileged admin bearer token; supp
 
 Sale and entry UUIDs provide idempotency: retries with identical normalized payloads return the original record; changed payloads return `idempotency_conflict`. Dates cannot be future-dated, and entries cannot precede their sale. Overpayments, excessive credits, and refunds exceeding the referenced receipt are rejected. Historical daily balances cannot become negative through backdating. Financial records are append-only through these APIs; corrections retain history using refunds, credits and new sale records.
 
-A cash refund reopens the amount owed. A credit reduces the agreed charge; when cancelling a paid charge, record its refund then credit. This distinguishes money returned from debt cancelled. A zero-value sale is `complimentary`, never evidence of cash received. Legacy licenses have no sales record until explicitly recorded. Default price changes do not rewrite sale snapshots. Renewals record a new sale; expiry changes remain a separate explicit licensing action. New issuance atomically records a plan-priced sale, unpaid unless a payment is supplied. Existing licenses without sales remain unchanged. No token payload, signing, activation or validation behavior changes.
+A cash refund reopens the amount owed. A credit reduces the agreed charge; when cancelling a paid charge, record its refund then credit. This distinguishes money returned from debt cancelled. A zero-value sale is `complimentary`, never evidence of cash received. Every issued v1 license has a linked sales snapshot. Default price changes do not rewrite sale snapshots. Renewals record a new sale; expiry changes remain a separate explicit licensing action. New issuance atomically records a plan-priced sale, unpaid unless a payment is supplied. Existing licenses without sales remain unchanged. No token payload, signing, activation or validation behavior changes.
 
 New errors: `future_date`, `initial_sale_exists`, `unknown_sale`, `invalid_date`, `overpayment`, `reason_required`, `excess_credit`, `invalid_refund`, `invalid_payment_reference`, `historical_overpayment`. These are validation errors (400), except unknown sale (404) and initial sale conflict (409).
 

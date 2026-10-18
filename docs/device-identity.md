@@ -26,7 +26,7 @@ const diagnostics = await client.getDeviceSignalsDiagnostics();
 await client.updateDeviceSignals();
 ```
 
-Explicit adapters remain available as `@zdevzone/keyforge-client/windows`, `/linux`, and `/macos`, exporting `createWindowsDeviceSignalsProvider`, `createLinuxDeviceSignalsProvider`, and `createMacOSDeviceSignalsProvider`. Existing Windows imports, manual signals, registration state and v1 hashes remain compatible. The Node reference enables automatic selection with `KEYFORGE_DEVICE_SIGNALS=1`; its older `KEYFORGE_WINDOWS_SIGNALS=1` option remains Windows-only.
+Explicit adapters remain available as `@zdevzone/keyforge-client/windows`, `/linux`, and `/macos`, exporting `createWindowsDeviceSignalsProvider`, `createLinuxDeviceSignalsProvider`, and `createMacOSDeviceSignalsProvider`. Manual signals and the platform-specific adapters are available in the current v1 setup. The Node reference enables automatic selection with `KEYFORGE_DEVICE_SIGNALS=1`; its older `KEYFORGE_WINDOWS_SIGNALS=1` option remains Windows-only.
 
 | Desktop OS | Reported kinds | Fixed read-only sources |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ Raw values stay local. Treat hashes as pseudonymous metadata and explain optiona
 
 ## Existing installations and server compatibility
 
-Upgrade the server before using new kinds. Older servers ignore unknown registration hints and may reject new kinds on backfill; that must not be treated as authorization. Existing Windows state requires no migration. Newly collected registration hashes are persisted before networking and replayed unchanged after interruptions, even when hardware/provider options change. Do not erase credentials or change a pending body to refresh signals.
+Use the current v1 server and SDK together; previous development client state is unsupported. Newly collected registration hashes are persisted before networking and replayed unchanged after interruptions, even when hardware/provider options change. Do not erase credentials or change a pending body to refresh signals.
 
 `updateDeviceSignals()` requires successful prior registration and the same installation credential. It adds recognition evidence to that installation's existing group without automatic group merges. It does not issue a license, consume/release a seat, restart trials, reset usage or alter financial records. Initial registration and backfill support at most three current signals; historical groups can retain older kinds. Changes to server URL/product require a coordinated credential-preserving state migration, not silent identity replacement. Avoid SDK downgrades that cannot understand newly stored kinds.
 

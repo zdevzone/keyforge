@@ -38,6 +38,7 @@ import {
   pickMatch,
   SIGNAL_KINDS,
   signalAvailability,
+  trialVerdict,
 } from "./machines.js";
 import { registerNotifications } from "./notifications.js";
 import {
@@ -146,7 +147,7 @@ interface Installation extends RecordValue {
   userName: string;
   userEmail: string;
   licenseId: string | null;
-  machineSignals?: ReturnType<typeof normalizeSignals>;
+  machineSignals: ReturnType<typeof normalizeSignals>;
   signalsUpdatedAt?: string;
 }
 interface Binding extends RecordValue {
@@ -172,9 +173,7 @@ function deviceSummary(
   signals?: ReturnType<typeof normalizeSignals>,
 ) {
   const groups = machines.filter((m) => m.installationIds.includes(installationId));
-  const signalKinds = [
-    ...new Set((signals ?? groups.flatMap((m) => m.signals)).map((s) => s.kind)),
-  ];
+  const signalKinds = [...new Set((signals ?? []).map((s) => s.kind))];
   return {
     machineGroups: groups.map((m) => ({ id: m.id, supportReference: m.supportReference })),
     signalKinds,
@@ -1530,11 +1529,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
         let machine =
           knownMachine ?? (match ? machines.find((m) => m.id === match.groupId)! : null);
         const converted = Boolean(prior?.trialConvertedAt);
-        const verdict = converted
-          ? "spent"
-          : !machine || machine.clearedAtCount === machine.registrationCount
-            ? "fresh"
-            : "spent";
+        const verdict = converted ? "spent" : trialVerdict(machine);
         machine ??= {
           id: randomUUID(),
           signals: [],

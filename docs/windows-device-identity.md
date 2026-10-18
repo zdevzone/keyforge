@@ -52,7 +52,7 @@ Two distinct matching kinds can associate a **new registration** with a group un
 
 ## Console interpretation
 
-- **Installations:** authenticated identities, active licensed counts, current signal kinds and group references. Available means all three kinds; Partial means one or two; Unavailable means none. Legacy rows without individual metadata fall back to historical evidence until backfilled.
+- **Installations:** authenticated identities, active licensed counts, current signal kinds and group references. Available means all three kinds; Partial means one or two; Unavailable means none. Missing individual signal metadata is shown as Unavailable; group evidence is never substituted for an installation report.
 - **Machines:** reported groups and historical evidence, registration counts and trial clear state. Availability describes retained evidence, not a live inspection. Last registration and last signal update are separate timestamps.
 - **License activations:** binding history and active installation seats, with group references. Release permissions and installation limits are unchanged.
 
