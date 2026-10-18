@@ -29,6 +29,7 @@ Deploy your own license server, issue licenses from priced plans, and connect yo
 - [Device recognition](device-identity.md): optional Windows, Linux and macOS signals, diagnostics and recovery.
 - [Token verification](verify-token.md): the exact Ed25519 license v4/trial v2 contract for any language.
 - [Client OpenAPI](client-openapi.json): download the language-independent client API contract.
+- [Studio Proof contract review](studio-proof-contract.md): production verification, endpoint details, migration boundaries and outstanding product decisions.
 - [AI integration context](dependent-app-ai-context.md): concise instructions for your app's coding assistant.
 
 ## Understand the boundaries

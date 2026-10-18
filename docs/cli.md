@@ -6,7 +6,7 @@ Set `LICENSE_SERVER_URL` and `LICENSE_ADMIN_TOKEN` for API commands. Use `--prod
 
 | Command | Purpose |
 | --- | --- |
-| `vp run license keygen` | Generate startup Ed25519 keys under secrets/ (or LICENSE_SIGNING_KEY_FILE) and save the path to .env.local. Existing setup asks [Y/n]; --yes confirms automation. --force permits explicit key replacement and can invalidate client trust. |
+| `vp run license keygen` | Generate startup Ed25519 keys under secrets/ (or LICENSE_SIGNING_KEY_FILE) and save the path to the selected environment file, .env.local by default. Existing setup asks [Y/n]; --yes confirms automation. --force permits explicit key replacement and can invalidate client trust. |
 | `vp run license keycheck` | Check configured private key, public fingerprint; --expect PEM/file, --token token, --server compare deployment. |
 | `vp run license issue` | Issue from --plan ID with --to name, optional --installation ID or --subject installation/service, and a stable --request-id UUID. Add --paid --method METHOD --reference ID to record full payment. Terms come from the saved plan. |
 | `vp run license list` | First page of selected product licenses. |
@@ -20,7 +20,8 @@ Set `LICENSE_SERVER_URL` and `LICENSE_ADMIN_TOKEN` for API commands. Use `--prod
 | `vp run db mirror` | Copy the configured active ledger to --to file/URL. |
 | `vp run db verify` | Compare --from and --to engine-neutral row contents. |
 | `vp run admin:create` | Create an operator with --email and --password; --name and --role admin/support are optional. |
-| `vp run secrets:init` | Initialize missing signing, data/backup encryption, admin, auth and cron secrets; save references/values to .env.local. Existing setup asks [Y/n]; --yes is explicit automation consent. Existing secrets are retained. |
+| `vp run secrets:init` | Initialize missing signing, data/backup encryption, admin, auth and cron secrets; save references/values to .env.local. Use --env-file PATH for an isolated named environment and --secrets-dir PATH for its key files. Existing setup asks [Y/n]; --yes confirms automation. Existing secrets are retained. |
+| `vp run secrets:export` | With --env-file PATH and --output PATH, write a private provider-neutral environment file embedding existing key files. No key rotation; provider identity variables are omitted. Existing output requires confirmation. |
 | `vp run backup:restore` | Explicit maintenance-only restore of an encrypted archive; see backups guide. |
 
 ```sh
@@ -31,6 +32,8 @@ vp run db verify --from ./db/licenses.sqlite --to ./standby/licenses.sqlite
 ```
 
 Definitions and an active plan must exist before issuance; create them in the console. Keys are retained encrypted when a data ring is configured. Existing hash-only records require secure original-key re-entry for recovery.
+
+License commands also accept `--env-file PATH`. The explicitly selected file supplies their server connection and signing configuration without falling back to local or ambient server credentials. Key generation uses that environment's `keys/` directory unless a key path or `--secrets-dir` is configured. See [portable environments](configuration.md#portable-environments-and-recovery-files) for Bash/PowerShell setup and export commands. Never print or commit a deployment environment file.
 
 Generate a fresh UUID for each new issuance; reuse it and the same arguments only when retrying that issuance. The example UUID is illustrative. The issue dialog shows the selected plan's terms and price without allowing overrides. Separate existing-license edits display UTC expiry dates: editing a customer without changing the date preserves the existing timestamp; choosing another expiry date uses the end of that UTC day. Plan and definition edits affect future issuance, while existing licenses retain their snapshots.
 

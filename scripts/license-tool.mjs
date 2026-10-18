@@ -20,14 +20,28 @@ import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { confirmLocalUpdate, readLocalEnv, saveLocalEnv } from "./local-env.mjs";
+import {
+  confirmLocalUpdate,
+  localEnvironmentOptions,
+  readLocalEnv,
+  saveLocalEnv,
+} from "./local-env.mjs";
 
 const [, , command, ...rest] = process.argv;
+if (command === "--help" || command === "-h" || rest.includes("--help")) {
+  usage();
+  process.exit(0);
+}
+const environmentOptions = localEnvironmentOptions(rest);
+const selectedEnvironment = await readLocalEnv(environmentOptions.file);
+if (environmentOptions.explicit && !selectedEnvironment.exists && command !== "keygen")
+  throw Error("The selected environment file does not exist.");
+const environment = environmentOptions.explicit ? selectedEnvironment.values : process.env;
 
 function env(name) {
   const value =
-    process.env[name] ||
-    (name === "LICENSE_SERVER_URL" ? process.env.RENDER_EXTERNAL_URL : undefined);
+    environment[name] ||
+    (name === "LICENSE_SERVER_URL" ? environment.RENDER_EXTERNAL_URL : undefined);
   if (!value) return value;
   if (
     (value.startsWith('"') && value.endsWith('"')) ||
@@ -48,7 +62,11 @@ function flag(name, fallback = undefined) {
 function usage() {
   console.log(`License tool
 
-  vp run license keygen [--force] [--yes]
+  --env-file PATH selects one environment for any command, without falling
+  back to local or ambient server credentials. Relative key paths use the
+  project working directory.
+
+  vp run license keygen [--force] [--yes] [--env-file PATH] [--secrets-dir PATH]
       Generate the Ed25519 signing keypair. Prints the public key to embed in
       server/license.ts; writes LICENSE_SIGNING_KEY_FILE (default
       ./secrets/license-signing.key) — KEEP PRIVATE, gitignored.
@@ -119,11 +137,11 @@ async function admin(path, options = {}) {
 async function keygen() {
   // Write where the deployment says the key lives, so `keygen` and the
   // service agree without anyone moving a file by hand.
-  const local = await readLocalEnv();
+  const local = selectedEnvironment;
   const keyPath =
     env("LICENSE_SIGNING_KEY_FILE") ??
     local.values.LICENSE_SIGNING_KEY_FILE ??
-    "./secrets/license-signing.key";
+    environmentOptions.secretsDir.replaceAll("\\", "/").replace(/\/$/, "") + "/license-signing.key";
   if (env("LICENSE_SIGNING_KEY") || local.values.LICENSE_SIGNING_KEY)
     throw new Error(
       "An inline signing key is configured. Remove it explicitly before generating a file-based replacement.",
@@ -136,7 +154,9 @@ async function keygen() {
   if (
     local.exists &&
     !(await confirmLocalUpdate(
-      "Generate a signing key and update LICENSE_SIGNING_KEY_FILE in .env.local?",
+      "Generate a signing key and update LICENSE_SIGNING_KEY_FILE in " +
+        environmentOptions.file +
+        "?",
       flag("yes") === true,
     ))
   )
@@ -150,7 +170,7 @@ async function keygen() {
     mode: 0o600,
     flag: flag("force") === true ? "w" : "wx",
   });
-  await saveLocalEnv({ LICENSE_SIGNING_KEY_FILE: keyPath });
+  await saveLocalEnv({ LICENSE_SIGNING_KEY_FILE: keyPath }, environmentOptions.file);
   console.log(`Private key written to ${keyPath} — keep it with the license service only.`);
   console.log("  Deploy it as LICENSE_SIGNING_KEY_FILE (or inline as LICENSE_SIGNING_KEY).\n");
   console.log(
@@ -204,7 +224,7 @@ async function keycheck() {
 
   let info;
   try {
-    info = describeSigningKey(resolveSigningKey(process.env));
+    info = describeSigningKey(resolveSigningKey(environment));
   } catch (error) {
     // The whole point of this command: say what is wrong in a sentence.
     console.error(`Signing key unusable: ${error.message}`);

@@ -12,6 +12,74 @@
     }
   ],
   "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "get Health",
+        "description": "Unsigned liveness and supported token versions, not a build identifier or authorization grant.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "tokenVersions": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "const": 4
+                        },
+                        "max": {
+                          "const": 4
+                        }
+                      },
+                      "required": ["min", "max"],
+                      "additionalProperties": false
+                    },
+                    "trialTokenVersions": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "const": 2
+                        },
+                        "max": {
+                          "const": 2
+                        }
+                      },
+                      "required": ["min", "max"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["ok", "serverTime", "tokenVersions", "trialTokenVersions"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/meta": {
       "get": {
         "operationId": "getServerMetadata",
@@ -26,7 +94,17 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["name", "serverTime"],
+                  "additionalProperties": false
                 }
               }
             }
@@ -1873,29 +1951,7 @@
             "maxLength": 200
           },
           "machineSignals": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "machine-guid",
-                    "smbios-uuid",
-                    "volume-serial",
-                    "linux-machine-id",
-                    "macos-platform-uuid",
-                    "root-volume-uuid"
-                  ]
-                },
-                "hash": {
-                  "type": "string",
-                  "pattern": "^[a-f0-9]{64}$"
-                }
-              },
-              "required": ["kind", "hash"],
-              "additionalProperties": false
-            }
+            "description": "Legacy registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count."
           }
         },
         "required": ["installationId", "requestId"],
@@ -1946,9 +2002,14 @@
           "key": {
             "type": "string",
             "minLength": 1
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
           }
         },
-        "required": ["installationId", "key"],
+        "required": ["installationId"],
         "additionalProperties": false
       },
       "BoundOperation": {
@@ -1959,13 +2020,17 @@
             "minLength": 1,
             "maxLength": 200
           },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
           "licenseId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200
           }
         },
-        "required": ["installationId", "licenseId"],
+        "required": ["installationId"],
         "additionalProperties": false
       },
       "TokenResponse": {
@@ -2166,6 +2231,10 @@
           "status",
           "receivedAt",
           "updatedAt",
+          "reporterName",
+          "appVersion",
+          "platform",
+          "clientCreatedAt",
           "messages"
         ],
         "additionalProperties": false
@@ -2320,6 +2389,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 5000
+          },
+          "internal": {
+            "const": false,
+            "default": false
           }
         },
         "required": ["requestId", "revision", "message"],
