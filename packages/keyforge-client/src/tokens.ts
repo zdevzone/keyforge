@@ -38,8 +38,42 @@ export const trialSchema = z
     supportReference: z.string().nullable(),
   })
   .strict();
-export type LicenseToken = z.infer<typeof licenseSchema>;
-export type TrialToken = z.infer<typeof trialSchema>;
+export const importLicenseSchema = z
+  .object({
+    ...licenseSchema.shape,
+    v: z.literal(5),
+    accountId: id,
+    authorizationRevision: z.number().int().positive().safe(),
+    paidImportsGranted: z.number().int().nonnegative().safe(),
+    recoveryGeneration: z.number().int().nonnegative().safe(),
+    trialConverted: z.literal(true),
+  })
+  .strict()
+  .refine((p) => p.subject.id === p.installationId);
+export const importTrialSchema = trialSchema.extend({ v: z.literal(3), converted: z.boolean() });
+export const recoverySchema = z
+  .object({
+    ...common,
+    v: z.literal(1),
+    kind: z.literal("usage-recovery"),
+    recoveryId: z.string().uuid(),
+    accountId: id,
+    challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    mode: z.enum(["restore", "lost_history"]),
+    usageDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    paidImportsFloor: z.number().int().nonnegative().safe(),
+    trialImportsFloor: z.number().int().nonnegative().safe(),
+    recoveryGeneration: z.number().int().positive().safe(),
+    authorizationRevision: z.number().int().positive().safe(),
+    expiresAt: date,
+  })
+  .strict();
+export type RecoveryToken = z.infer<typeof recoverySchema>;
+export type LicenseToken = z.infer<typeof licenseSchema> | z.infer<typeof importLicenseSchema>;
+export type TrialToken = z.infer<typeof trialSchema> | z.infer<typeof importTrialSchema>;
 export type SignedToken = LicenseToken | TrialToken;
 
 export class TokenError extends Error {
@@ -78,10 +112,10 @@ function decodeBase64url(encoded: string): Uint8Array<ArrayBuffer> {
 
 /** Authenticates a token, including its context. Expiry/status are evaluated separately
  * so signed negative grants can replace a previously active cached grant. */
-export async function verifySignedToken(
+async function verifyAnyToken(
   token: string,
   context: VerificationContext,
-): Promise<SignedToken> {
+): Promise<SignedToken | RecoveryToken> {
   if (typeof token !== "string" || token.length > 65536) throw new TokenError("malformed_token");
   const parts = token.split(".");
   if (parts.length !== 2) throw new TokenError("malformed_token");
@@ -94,7 +128,9 @@ export async function verifySignedToken(
   } catch {
     throw new TokenError("malformed_token");
   }
-  const parsed = z.union([licenseSchema, trialSchema]).safeParse(input);
+  const parsed = z
+    .union([licenseSchema, trialSchema, importLicenseSchema, importTrialSchema, recoverySchema])
+    .safeParse(input);
   if (!parsed.success) throw new TokenError("invalid_payload");
   const p = parsed.data;
   if (
@@ -106,13 +142,22 @@ export async function verifySignedToken(
   const pem = Object.hasOwn(context.publicKeys, p.kid) ? context.publicKeys[p.kid] : undefined;
   if (!pem) throw new TokenError("unknown_key");
   try {
-    if (!/^-----BEGIN PUBLIC KEY-----\s+[A-Za-z0-9+/=\s]+-----END PUBLIC KEY-----\s*$/.test(pem))
+    // Ed25519 SPKI keys are small. Bound input before parsing and check fixed
+    // markers separately to avoid overlapping whitespace quantifiers.
+    if (typeof pem !== "string" || pem.length > 4096) throw new Error("Invalid public key");
+    const begin = "-----BEGIN PUBLIC KEY-----",
+      end = "-----END PUBLIC KEY-----",
+      normalized = pem.trimEnd();
+    if (!normalized.startsWith(begin) || !normalized.endsWith(end))
       throw new Error("Invalid public key");
-    const der = Uint8Array.from(atob(pem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "")), (c) =>
-      c.charCodeAt(0),
-    );
+    const body = normalized.slice(begin.length, -end.length);
+    if (!/^\s/.test(body)) throw new Error("Invalid public key");
+    const encoded = body.replace(/\s/g, ""),
+      decoded = atob(encoded);
+    if (!encoded || btoa(decoded) !== encoded) throw new Error("Invalid public key");
+    const der = Uint8Array.from(decoded, (c) => c.charCodeAt(0));
     const key = await crypto.subtle.importKey("spki", der, { name: "Ed25519" }, false, ["verify"]);
-    // Current v4/v2 server contract signs decoded JSON bytes, not the base64url segment.
+    // All supported server contracts sign decoded JSON bytes, not the base64url segment.
     if (!(await crypto.subtle.verify("Ed25519", key, signature, bytes)))
       throw new Error("Invalid signature");
   } catch {
@@ -124,4 +169,23 @@ export async function verifySignedToken(
     throw new TokenError("invalid_clock");
   if (Date.parse(p.issuedAt) > now + tolerance) throw new TokenError("future_issuance");
   return p;
+}
+
+export async function verifySignedToken(
+  token: string,
+  context: VerificationContext,
+): Promise<SignedToken> {
+  const grant = await verifyAnyToken(token, context);
+  if (grant.kind === "usage-recovery") throw new TokenError("unexpected_token_kind");
+  return grant;
+}
+export async function verifyRecoveryToken(
+  token: string,
+  context: VerificationContext,
+): Promise<RecoveryToken> {
+  const grant = await verifyAnyToken(token, context);
+  if (grant.kind !== "usage-recovery") throw new TokenError("unexpected_token_kind");
+  if (Date.parse(grant.expiresAt) <= (context.now ?? Date.now()))
+    throw new TokenError("recovery_expired");
+  return grant;
 }

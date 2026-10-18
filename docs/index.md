@@ -25,6 +25,7 @@ Deploy your own license server, issue licenses from priced plans, and connect yo
 ## Connect an application
 
 - [Integration guide](dependent-app-integration.md): registration, activation, offline authorization, support and trusted metering.
+- [Import licensing and recovery](import-licensing.md): additive paid allowances, permanent trial conversion, atomic local usage and staff-approved recovery.
 - [TypeScript SDK](../packages/keyforge-client/README.md): secure storage, retries, signed-token verification and client methods.
 - [Device recognition](device-identity.md): optional Windows, Linux and macOS signals, diagnostics and recovery.
 - [Token verification](verify-token.md): the exact Ed25519 license v4/trial v2 contract for any language.

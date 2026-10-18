@@ -7,7 +7,13 @@ import { z } from "zod";
 
 import { SIGNAL_KINDS } from "../src/machines.js";
 import { supportRequestBodySchema } from "../src/support.js";
-import { licenseTokenSchema, trialTokenSchema } from "../src/token-contract.js";
+import {
+  licenseTokenSchema,
+  trialTokenSchema,
+  importLicenseTokenSchema,
+  importTrialTokenSchema,
+  recoveryTokenSchema,
+} from "../src/token-contract.js";
 
 type Schema = Record<string, unknown>;
 const string = (extra: Schema = {}): Schema => ({ type: "string", ...extra });
@@ -129,6 +135,9 @@ const supportProperties = supportBody.properties as Record<string, Schema>;
 const schemas: Record<string, Schema> = {
   LicenseToken: fromZod(licenseTokenSchema),
   TrialToken: fromZod(trialTokenSchema),
+  ImportLicenseToken: fromZod(importLicenseTokenSchema),
+  ImportTrialToken: fromZod(importTrialTokenSchema),
+  UsageRecoveryToken: fromZod(recoveryTokenSchema),
   Error: object(
     { error: string(), message: string(), retryable: boolean, serverTime: timestamp },
     ["error", "message"],
@@ -263,8 +272,8 @@ operation(
   object({
     ok: { const: true },
     serverTime: timestamp,
-    tokenVersions: object({ min: { const: 4 }, max: { const: 4 } }),
-    trialTokenVersions: object({ min: { const: 2 }, max: { const: 2 } }),
+    tokenVersions: object({ min: { const: 4 }, max: { const: 5 } }),
+    trialTokenVersions: object({ min: { const: 2 }, max: { const: 3 } }),
   }),
   undefined,
   200,
@@ -355,6 +364,26 @@ operation(
       }),
     },
   }),
+);
+operation(
+  "post",
+  installation + "/recovery-requests",
+  "requestUsageRecovery",
+  "Installation-authenticated request only; never grants recovery without independent admin approval. Persist UUID/challenge before networking, reuse exact body. Send only an optional nonce-bound usage commitment, not usage history.",
+  object({ id, status: string({ enum: ["requested", "approved", "claimed", "rejected"] }) }),
+  object({
+    requestId: uuid,
+    licenseId: id,
+    challenge: string({ pattern: "^[A-Za-z0-9_-]{43}$" }),
+    usageDigest: nullable(string({ pattern: "^[a-f0-9]{64}$" })),
+  }),
+);
+operation(
+  "post",
+  installation + "/recovery-requests/{id}/claim",
+  "claimUsageRecovery",
+  "Claims an approved, unexpired recovery once on the server. Exact retries are safe while the generation remains current. Verify the separate recovery signature, challenge, account, generation and candidate commitment before atomically adopting it with the v5 license. Approval expires after 24 hours.",
+  object({ recoveryToken: string(), token: string(), serverTime: timestamp }),
 );
 operation(
   "get",
@@ -492,7 +521,7 @@ export const clientOpenApi = {
     title: "KeyForge dependent-app API",
     version: "1.0.0",
     description:
-      "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded.",
+      "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Import policy opt-in adds license v5, trial v3 and separate usage-recovery v1; legacy v4/v2 remain supported. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded.",
   },
   servers: [
     {

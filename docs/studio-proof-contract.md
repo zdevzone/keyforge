@@ -1,5 +1,7 @@
 # Studio Proof integration contract review
 
+This is the historical production assessment. Subsequent source work implements the opt-in [import-account contract](import-licensing.md), including additive renewal and approved recovery. Those features require a separate deployment, client rollout and explicit product/license opt-in; this dated snapshot and its frozen fixtures do not claim that production has changed.
+
 Reviewed **2026-10-18** against running production and its source commit **`a75fb8db6485ea2bacbe8831537feeeb1d8f31ad`**. This is an assessment of the questionnaire, not approval to change quotas, create customer licenses, reset usage or issue recovery authorizations. Production was inspected using read-only requests. No customer identifiers, license keys or financial entries are included here.
 
 ## Verified deployment and evidence

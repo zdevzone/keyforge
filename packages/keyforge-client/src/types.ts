@@ -1,4 +1,5 @@
 import type { LicenseToken, TrialToken } from "./tokens.js";
+import type { ImportUsage } from "./usage.js";
 
 export const DEVICE_SIGNAL_KINDS = [
   "machine-guid",
@@ -55,12 +56,24 @@ export interface ClientState {
   denial: string | null;
   lastObservedTime: number;
   deviceSignals?: DeviceSignalsReport;
+  storageRevision?: number;
+  importUsage?: ImportUsage | null;
+  pendingRecovery?: {
+    requestId: string;
+    licenseId: string;
+    challenge: string;
+    usageDigest: string | null;
+    candidate: ImportUsage | null;
+    id?: string;
+  } | null;
 }
 /** One owner per installation. load returns a snapshot; save atomically replaces it.
  * Production implementations must protect credentials using platform secure storage. */
 export interface SecureStorage {
   load(): Promise<ClientState | null>;
   save(state: ClientState): Promise<void>;
+  /** Must be a database transaction or equivalent atomic operation, across all processes. */
+  compareAndSwap?(expectedRevision: number | null, state: ClientState): Promise<boolean>;
 }
 export type Authorization =
   | { state: "unlicensed"; reason: string }
@@ -70,8 +83,12 @@ export type Authorization =
       token: LicenseToken;
       entitlements: LicenseToken["entitlements"];
       deadline: string;
+      remainingImports?: number;
     }
-  | { state: "reconnect_required" | "expired" | "revoked"; reason: string };
+  | {
+      state: "reconnect_required" | "expired" | "revoked" | "quota_exhausted" | "recovery_required";
+      reason: string;
+    };
 export interface NotificationPreferences {
   messages: boolean;
   expirations: boolean;

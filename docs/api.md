@@ -74,6 +74,7 @@ The table is generated from an isolated server's route registration. Product-sco
 | GET | `/admin/products/:productId/finance/report` |
 | POST | `/admin/products/:productId/finance/sales` |
 | POST | `/admin/products/:productId/finance/sales/:saleId/entries` |
+| PUT | `/admin/products/:productId/import-policy` |
 | GET | `/admin/products/:productId/installations` |
 | POST | `/admin/products/:productId/keys/:kid/activate` |
 | POST | `/admin/products/:productId/keys/stage` |
@@ -86,7 +87,11 @@ The table is generated from an isolated server's route registration. Product-sco
 | GET | `/admin/products/:productId/licenses/:id/activations` |
 | POST | `/admin/products/:productId/licenses/:id/deactivate` |
 | GET | `/admin/products/:productId/licenses/:id/delivery` |
+| GET | `/admin/products/:productId/licenses/:id/import-account` |
+| POST | `/admin/products/:productId/licenses/:id/import-account` |
 | POST | `/admin/products/:productId/licenses/:id/key` |
+| POST | `/admin/products/:productId/licenses/:id/renew` |
+| POST | `/admin/products/:productId/licenses/:id/replace-key` |
 | POST | `/admin/products/:productId/licenses/:id/revoke` |
 | GET | `/admin/products/:productId/machines` |
 | POST | `/admin/products/:productId/machines/:id/clear` |
@@ -97,6 +102,9 @@ The table is generated from an isolated server's route registration. Product-sco
 | PUT | `/admin/products/:productId/notifications/preferences` |
 | POST | `/admin/products/:productId/notifications/read` |
 | PUT | `/admin/products/:productId/plans/:id` |
+| GET | `/admin/products/:productId/recovery-requests` |
+| POST | `/admin/products/:productId/recovery-requests/:id/approve` |
+| POST | `/admin/products/:productId/recovery-requests/:id/reject` |
 | GET | `/admin/products/:productId/reports` |
 | GET | `/admin/products/:productId/support` |
 | GET | `/admin/products/:productId/support/:id` |
@@ -122,6 +130,8 @@ The table is generated from an isolated server's route registration. Product-sco
 | GET | `/v1/products/:productId/installations/:installationId/notifications` |
 | PUT | `/v1/products/:productId/installations/:installationId/notifications/preferences` |
 | POST | `/v1/products/:productId/installations/:installationId/notifications/read` |
+| POST | `/v1/products/:productId/installations/:installationId/recovery-requests` |
+| POST | `/v1/products/:productId/installations/:installationId/recovery-requests/:id/claim` |
 | GET | `/v1/products/:productId/installations/:installationId/support` |
 | POST | `/v1/products/:productId/installations/:installationId/support` |
 | GET | `/v1/products/:productId/installations/:installationId/support/:id` |
@@ -139,6 +149,7 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 
 | Code |
 | --- |
+| `account_mismatch` |
 | `activation_limit_reached` |
 | `admin_disabled` |
 | `admin_unauthorized` |
@@ -183,12 +194,16 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `future_date` |
 | `historical_overpayment` |
 | `idempotency_conflict` |
+| `import_account_missing` |
+| `import_account_required` |
+| `import_migration_required` |
 | `initial_sale_exists` |
 | `installation_unauthorized` |
 | `insufficient_role` |
 | `internal_error` |
 | `invalid_assignee` |
 | `invalid_date` |
+| `invalid_import_allowance` |
 | `invalid_license_request` |
 | `invalid_message` |
 | `invalid_origin` |
@@ -213,6 +228,7 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `original_key_unavailable` |
 | `overpayment` |
 | `paid_license_required` |
+| `policy_locked` |
 | `price_required` |
 | `product_archived` |
 | `product_exists` |
@@ -220,7 +236,12 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `rate_limited` |
 | `reason_required` |
 | `reauthentication_required` |
+| `recovery_rate_limited` |
+| `recovery_required` |
+| `recovery_stale` |
+| `recovery_unavailable` |
 | `registry_disabled` |
+| `renewal_unavailable` |
 | `request_closed` |
 | `request_not_found` |
 | `request_pending` |
@@ -232,6 +253,7 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `revision_required` |
 | `service_unauthorized` |
 | `signing_unavailable` |
+| `single_installation_required` |
 | `storage_credentials_required` |
 | `storage_not_saved` |
 | `support_rate_limited` |
@@ -244,10 +266,12 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `unknown_meter_or_license` |
 | `unknown_plan` |
 | `unknown_product` |
+| `unknown_recovery` |
 | `unknown_sale` |
 | `unknown_staged_key` |
 | `unknown_support_request` |
 | `usage_unauthorized` |
+| `use_license_renewal` |
 | `verification_unconfigured` |
 
 ## Console reports

@@ -87,7 +87,8 @@ function usage() {
   vp run license revoke <licenseId>
   vp run license activations <licenseId>
   vp run license deactivate <licenseId> --installation <installationId>
-      Release a binding so the customer can activate elsewhere (transfer).
+      Release a binding. Import accounts retain ownership; transferring them
+      requires approved recovery rather than ordinary reactivation elsewhere.
 
   vp run license machines [--q <reference|machineId|installationId>] [--limit 25]
       The trial ledger. Search by the support reference a customer reads out,
@@ -97,6 +98,22 @@ function usage() {
   vp run license clear <machineId>
       Give one machine its trial back. Grants exactly ONE more: the next run
       reads fresh, the one after it is spent again. Audited.
+
+  vp run license imports-enable --entitlement imports --revision N
+  vp run license imports-account <licenseId>
+  vp run license imports-adopt <licenseId> --granted N --revision N --reason TEXT
+  vp run license renew <licenseId> --plan ID --mode renewal|top_up|extension --request-id UUID
+      Renewal extends time and adds units once; top_up adds units only;
+      extension changes time only. Optional --paid --method TEXT --reference TEXT.
+  vp run license replace-key <licenseId> --request-id UUID --reason TEXT
+      Preserves the existing usage account and creates no sale.
+  vp run license recovery-list
+  vp run license recovery-approve <requestId> --revision N --mode restore|lost_history --reason TEXT
+  vp run license recovery-reject <requestId> --revision N --reason TEXT
+      Verify customer identity independently first. lost_history consumes the
+      previously granted budget; restore requires a committed encrypted backup.
+      These commands change the selected server. Always select --product and
+      --env-file deliberately. No recovery action is implied by ordinary keygen.
 
   Service connection (all but keygen/inspect; keycheck only with --server):
       LICENSE_SERVER_URL, LICENSE_ADMIN_TOKEN
@@ -302,6 +319,121 @@ function inspect(input) {
 }
 
 switch (command) {
+  case "imports-enable": {
+    const pid = encodeURIComponent(flag("product") || "default");
+    await admin(`/admin/products/${pid}/import-policy`, {
+      method: "PUT",
+      body: JSON.stringify({
+        entitlement: flag("entitlement", "imports"),
+        revision: Number(flag("revision")),
+      }),
+    });
+    console.log(
+      "Import licensing enabled for future issuance. Existing licenses require explicit adoption.",
+    );
+    break;
+  }
+  case "imports-account": {
+    console.log(
+      JSON.stringify(
+        await admin(`/admin/licenses/${encodeURIComponent(rest[0])}/import-account`),
+        null,
+        2,
+      ),
+    );
+    break;
+  }
+  case "imports-adopt": {
+    const requestId = flag("request-id") || randomUUID();
+    console.log("Operation ID (reuse unchanged on retry): " + requestId);
+    await admin(`/admin/licenses/${encodeURIComponent(rest[0])}/import-account`, {
+      method: "POST",
+      body: JSON.stringify({
+        requestId,
+        revision: Number(flag("revision")),
+        granted: Number(flag("granted")),
+        reason: flag("reason"),
+      }),
+    });
+    console.log(
+      "Legacy license adopted. The client must migrate verified surviving usage before using v5 grants.",
+    );
+    break;
+  }
+  case "renew": {
+    const requestId = flag("request-id") || randomUUID();
+    console.log("Purchase ID (reuse unchanged on retry): " + requestId);
+    const body = {
+      requestId,
+      plan: flag("plan", "standard"),
+      mode: flag("mode", "renewal"),
+      ...(flag("paid")
+        ? {
+            payment: {
+              date: new Date().toISOString().slice(0, 10),
+              method: flag("method", ""),
+              reference: flag("reference", ""),
+            },
+          }
+        : {}),
+    };
+    const result = await admin(`/admin/licenses/${encodeURIComponent(rest[0])}/renew`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    console.log(
+      `License ${result.licenseId}: ${result.account.granted} cumulative paid imports granted; sale ${result.sale.id} ${result.sale.status}.`,
+    );
+    break;
+  }
+  case "replace-key": {
+    const requestId = flag("request-id") || randomUUID();
+    console.log("Replacement ID (reuse unchanged on retry): " + requestId);
+    const result = await admin(`/admin/licenses/${encodeURIComponent(rest[0])}/replace-key`, {
+      method: "POST",
+      body: JSON.stringify({ requestId, reason: flag("reason") }),
+    });
+    console.log("Replacement product key (keep private): " + result.key);
+    break;
+  }
+  case "recovery-list": {
+    const pid = encodeURIComponent(flag("product") || "default");
+    console.log(JSON.stringify(await admin(`/admin/products/${pid}/recovery-requests`), null, 2));
+    break;
+  }
+  case "recovery-approve": {
+    const pid = encodeURIComponent(flag("product") || "default"),
+      requestId = flag("request-id") || randomUUID();
+    console.log("Approval ID (reuse unchanged on retry): " + requestId);
+    await admin(`/admin/products/${pid}/recovery-requests/${encodeURIComponent(rest[0])}/approve`, {
+      method: "POST",
+      body: JSON.stringify({
+        requestId,
+        revision: Number(flag("revision")),
+        mode: flag("mode"),
+        reason: flag("reason"),
+      }),
+    });
+    console.log(
+      "Recovery approved for 24 hours. Customer must claim with the original installation credential and persisted challenge.",
+    );
+    break;
+  }
+  case "recovery-reject": {
+    const pid = encodeURIComponent(flag("product") || "default"),
+      requestId = flag("request-id") || randomUUID();
+    console.log("Rejection ID (reuse unchanged on retry): " + requestId);
+    await admin(`/admin/products/${pid}/recovery-requests/${encodeURIComponent(rest[0])}/reject`, {
+      method: "POST",
+      body: JSON.stringify({
+        requestId,
+        revision: Number(flag("revision")),
+        reason: flag("reason"),
+      }),
+    });
+    console.log("Recovery rejected. The request can no longer transfer this account.");
+    break;
+  }
   case "keygen":
     await keygen();
     break;
@@ -388,7 +520,9 @@ switch (command) {
       method: "POST",
       body: JSON.stringify({ installationId }),
     });
-    console.log("Binding released. The key can now activate on another installation.");
+    console.log(
+      "Binding released. Import-account ownership remains; transfer requires approved recovery.",
+    );
     break;
   }
   case "machines": {

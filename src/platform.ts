@@ -18,6 +18,14 @@ import {
   type Sale,
   type Entry,
 } from "./finance.js";
+import {
+  bumpImportRevision,
+  importAccount,
+  importUnits,
+  recordImportEvent,
+  registerImportLicensing,
+  type ImportAccount,
+} from "./import-licensing.js";
 import { describeSigningKey, verifyLicenseToken } from "./keypair.js";
 import {
   registerLicenseDelivery,
@@ -107,6 +115,7 @@ const planSchema = z
 export type Definition = z.infer<typeof definitionSchema>;
 export type Plan = z.infer<typeof planSchema>;
 export interface Product extends RecordValue {
+  importPolicy?: { entitlement: string };
   name: string;
   archived: boolean;
   graceDays: number;
@@ -120,6 +129,7 @@ export interface Product extends RecordValue {
   }[];
 }
 export interface Grant extends LicenseRow {
+  importAccountId?: string;
   revision?: number;
   productId: string;
   keyReference: string;
@@ -127,6 +137,8 @@ export interface Grant extends LicenseRow {
   subjectKind: "installation" | "service";
 }
 interface Installation extends RecordValue {
+  importAccountId?: string | null;
+  trialConvertedAt?: string | null;
   credentialHash: string | null;
   registeredAt: string;
   lastSeenAt: string;
@@ -435,9 +447,10 @@ export class Platform {
       sign(null, bytes, this.privateKey(product)).toString("base64url")
     );
   }
-  token(product: Product, license: Grant, installationId: string) {
+  async token(product: Product, license: Grant, installationId: string, records = this.records) {
+    const account = await importAccount(records, product.id, license);
     return this.sign(product, {
-      v: 4,
+      v: account ? 5 : 4,
       kind: "license",
       iss: "default",
       productId: product.id,
@@ -454,6 +467,15 @@ export class Platform {
         this.options.now().getTime() + product.graceDays * 86400000,
       ).toISOString(),
       status: this.status(license),
+      ...(account
+        ? {
+            accountId: account.id,
+            authorizationRevision: account.authorizationRevision,
+            paidImportsGranted: account.granted,
+            recoveryGeneration: account.recoveryGeneration,
+            trialConverted: true,
+          }
+        : {}),
     });
   }
   async authenticate(pid: string, iid: string, secret: string, records = this.records) {
@@ -1050,6 +1072,12 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
               replayed: true,
             };
           }
+          if (await records.get(s, "sale", input.requestId))
+            throw new DomainError(
+              "idempotency_conflict",
+              "This transaction ID has already been used.",
+              409,
+            );
           const plan = await records.get<Plan>(s, "plan", input.plan);
           if (!plan || plan.archived)
             throw new DomainError("unknown_plan", "Choose an active plan.");
@@ -1136,6 +1164,32 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
               ? new Date(options.now().getTime() + plan.durationDays * 86400000).toISOString()
               : null,
           };
+          const product = await platform.product(pid, records);
+          if (product.importPolicy) {
+            if (plan.activationLimit !== 1 || input.subjectKind !== "installation")
+              throw new DomainError(
+                "single_installation_required",
+                "Import licensing requires one installation seat.",
+              );
+            const account: ImportAccount = {
+              id: randomUUID(),
+              licenseId: id,
+              granted: importUnits(plan, product.importPolicy.entitlement),
+              authorizationRevision: 1,
+              recoveryGeneration: 0,
+              ownerInstallationId: null,
+            };
+            license.importAccountId = account.id;
+            await records.put(s, "import_account", account);
+            await recordImportEvent(records, pid, {
+              id: input.requestId,
+              kind: "initial",
+              accountId: account.id,
+              added: account.granted,
+              actor: req.actor,
+              createdAt: time,
+            });
+          }
           license.revision = await records.put(s, "license", license);
           const sale: Sale = {
             id: input.requestId,
@@ -1254,6 +1308,17 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
             req.params.id,
           );
           if (!license) throw new DomainError("unknown_license", "No such license.", 404);
+          if (
+            license.importAccountId &&
+            (input.entitlements !== undefined ||
+              input.activationLimit !== undefined ||
+              input.expiresAt !== undefined)
+          )
+            throw new DomainError(
+              "use_license_renewal",
+              "Use renewal, top-up or extension for import-account terms.",
+              409,
+            );
           if (input.entitlements)
             await platform.validateEntitlements(req.params.productId, input.entitlements, records);
           await records.put(
@@ -1262,6 +1327,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
             { ...license, ...input },
             input.revision,
           );
+          await bumpImportRevision(records, req.params.productId, license);
         });
         await platform.audit(req.actor, "license.update", req.params.productId, {
           licenseId: req.params.id,
@@ -1296,6 +1362,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
             status: "revoked",
             revokedAt: platform.time(),
           } as Grant);
+          await bumpImportRevision(records, req.params.productId, license);
         });
         await platform.audit(req.actor, "license.revoke", req.params.productId, {
           licenseId: req.params.id,
@@ -1560,6 +1627,8 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
               ? input.userEmail
               : "",
           licenseId: prior?.licenseId ?? null,
+          trialConvertedAt: prior?.trialConvertedAt ?? null,
+          importAccountId: prior?.importAccountId ?? null,
           machineSignals: normalizeSignals(input.machineSignals),
           signalsUpdatedAt: platform.time(),
         } as Installation);
@@ -1586,8 +1655,12 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
           .sort((a, b) => a.firstRegisteredAt.localeCompare(b.firstRegisteredAt))[0];
         let machine =
           knownMachine ?? (match ? machines.find((m) => m.id === match.groupId)! : null);
-        const verdict =
-          !machine || machine.clearedAtCount === machine.registrationCount ? "fresh" : "spent";
+        const converted = Boolean(prior?.trialConvertedAt);
+        const verdict = converted
+          ? "spent"
+          : !machine || machine.clearedAtCount === machine.registrationCount
+            ? "fresh"
+            : "spent";
         machine ??= {
           id: randomUUID(),
           signals: [],
@@ -1612,7 +1685,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
           trial: product.trial.enabled
             ? {
                 token: platform.sign(product, {
-                  v: 2,
+                  v: product.importPolicy ? 3 : 2,
                   kind: "trial",
                   iss: "default",
                   productId: pid,
@@ -1627,6 +1700,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
                       ).toISOString()
                     : null,
                   supportReference: verdict === "spent" ? machine.supportReference : null,
+                  ...(product.importPolicy ? { converted } : {}),
                 }),
               }
             : null,
@@ -1782,6 +1856,29 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
                 "Release an existing seat or contact support.",
                 409,
               );
+            const account = await importAccount(records, pid, license);
+            if (account) {
+              if (installation.importAccountId && installation.importAccountId !== account.id)
+                throw new DomainError(
+                  "account_mismatch",
+                  "Renew the existing import account instead of activating a separate budget.",
+                  409,
+                );
+              if (
+                account.ownerInstallationId &&
+                account.ownerInstallationId !== input.installationId
+              )
+                throw new DomainError(
+                  "recovery_required",
+                  "An operator-approved recovery is required to transfer this usage account.",
+                  409,
+                );
+              account.ownerInstallationId = input.installationId;
+              if (!existing || existing.deactivatedAt) account.authorizationRevision++;
+              await records.put(scope(pid), "import_account", account);
+              installation.trialConvertedAt ??= platform.time();
+              installation.importAccountId = account.id;
+            }
             await records.put(scope(pid), "binding", {
               id,
               licenseId: license.id,
@@ -1794,7 +1891,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
           installation.lastSeenAt = platform.time();
           await records.put(scope(pid), "installation", installation);
           return {
-            token: platform.token(product, license, input.installationId),
+            token: await platform.token(product, license, input.installationId, records),
             serverTime: platform.time(),
           };
         });
@@ -1845,6 +1942,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
     }, true),
   );
   registerLicenseDelivery(app, platform, wrap, ap, device, bearer);
+  registerImportLicensing(app, platform, wrap, ap, device, bearer);
   registerFinance(app, platform, wrap, ap);
   registerNotifications(app, platform, wrap, ap, device, bearer);
   await registerSupport(app, platform, wrap, ap, device, bearer, paged);

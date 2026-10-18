@@ -75,3 +75,18 @@ Restore current archives using `vp run backup:restore --file <archive> --job <UU
 ## Plan-based issuance
 
 `vp run license issue --plan standard --to "Customer" --request-id UUID` copies saved plan terms and creates an unpaid ETB sale atomically. Configure the plan price first. Reuse the UUID when retrying. Overrides such as `--expires`, `--activations`, `--entitlements` and `--allowance` are rejected; edit the plan instead. Add `--installation ID` for authenticated dependent-app delivery, or share the returned key manually. Add `--paid --method "Bank transfer" --reference BANK_ID` to record full payment on today's UTC date. Existing records and signing/validation are unchanged. See [License requests and sales](license-sales.md).
+
+## Import-account operators
+
+See [import licensing and recovery](import-licensing.md) before opting a product in. These are explicit admin operations on the selected server; use `--product` and `--env-file` deliberately. No live product is changed by updating this source checkout.
+
+- `vp run license imports-enable --entitlement imports --revision N`: enable future v5 issuance/v3 trials after updated clients are deployed.
+- `vp run license imports-account LICENSE_ID`: inspect cumulative granted units and transactional licensing events; no customer usage is uploaded.
+- `vp run license imports-adopt LICENSE_ID --granted N --revision N --reason TEXT --request-id UUID`: explicitly migrate a single-installation historical license without a new financial record. Client history must migrate separately.
+- `vp run license renew LICENSE_ID --plan PLAN --mode renewal --request-id UUID`: add the selected plan allowance once and extend time. `--mode top_up` adds units only; `--mode extension` extends time only. Optional `--paid --method TEXT --reference TEXT` records today's full ETB receipt. Retrying the exact UUID/body never creates another sale or allocation.
+- `vp run license replace-key LICENSE_ID --reason TEXT --request-id UUID`: replace the key on the same account/license without refilling allowance or creating a sale.
+- `vp run license recovery-list`: list recovery requests for independent customer verification.
+- `vp run license recovery-approve REQUEST_ID --revision N --mode restore --reason TEXT --request-id UUID`: approve a committed verified-backup restoration for 24 hours. `--mode lost_history` conservatively consumes previously granted allowance and keeps lifetime history unknown. Customer must claim from the authenticated target installation. It does not automatically grant new units.
+- `vp run license recovery-reject REQUEST_ID --revision N --reason TEXT --request-id UUID`: reject a pending or approved recovery after independent review; repeated identical requests are safe.
+
+These use the current product-scoped admin API. Existing manual sales creation is rejected for import-account licenses; purchases must use the atomic renewal endpoint. Marking an existing transaction paid remains a financial-only action. Deployed v4 products and existing sessions/records remain unchanged until explicit opt-in/migration.
