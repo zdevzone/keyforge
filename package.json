@@ -24,8 +24,9 @@
   },
   "type": "module",
   "scripts": {
-    "secrets:init": "node scripts/init-secrets.mjs",
-    "license": "node --env-file-if-exists=.env.local scripts/license-tool.mjs",
+    "secrets:init": "node -- scripts/init-secrets.mjs",
+    "secrets:export": "node -- scripts/export-secrets.mjs",
+    "license": "node --env-file-if-exists=.env.local -- scripts/license-tool.mjs",
     "db": "node --env-file-if-exists=.env.local scripts/db-tool.mjs",
     "admin:create": "node --env-file-if-exists=.env.local scripts/create-admin.mjs",
     "build": "tsc -p tsconfig.json && vp -C packages/keyforge-client run build && node scripts/runtime-package.mjs",

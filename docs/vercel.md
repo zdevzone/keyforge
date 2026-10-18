@@ -66,14 +66,17 @@ Both hosted environments use production runtime settings and secure cookies. Ver
 
 These commands work in Bash and PowerShell:
 
+Prepare `secrets/environments/staging/server.env` using the [portable environment guide](configuration.md#portable-environments-and-recovery-files). Generate independent keys once for a new installation; restore the existing keys for an existing one. Provider exports go under `secrets/providers/vercel/` for reference, separate from the canonical server configuration. They may contain masked values and must not overwrite your complete recovery settings.
+
 ```sh
 git switch dev
-vercel env pull .env.vercel-preview.local --environment=preview --git-branch=dev --yes
+node -e "require('node:fs').mkdirSync('secrets/providers/vercel', {recursive: true})"
+vercel env pull secrets/providers/vercel/preview-export.env --environment=preview --git-branch=dev --yes
 vp install --frozen-lockfile
 vp run check
 vp run test
 vp run build:all
-node --env-file=.env.vercel-preview.local scripts/vercel-prepare.mjs
+node --env-file=secrets/environments/staging/server.env scripts/vercel-prepare.mjs
 vp run test:packages
 vp run test:console
 vp run test:issuance
@@ -99,8 +102,8 @@ This procedure intentionally does **not** migrate users, sessions, licenses, ins
 ```sh
 git switch main
 git pull --ff-only
-vercel env pull .env.vercel-production.local --environment=production --yes
-node --env-file=.env.vercel-production.local scripts/vercel-prepare.mjs
+vercel env pull secrets/providers/vercel/production-export.env --environment=production --yes
+node --env-file=secrets/environments/production/server.env scripts/vercel-prepare.mjs
 vercel deploy --prod --skip-domain
 ```
 
@@ -130,7 +133,7 @@ Before production migration, verify health, welcome/docs, login, profile upload,
 Vercel application rollback does not reverse database migrations or restore data. Test archive recovery into an independent target first, initialized using the exact matching release and its authentication schema:
 
 ```sh
-node --env-file=.env.recovery.local scripts/vercel-prepare.mjs
+node --env-file=secrets/environments/recovery/server.env scripts/vercel-prepare.mjs
 vp run backup:restore --file ./JOB_UUID.kfbackup --job JOB_UUID --maintenance --database "POSTGRES_RECOVERY_URL" --replace
 ```
 

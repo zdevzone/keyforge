@@ -74,6 +74,48 @@ Use the reset, cleanup, demo seed and bucket setup commands in the [CLI guide](c
 
 Run `vp run secrets:init` to fill missing local secrets and file references in `.env.local`; existing setup requires confirmation. The default private key path is `secrets/license-signing.key`. Never configure both inline and file values for the same key.
 
+## Portable environments and recovery files
+
+Application credentials are independent of the hosting provider. Use one private environment directory for each deployment, and keep provider access tokens separate:
+
+```text
+.env.local                               # local development
+secrets/license-signing.key               # existing local signing key
+secrets/data.keyring.json                 # local stored-data encryption
+secrets/backup.keyring.json               # local archive encryption
+secrets/environments/staging/server.env   # staging server settings
+secrets/environments/staging/keys/        # staging file-based keys, when used
+secrets/environments/production/server.env
+secrets/environments/production/keys/
+secrets/providers/                        # provider administration tokens, not app configuration
+secrets/recovery/                         # old host exports and migration recovery copies
+```
+
+All of `secrets/` and local environment files are ignored by Git. They are not public documentation, client configuration, a backup of the database itself, or files to include in a container image. Store a separate secure recovery copy outside this checkout. Unix file modes are restricted when writing new files; Windows users should also restrict the directory's access using their account permissions.
+
+For a **new** staging installation, run the following from the project root (Bash or PowerShell):
+
+```sh
+vp run secrets:init --env-file secrets/environments/staging/server.env
+```
+
+This creates independent keys in that environment's `keys/` directory, then writes their project-root-relative paths plus new admin, session and cron secrets into its environment file. Use `--secrets-dir PATH` to choose a different private key directory. The same command works for `production` or another environment name. An explicitly selected environment ignores ambient server credentials, so a local development file or a production shell cannot silently supply the new environment's keys. Existing values and key files are retained; existing configuration requires confirmation (`--yes` for deliberate automation).
+
+Set `LICENSE_SERVER_URL` to that deployment's public HTTPS origin, configure its own database and bootstrap operator, and set `NODE_ENV=production` for hosted operation. Leave `LICENSE_PORT` unset on platforms that assign `PORT`. Use persistent SQLite storage or PostgreSQL as appropriate. Keep staging and production databases, keyrings, signing keys and backup destinations independent. Configure backup storage credentials in **Settings → Backups**; provider-specific tokens are not universal server secrets.
+
+For hosts whose secret manager accepts inline values, export a private deployment bundle:
+
+```sh
+vp run secrets:export --env-file secrets/environments/staging/server.env --output secrets/environments/staging/deploy.env
+vp run license keycheck --env-file secrets/environments/staging/deploy.env
+```
+
+The exporter embeds the existing signing/data/backup files into their inline variables, removes the corresponding `_FILE` settings, and omits platform identity/build variables such as `VERCEL_*`, `NEON_*` and `TURBO_*`. It writes values only to the selected file, not the terminal, and does not rotate keys or change the source files. Replacing an existing export requires confirmation. Keep the complete bundle secret; install its individual variables through your host's secret manager. On a persistent server, file references work equally well if you securely mount the files at their configured paths. Always run relative file references from the project root.
+
+Changing hosts is a **restore**, not fresh initialization: retain the original signing key, session secret, data and backup rings. Restore real values before exporting. A host export containing `[SENSITIVE]` is incomplete; setup/export refuse that placeholder rather than inventing replacement keys. Never substitute demo or staging keys. `vp run license keygen --env-file PATH` remains available for deliberate new keys, with `--force` required to overwrite an existing key; plan client trust and retired-key handling before rotation.
+
+Only the server URL, stable product ID, approved public verification keys and public API contract belong in a dependent app. `default` is the automatically seeded product ID, not a universal ID for every application. Select the product actually owning the existing licenses; display names and the token issuer are not substitutes for a product ID. See [dependent-app integration](dependent-app-integration.md).
+
 Manage backup-provider credentials in **Settings → Backups**, where they are encrypted with the external data keyring. Legacy provider environment settings below remain migration inputs for existing installations; omit them after storage and archive verification. Signing keys, authentication secrets, data/archive encryption rings, database URLs, cron authentication and deployment URLs remain server configuration. They cannot safely depend on an unavailable database during recovery.
 
 For the Vercel deployment, only `DATABASE_URL` is read as the application database connection. The integration aliases `PG*`, `POSTGRES_*`, `DATABASE_URL_UNPOOLED` and `NEON_PROJECT_ID` are not needed by KeyForge. Do not remove an alias that another app sharing the project uses. Keep `LICENSE_BACKUP_VERIFY_DATABASE_URL` separate and retain seed credentials if build-time admin bootstrapping is still required. `VITE_KEYFORGE_ANALYTICS` remains a nonsecret, Production-only build preference. Platform-supplied Vercel variables are platform metadata rather than application configuration.

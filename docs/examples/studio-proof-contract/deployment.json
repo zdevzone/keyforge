@@ -1,0 +1,62 @@
+{
+  "checkedAt": "2026-10-18T06:16:41Z",
+  "runtimeSourceCommit": "a75fb8db6485ea2bacbe8831537feeeb1d8f31ad",
+  "serverUrl": "https://keyforge.1hubengineering.com",
+  "productId": "default",
+  "productName": "Keyforge",
+  "issuer": "default",
+  "licenseTokenVersion": 4,
+  "trialTokenVersion": 2,
+  "publicKeys": {
+    "key-a9d7d15deea7be3e": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4gG4dEP4S7cjgX4DQwW//1jE1OBGz26XjspUo95NY2k=\n-----END PUBLIC KEY-----\n"
+  },
+  "spkiSha256": "a9d7d15deea7be3e7dfb7189096617363d0e31cf80881bb37f293de9e415813e",
+  "graceDays": 30,
+  "trial": {
+    "enabled": true,
+    "allowance": 20000,
+    "durationDays": null
+  },
+  "definitions": [
+    {
+      "id": "imports",
+      "type": "number",
+      "defaultValue": 10000,
+      "minimum": 1000,
+      "maximum": 100000,
+      "revision": 2
+    }
+  ],
+  "plans": [
+    {
+      "id": "standard",
+      "entitlements": {
+        "imports": 20000
+      },
+      "durationDays": 32,
+      "activationLimit": 1,
+      "price": 50000,
+      "currency": "ETB",
+      "revision": 2
+    },
+    {
+      "id": "standard-plus",
+      "entitlements": {
+        "imports": 50000
+      },
+      "durationDays": 90,
+      "activationLimit": 1,
+      "price": 100000,
+      "currency": "ETB",
+      "revision": 1
+    }
+  ],
+  "unresolvedPolicy": [
+    "counting unit",
+    "lifetime ceiling versus purchased increment",
+    "trial-to-paid accounting and resume",
+    "unlimited representation",
+    "usage recovery",
+    "record provenance"
+  ]
+}

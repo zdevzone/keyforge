@@ -52,7 +52,7 @@ export function resolveSigningKey(env: NodeJS.ProcessEnv = process.env): string 
   if (path) return readFileSync(path, "utf8");
   throw new Error(
     "Set LICENSE_SIGNING_KEY (PEM) or LICENSE_SIGNING_KEY_FILE (path to PEM). " +
-      "Generate a keypair with: npm run license keygen",
+      "Generate a keypair with: vp run license keygen",
   );
 }
 
@@ -76,7 +76,7 @@ export function describeSigningKey(pem: string): SigningKeyInfo {
   if (/-----BEGIN (?:PUBLIC KEY|[A-Z ]*PUBLIC KEY)-----/.test(text)) {
     throw new Error(
       "That is a PUBLIC key. The service signs with the PRIVATE half — the public key is " +
-        "the one you embed in your app. Look for the file written by: npm run license keygen",
+        "the one you embed in your app. Look for the file written by: vp run license keygen",
     );
   }
   if (text.includes("\\n") && !text.includes("\n")) {
@@ -94,7 +94,7 @@ export function describeSigningKey(pem: string): SigningKeyInfo {
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new Error(
       `The signing key is not a readable PEM private key (${detail}). It should begin with ` +
-        "-----BEGIN PRIVATE KEY----- and be the file written by: npm run license keygen",
+        "-----BEGIN PRIVATE KEY----- and be the file written by: vp run license keygen",
     );
   }
 
@@ -104,7 +104,7 @@ export function describeSigningKey(pem: string): SigningKeyInfo {
   if (privateKey.asymmetricKeyType !== "ed25519") {
     throw new Error(
       `The signing key is ${privateKey.asymmetricKeyType ?? "of an unknown type"}, but license ` +
-        "tokens are signed with Ed25519. Generate one with: npm run license keygen",
+        "tokens are signed with Ed25519. Generate one with: vp run license keygen",
     );
   }
 

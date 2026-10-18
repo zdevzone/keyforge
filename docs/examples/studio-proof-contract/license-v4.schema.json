@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "iss": {
+      "type": "string",
+      "const": "default"
+    },
+    "productId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "kid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "installationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "expiresAt": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "const": "license"
+    },
+    "v": {
+      "type": "number",
+      "const": 4
+    },
+    "licenseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "plan": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "entitlements": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "additionalProperties": {
+        "type": ["number", "string", "boolean"]
+      }
+    },
+    "issuedTo": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["installation", "service"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": ["kind", "id"],
+      "additionalProperties": false
+    },
+    "offlineGraceUntil": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "revoked", "expired"]
+    }
+  },
+  "required": [
+    "iss",
+    "productId",
+    "kid",
+    "installationId",
+    "issuedAt",
+    "expiresAt",
+    "kind",
+    "v",
+    "licenseId",
+    "plan",
+    "entitlements",
+    "issuedTo",
+    "subject",
+    "offlineGraceUntil",
+    "status"
+  ],
+  "additionalProperties": false
+}
