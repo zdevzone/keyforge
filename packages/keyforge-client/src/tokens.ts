@@ -142,13 +142,22 @@ async function verifyAnyToken(
   const pem = Object.hasOwn(context.publicKeys, p.kid) ? context.publicKeys[p.kid] : undefined;
   if (!pem) throw new TokenError("unknown_key");
   try {
-    if (!/^-----BEGIN PUBLIC KEY-----\s+[A-Za-z0-9+/=\s]+-----END PUBLIC KEY-----\s*$/.test(pem))
+    // Ed25519 SPKI keys are small. Bound input before parsing and check fixed
+    // markers separately to avoid overlapping whitespace quantifiers.
+    if (typeof pem !== "string" || pem.length > 4096) throw new Error("Invalid public key");
+    const begin = "-----BEGIN PUBLIC KEY-----",
+      end = "-----END PUBLIC KEY-----",
+      normalized = pem.trimEnd();
+    if (!normalized.startsWith(begin) || !normalized.endsWith(end))
       throw new Error("Invalid public key");
-    const der = Uint8Array.from(atob(pem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "")), (c) =>
-      c.charCodeAt(0),
-    );
+    const body = normalized.slice(begin.length, -end.length);
+    if (!/^\s/.test(body)) throw new Error("Invalid public key");
+    const encoded = body.replace(/\s/g, ""),
+      decoded = atob(encoded);
+    if (!encoded || btoa(decoded) !== encoded) throw new Error("Invalid public key");
+    const der = Uint8Array.from(decoded, (c) => c.charCodeAt(0));
     const key = await crypto.subtle.importKey("spki", der, { name: "Ed25519" }, false, ["verify"]);
-    // Current v4/v2 server contract signs decoded JSON bytes, not the base64url segment.
+    // All supported server contracts sign decoded JSON bytes, not the base64url segment.
     if (!(await crypto.subtle.verify("Ed25519", key, signature, bytes)))
       throw new Error("Invalid signature");
   } catch {
