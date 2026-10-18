@@ -12,7 +12,7 @@ Deploy your own license server, issue licenses from priced plans, and connect yo
 - [Deployment](deploy.md): Render, Docker, local/VPS, Fly.io, Railway, Koyeb and cPanel.
 - [Backups and recovery](backups.md): encrypted archives, independent schedules, verification and restoration.
 - [Database maintenance](database.md): SQLite/PostgreSQL selection, demo data and the admin-preserving reset.
-- [Upgrade an existing installation](database.md#upgrade-existing-installations): backups, schema changes and older client compatibility.
+- [Upgrade an existing installation](database.md#fresh-v1-baseline): backups, schema changes and older client compatibility.
 
 ## Operate KeyForge
 
@@ -28,7 +28,7 @@ Deploy your own license server, issue licenses from priced plans, and connect yo
 - [Import licensing and recovery](import-licensing.md): additive paid allowances, permanent trial conversion, atomic local usage and staff-approved recovery.
 - [TypeScript SDK](../packages/keyforge-client/README.md): secure storage, retries, signed-token verification and client methods.
 - [Device recognition](device-identity.md): optional Windows, Linux and macOS signals, diagnostics and recovery.
-- [Token verification](verify-token.md): the exact Ed25519 license v4/trial v2 contract for any language.
+- [Token verification](verify-token.md): the exact Ed25519 license/trial v1 contract for any language.
 - [Client OpenAPI](client-openapi.json): download the language-independent client API contract.
 - [Studio Proof contract review](studio-proof-contract.md): production verification, endpoint details, migration boundaries and outstanding product decisions.
 - [AI integration context](dependent-app-ai-context.md): concise instructions for your app's coding assistant.

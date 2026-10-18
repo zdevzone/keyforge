@@ -1,47 +1,27 @@
-# Signed token verification
+# Verify KeyForge v1 authorization
 
-Opt-in import licensing adds strict license v5, trial v3 and a **separate** recovery v1 schema. See [import licensing](import-licensing.md) and the current OpenAPI for fields, revision/generation checks and migration rules. V4/v2 remain supported unchanged. Recovery artifacts must never be accepted as application licenses.
+License, trial and usage-recovery artifacts all use `v: 1`, distinguished by `kind`. This is the sole supported protocol. There is no version negotiation, alternate parser or data-adoption path. Use a fresh development database and SDK secure-state store when testing this baseline. Preserve the deployment's existing signing keys; changing the format does not require key generation.
 
-A token is two unpadded base64url strings separated by one dot:
+## Encoding and signature
 
-```text
-base64url(UTF-8 JSON payload).base64url(64-byte Ed25519 signature)
-```
+Tokens contain exactly two canonical unpadded base64url segments: `base64url(UTF-8 JSON bytes).base64url(Ed25519 signature)`. Verify the signature against the **original decoded bytes**, without reserializing JSON. Tokens are not JWTs. Use an authenticated update channel to pin the intended product/environment public keys. Discovery does not establish trust. Reject unknown key IDs, malformed encodings, unknown fields and versions, wrong issuer/product/installation/subject, future issuance and invalid timestamps.
 
-The signature covers the **decoded UTF-8 JSON bytes**, exactly as returned by base64url-decoding the first segment. Do not reserialize the JSON or verify the encoded segment. There is no JWT header. Decoding is untrusted inspection, not verification.
+## License v1
 
-## License v4
+Required fields: `v`, `kind:'license'`, `iss:'default'`, `productId`, `kid`, `installationId`, `licenseId`, `plan`, `entitlements`, `issuedTo`, `subject:{kind,id}`, `issuedAt`, nullable `expiresAt`, `offlineGraceUntil`, `status`, nullable `accountId`, positive `authorizationRevision`, nullable `paidImportsGranted`, nonnegative `recoveryGeneration`, and `trialConverted:true`.
 
-Required fields: `v:4`, `kind:"license"`, `iss:"default"`, `productId`, `kid`, `licenseId`, `plan`, `entitlements`, `issuedTo`, `subject:{kind:"installation"|"service",id}`, `installationId`, `issuedAt`, nullable `expiresAt`, `offlineGraceUntil`, and `status:"active"|"revoked"|"expired"`. Entitlements are a map of finite numbers, strings or booleans. Subject ID must equal installation ID.
+Products without local import quotas use `accountId:null`, `paidImportsGranted:null`, `recoveryGeneration:0`. These are explicit feature settings in the same v1 format. Import-account licenses require a non-null account, nonnegative cumulative paid allowance and an installation subject. Subject ID must equal installationId. An entitlement map remains a plan snapshot; cumulative purchased import allowance is `paidImportsGranted`.
 
-Reject extra or missing fields, unknown versions, malformed timestamps or invalid types. Match issuer, product ID, subject kind and installation ID to your own expected context. Reject future issuance beyond your clock tolerance, negative status, passed expiry and passed offline deadline. Persist the maximum local clock and authenticated signed issuance time observed; the unsigned HTTP `serverTime` field is not a trusted time oracle. This makes basic clock rollback harder, but does not protect against a compromised device.
+Authenticate and persist signed revoked/expired responses before returning a result; they supersede earlier active authorization. An active signature alone is insufficient. Enforce status, expiry, offline deadline, signed revision/generation and local usage integrity at the protected operation. Reject older revisions and conflicting terms at the same revision. A lease refresh may update mint time/deadline without adding allowance. Keep existing media readable when new imports are blocked.
 
-## Trial v2
+## Trial v1
 
-Required fields: `v:2`, `kind:"trial"`, issuer, productId, kid, installationId, issuedAt, nullable expiresAt, `verdict:"fresh"|"spent"`, nullable nonnegative integer allowance and nullable supportReference. Accept only the expected product/installation, a valid signature and a fresh unexpired grant. A null allowance means the product has no numeric trial ceiling; interpret it according to your product policy. Persist consumption outside the grant.
+Required fields: `v`, `kind:'trial'`, `iss`, `productId`, `kid`, `installationId`, `issuedAt`, nullable `expiresAt`, `verdict:'fresh'|'spent'`, nullable nonnegative `allowance`, nullable `supportReference`, and boolean `converted`. Enforce the signed limits and durable local trial consumption. Paid conversion permanently forfeits trial; refresh/restart never resets usage. Trial time/allowance rules are distinct from paid offline grace.
 
-## Node signature example
+## Recovery v1
 
-```js
-import { verify } from "node:crypto";
+Recovery is separately verified with `kind:'usage-recovery'`. Required context fields are issuer/product/key/installation, issuance and a required expiry; additional fields are recoveryId, accountId, challenge, mode, nullable usageDigest, paidImportsFloor, trialImportsFloor, recoveryGeneration and authorizationRevision. It is never an application license. Approval is staff-controlled, target/challenge/account-bound and time-limited. Verify the matching ordinary license and pending backup commitment, then adopt atomically once. See [recovery](import-licensing.md#recovery-flow-and-limits).
 
-function verifySignature(token, pinnedKeys) {
-  const parts = token.split(".");
-  if (parts.length !== 2 || parts.some(p => !/^[A-Za-z0-9_-]+$/.test(p))) return null;
-  const [encoded, signature] = parts;
-  let untrusted;
-  try { untrusted = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")); }
-  catch { return null; }
-  const publicKey = pinnedKeys[untrusted.kid];
-  if (!publicKey || !verify(null, Buffer.from(encoded, "base64url"), publicKey,
-      Buffer.from(signature, "base64url"))) return null;
-  // Apply the complete shape and contextual/time checks described above.
-  return untrusted;
-}
-```
+## Reference implementations and vectors
 
-The example verifies only the cryptographic signature; do not use its return value as authorization before implementing the remaining checks. `src/token-contract.ts` defines server payload schemas. Prefer the complete verifier and authorization evaluator in [the TypeScript SDK](../packages/keyforge-client/README.md). `verifySignedToken` authenticates shape and context, including signed negative statuses; only the SDK's `getAuthorization` result indicates whether use is currently allowed.
-
-## Rotation
-
-Public product key discovery at `/v1/products/:productId/keys` helps operators distribute keys; downloading a key beside an untrusted token does not establish trust. Authenticate your distribution/update channel and pin approved keys. An admin stages a new key, distributes it to clients, then explicitly activates it. Retired public keys remain available for existing offline grants. Never activate before deployed clients trust the new kid.
+Use SDK `@zdevzone/keyforge-client@0.2.0` and the [OpenAPI](client-openapi.json) schemas. Other languages can implement the same HTTPS/signature/storage contract without adding Node. [Portable v1 vectors](examples/client-contract/README.md) include checksums and test-only public keys. Run `vp exec tsx scripts/generate-client-fixtures.ts --check` to detect drift. Never use fixture keys for a deployment.

@@ -193,7 +193,7 @@ test("S3 and R2 use separate credentials and buckets and support remote read/del
   assert.ok(auth.some((a) => a.includes("Credential=R2_TEST/")));
   assert.equal(files.size, 0);
 });
-test("daily UTC schedules, toggles, migration and retention are independent per destination", async (t) => {
+test("daily UTC schedules, toggles and retention are independent per destination", async (t) => {
   const removed: string[] = [],
     stored = new Map<string, Buffer>();
   const mock = (id: string): BackupDriver => ({
@@ -210,25 +210,12 @@ test("daily UTC schedules, toggles, migration and retention are independent per 
   const h = await fixture(t, {
     drivers: { s3: mock("s3"), r2: mock("r2"), uploadthing: mock("uploadthing") },
   });
-  await atomic(h.platform.options.database, (r) =>
-    r.put(WORKSPACE, "backup-schedule", {
-      id: "default",
-      destination: "s3",
-      enabled: true,
-      hourUTC: 13,
-      retentionDays: 1,
-      nextAt: "2026-10-12T13:00:00.000Z",
-    } as Schedule),
-  );
-  await h.service.migrateSchedules();
-  await h.service.migrateSchedules();
-  const migrated = (await h.platform.records.get<Schedule>(WORKSPACE, "backup-schedule", "s3"))!;
-  assert.equal(migrated.enabled, true);
-  assert.equal(migrated.minuteUTC, 0);
-  assert.equal(
-    (await h.platform.records.get<Schedule>(WORKSPACE, "backup-schedule", "default"))!.enabled,
-    false,
-  );
+  await h.service.saveSchedule("s3", {
+    enabled: true,
+    hourUTC: 13,
+    minuteUTC: 0,
+    retentionDays: 1,
+  });
   await h.service.saveSchedule("r2", {
     enabled: true,
     hourUTC: 13,

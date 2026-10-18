@@ -37,7 +37,7 @@ test("client starter validates configuration and preserves existing applications
   );
   const pkg = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
   assert.equal(pkg.private, true);
-  assert.equal(pkg.dependencies["@zdevzone/keyforge-client"], "^0.1.1");
+  assert.equal(pkg.dependencies["@zdevzone/keyforge-client"], "^0.2.0");
   assert.match(
     await readFile(join(directory, ".env.example"), "utf8"),
     /KEYFORGE_PRODUCT_ID=studio/,

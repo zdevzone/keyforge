@@ -70,7 +70,7 @@ const trialSchema = z
 const definitionSchema = z
   .object({
     id: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/),
-    type: z.enum(["number", "string", "boolean", "mixed"]),
+    type: z.enum(["number", "string", "boolean"]),
     description: z.string().max(500),
     defaultValue: valueSchema.optional(),
     minimum: z.number().finite().optional(),
@@ -88,8 +88,7 @@ const definitionSchema = z
       context.addIssue({ code: "custom", message: "Minimum exceeds maximum." });
     if (
       definition.defaultValue !== undefined &&
-      (definition.type === "mixed" ||
-        typeof definition.defaultValue !== definition.type ||
+      (typeof definition.defaultValue !== definition.type ||
         (typeof definition.defaultValue === "number" &&
           ((definition.minimum !== undefined && definition.defaultValue < definition.minimum) ||
             (definition.maximum !== undefined && definition.defaultValue > definition.maximum))))
@@ -139,7 +138,7 @@ export interface Grant extends LicenseRow {
 interface Installation extends RecordValue {
   importAccountId?: string | null;
   trialConvertedAt?: string | null;
-  credentialHash: string | null;
+  credentialHash: string;
   registeredAt: string;
   lastSeenAt: string;
   appVersion: string;
@@ -291,38 +290,7 @@ export class Platform {
           ...this.options.config.signingKeys.retired,
         ],
       } as Product);
-      const licenses = await records.db.selectFrom("licenses").selectAll().execute();
       const definitions = new Map<string, Set<string>>();
-      for (const row of licenses) {
-        const {
-          key_hash,
-          issued_to,
-          activation_limit,
-          issued_at,
-          expires_at,
-          revoked_at,
-          ...rest
-        } = row;
-        const entitlements = JSON.parse(row.entitlements) as Entitlements;
-        for (const [key, value] of Object.entries(entitlements)) {
-          const types = definitions.get(key) ?? new Set<string>();
-          types.add(typeof value);
-          definitions.set(key, types);
-        }
-        await records.put(scope("default"), "license", {
-          ...rest,
-          entitlements,
-          productId: "default",
-          keyHash: key_hash,
-          issuedTo: issued_to,
-          activationLimit: activation_limit,
-          issuedAt: issued_at,
-          expiresAt: expires_at,
-          revokedAt: revoked_at,
-          keyReference: "legacy-" + row.id.slice(0, 8),
-          subjectKind: "installation",
-        } as Grant);
-      }
       for (const [id, preset] of Object.entries(this.options.config.licenses.planPresets)) {
         await records.put(scope("default"), "plan", {
           id,
@@ -339,77 +307,15 @@ export class Platform {
           definitions.set(key, types);
         }
       }
-      for (const [id, types] of definitions)
+      for (const [id, types] of definitions) {
+        if (types.size !== 1)
+          throw new Error("Configured plans disagree on the entitlement type for " + id + ".");
         await records.put(scope("default"), "definition", {
           id,
-          type: types.size === 1 ? [...types][0] : "mixed",
+          type: [...types][0],
           description: "",
           archived: false,
         } as Definition);
-      for (const row of await records.db.selectFrom("installations").selectAll().execute()) {
-        await records.put(scope("default"), "installation", {
-          id: row.installation_id,
-          credentialHash: null,
-          registeredAt: row.registered_at,
-          lastSeenAt: row.last_seen_at,
-          appVersion: row.app_version,
-          platform: row.platform,
-          userName: row.user_name,
-          userEmail: row.user_email,
-          licenseId: row.license_id,
-        } as Installation);
-      }
-      for (const row of await records.db.selectFrom("activations").selectAll().execute())
-        await records.put(scope("default"), "binding", {
-          id: row.license_id + ":" + row.installation_id,
-          licenseId: row.license_id,
-          installationId: row.installation_id,
-          activatedAt: row.activated_at,
-          deactivatedAt: row.deactivated_at,
-        } as Binding);
-      for (const row of await records.db.selectFrom("support_requests").selectAll().execute())
-        await records.put(scope("default"), "ticket", {
-          id: row.id,
-          licenseId: row.license_id,
-          installationId: row.installation_id,
-          category: row.category,
-          urgency: row.urgency,
-          subject: row.subject,
-          message: row.message,
-          reporterName: row.reporter_name,
-          appVersion: row.app_version,
-          platform: row.platform,
-          clientRequestId: row.client_request_id,
-          clientCreatedAt: row.client_created_at,
-          receivedAt: row.received_at,
-          updatedAt: row.updated_at,
-          status: "queued",
-          assignedTo: null,
-          messages: [],
-        } as Ticket);
-      const machines = await records.db.selectFrom("machine_groups").selectAll().execute();
-      for (const machine of machines) {
-        const signals = await records.db
-          .selectFrom("machine_signals")
-          .select(["kind", "hash"])
-          .where("group_id", "=", machine.id)
-          .execute();
-        const installations = await records.db
-          .selectFrom("machine_installations")
-          .select("installation_id")
-          .where("group_id", "=", machine.id)
-          .execute();
-        await records.put(scope("default"), "machine", {
-          id: machine.id,
-          supportReference: machine.support_reference,
-          signals: normalizeSignals(signals),
-          installationIds: installations.map((i) => i.installation_id),
-          registrationCount: machine.registration_count,
-          clearedAtCount: machine.cleared_at_count,
-          clearedAt: machine.cleared_at,
-          firstRegisteredAt: machine.first_registered_at,
-          lastRegisteredAt: machine.last_registered_at,
-        } as Machine);
       }
     };
     if (existingRecords) await seed(existingRecords);
@@ -450,7 +356,7 @@ export class Platform {
   async token(product: Product, license: Grant, installationId: string, records = this.records) {
     const account = await importAccount(records, product.id, license);
     return this.sign(product, {
-      v: account ? 5 : 4,
+      v: 1,
       kind: "license",
       iss: "default",
       productId: product.id,
@@ -467,15 +373,11 @@ export class Platform {
         this.options.now().getTime() + product.graceDays * 86400000,
       ).toISOString(),
       status: this.status(license),
-      ...(account
-        ? {
-            accountId: account.id,
-            authorizationRevision: account.authorizationRevision,
-            paidImportsGranted: account.granted,
-            recoveryGeneration: account.recoveryGeneration,
-            trialConverted: true,
-          }
-        : {}),
+      accountId: account?.id ?? null,
+      authorizationRevision: account?.authorizationRevision ?? license.revision ?? 1,
+      paidImportsGranted: account?.granted ?? null,
+      recoveryGeneration: account?.recoveryGeneration ?? 0,
+      trialConverted: true,
     });
   }
   async authenticate(pid: string, iid: string, secret: string, records = this.records) {
@@ -495,7 +397,6 @@ export class Platform {
       if (
         !def ||
         def.archived ||
-        def.type === "mixed" ||
         typeof value !== def.type ||
         (typeof value === "number" &&
           ((def.minimum !== undefined && value < def.minimum) ||
@@ -856,12 +757,9 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
             const used =
               licenses.some((l) => def.id in l.entitlements) ||
               plans.some((p) => def.id in p.entitlements);
-            if (prior && prior.type !== def.type && used && prior.type !== "mixed")
+            if (prior && prior.type !== def.type && used)
               throw new DomainError("definition_in_use", "Used entitlement type cannot change.");
-            if (
-              def.type === "mixed" ||
-              (def.defaultValue !== undefined && typeof def.defaultValue !== def.type)
-            )
+            if (def.defaultValue !== undefined && typeof def.defaultValue !== def.type)
               throw new DomainError(
                 "bad_definition",
                 "Resolve ambiguous entitlement types before import.",
@@ -970,7 +868,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
                 (await records.list<Plan>(scope(req.params.productId), "plan")).some(
                   (p) => input.id in p.entitlements,
                 );
-              if (prior && used && prior.type !== def.type && prior.type !== "mixed")
+              if (prior && used && prior.type !== def.type)
                 throw new DomainError(
                   "definition_in_use",
                   "A used entitlement cannot change type.",
@@ -1385,46 +1283,22 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
           req.params.id,
         );
         if (!license) throw new DomainError("unknown_license", "No such license.", 404);
-        const supplied = z.string().optional().parse(req.body?.key);
-        if (supplied !== undefined) {
-          if (hashProductKey(supplied) !== license.keyHash)
-            throw new DomainError("key_mismatch", "This key does not match the original.");
-          await atomic(options.database, async (records) => {
-            const current = (await records.get<Grant>(
-              scope(req.params.productId),
-              "license",
-              req.params.id,
-            ))!;
-            await records.put(scope(req.params.productId), "license", {
-              ...current,
-              encryptedKey: platform.vault.encrypt(
-                supplied.trim().toUpperCase(),
-                "license:" + req.params.productId + ":" + license.id,
-              ),
-            } as Grant);
-          });
-        }
-        const current = (await platform.records.get<Grant>(
-          scope(req.params.productId),
-          "license",
-          license.id,
-        ))!;
-        if (!current.encryptedKey)
+        z.object({ password: z.string().optional() })
+          .strict()
+          .parse(req.body ?? {});
+        if (!license.encryptedKey)
           throw new DomainError(
             "original_key_unavailable",
-            "Original key unavailable. Securely re-enter it to enable storage.",
+            "Stored key unavailable. Restore a current backup or explicitly replace the key.",
             404,
           );
-        await platform.audit(
-          req.actor,
-          supplied ? "license.key.store" : "license.key.reveal",
-          req.params.productId,
-          { licenseId: license.id },
-        );
+        await platform.audit(req.actor, "license.key.reveal", req.params.productId, {
+          licenseId: license.id,
+        });
         reply.header("Cache-Control", "no-store");
         return {
           key: platform.vault.decrypt(
-            current.encryptedKey,
+            license.encryptedKey,
             "license:" + req.params.productId + ":" + license.id,
           ),
         };
@@ -1685,7 +1559,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
           trial: product.trial.enabled
             ? {
                 token: platform.sign(product, {
-                  v: product.importPolicy ? 3 : 2,
+                  v: 1,
                   kind: "trial",
                   iss: "default",
                   productId: pid,
@@ -1700,7 +1574,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
                       ).toISOString()
                     : null,
                   supportReference: verdict === "spent" ? machine.supportReference : null,
-                  ...(product.importPolicy ? { converted } : {}),
+                  converted,
                 }),
               }
             : null,
@@ -1876,7 +1750,6 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
               account.ownerInstallationId = input.installationId;
               if (!existing || existing.deactivatedAt) account.authorizationRevision++;
               await records.put(scope(pid), "import_account", account);
-              installation.trialConvertedAt ??= platform.time();
               installation.importAccountId = account.id;
             }
             await records.put(scope(pid), "binding", {
@@ -1888,6 +1761,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
             } as Binding);
             installation.licenseId = license.id;
           }
+          installation.trialConvertedAt ??= platform.time();
           installation.lastSeenAt = platform.time();
           await records.put(scope(pid), "installation", installation);
           return {

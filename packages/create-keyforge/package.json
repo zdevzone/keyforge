@@ -1,6 +1,6 @@
 {
   "name": "create-keyforge",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Scaffold a self-hosted Keyforge license server: pick a database, an operator-admin scope, and a licensing model, and get a configured project ready to deploy.",
   "keywords": [
     "create",

@@ -211,8 +211,7 @@ export function EntitlementsEditor(props: {
         }[];
       }>(productPath("/catalog")),
   });
-  const definitions =
-    catalog.data?.definitions.filter((d) => !d.archived && d.type !== "mixed") ?? [];
+  const definitions = catalog.data?.definitions.filter((d) => !d.archived) ?? [];
   const update = (index: number, patch: Partial<EntitlementRow>) => {
     onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };

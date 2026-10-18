@@ -44,11 +44,14 @@
     },
     "v": {
       "type": "number",
-      "const": 2
+      "const": 1
     },
     "verdict": {
       "type": "string",
-      "enum": ["fresh", "spent"]
+      "enum": [
+        "fresh",
+        "spent"
+      ]
     },
     "allowance": {
       "anyOf": [
@@ -63,7 +66,13 @@
       ]
     },
     "supportReference": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "converted": {
+      "type": "boolean"
     }
   },
   "required": [
@@ -77,7 +86,8 @@
     "v",
     "verdict",
     "allowance",
-    "supportReference"
+    "supportReference",
+    "converted"
   ],
   "additionalProperties": false
 }

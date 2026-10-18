@@ -1,6 +1,6 @@
 # Import licensing, additive renewals and recovery
 
-This source implementation adds an **opt-in** contract. It has not been deployed or published merely because this document exists. Existing products/licenses continue using license v4 and trial v2. Import-account licenses use **v5**, import-policy trials use **v3**, and recovery uses a separate **usage-recovery v1** artifact. Ed25519 continues signing decoded JSON bytes; no JWT conversion or private-key rotation is involved.
+KeyForge uses one clean v1 contract: license, trial and separate usage-recovery artifacts all use `v:1`. Import quotas are an explicit product feature within this format. There are no older parsers, negotiation or data-adoption endpoints. Ed25519 still signs decoded JSON bytes; retain the deployment signing keys. A fresh development database and SDK state are required. Publishing code does not deploy Production.
 
 ## Business rules
 
@@ -21,9 +21,9 @@ KeyForge stores cumulative **paid units granted**, not usage history. Studio Pro
 
 Units carry forward but imports require active authorization, unexpired paid term and unexpired offline lease. Base feature entitlements remain the original license snapshot; the renewal plan supplies the purchased units, duration and price. This endpoint does not schedule feature-tier changes. Generic entitlement edits are blocked on import-account licenses: use the explicit purchase operations for units/time. A purchase without a receipt remains unpaid and authorized, preserving existing operator-controlled issuance. Payment/refund/credit entries affect finances, not units. Revocation is a separate deliberate action and reaches offline apps only within their signed lease bounds.
 
-## Enable without rewriting existing data
+## Configure a fresh product
 
-New records use the existing scoped `platform_records` ledger and its SQLite/PostgreSQL transaction lock. No auth-table migration, session reset, historic-sale rewrite or guessed backfill occurs. Accounts, operation receipts, approvals and immutable licensing-event records travel with normal application backups and database copies. They are not part of catalog export/import.
+New records use the existing scoped `platform_records` ledger and its SQLite/PostgreSQL transaction lock. There is no previous-schema import or automatic state conversion. Accounts, operation receipts, approvals and immutable licensing-event records travel with normal application backups and database copies. They are not part of catalog export/import.
 
 Use an isolated test server first. Configure an active numeric entitlement (usually `imports`) and priced plans with **one installation seat**, then opt in:
 
@@ -33,15 +33,9 @@ vp run license issue --product studio-proof --plan standard --to "Test studio" -
 vp run license imports-account LICENSE_ID --product studio-proof --env-file secrets/environments/staging/server.env
 ```
 
-Get the current product revision through its catalog. Replace example IDs/revisions with verified values. Enabling policy affects future issuance and registration, not existing licenses. Import plans must supply a finite nonnegative safe-integer numeric allowance; missing/negative/fractional/string values fail closed. Zero grants no imports. Paid unlimited plans are not inferred from null/omission. Per-purchase entitlement bounds do not cap the cumulative account total.
+Get the current product revision through its catalog. Replace example IDs/revisions with verified values. Enable the policy before issuing development import-account licenses; reissue test records when changing the product model. Import plans must supply a finite nonnegative safe-integer numeric allowance; missing/negative/fractional/string values fail closed. Zero grants no imports. Paid unlimited plans are not inferred from null/omission. Per-purchase entitlement bounds do not cap the cumulative account total.
 
-For an existing license, reconcile purchased allowance and surviving usage privately first:
-
-```sh
-vp run license imports-adopt LICENSE_ID --product studio-proof --granted 50000 --revision 4 --reason "Verified the original purchased allowance" --request-id 22222222-2222-4222-8222-222222222222 --env-file secrets/environments/staging/server.env
-```
-
-This creates an account without a new sale or receipt. Existing licenses with multiple historical installations require manual reconciliation rather than guessing a shared offline budget. The SDK must explicitly adopt verified surviving legacy usage; lack of a new ledger never means zero. An already adopted account cannot be reinitialized. A licensing account remembers its installation after seat release; transferring it requires approved recovery. Hardware matching never transfers it. Multiple independent offline computers sharing one budget remain unsupported.
+Use fresh development records when testing this baseline. An import account remembers its installation after seat release; transferring it requires approved recovery. Hardware matching never transfers it. Multiple independent offline computers sharing one budget remain unsupported.
 
 ## Renewals and operator permissions
 
@@ -58,7 +52,7 @@ These policy, account, purchase, replacement and recovery-management APIs requir
 
 ## SDK storage and import enforcement
 
-Use a secure `SecureStorage` adapter with **atomic `compareAndSwap(expectedRevision, nextState)`**. Expected null means no existing record; otherwise match stored `storageRevision` (legacy absence means zero). Commit the complete snapshot only if the version matches. `save` remains for old adapters/legacy licensing, but new import mutations require CAS. `MemoryStorage` implements CAS for tests only, not persistence or OS security.
+Use a secure `SecureStorage` adapter with **atomic `compareAndSwap(expectedRevision, nextState)`**. Expected null means no existing record; otherwise match stored `storageRevision` (required for every saved record). Commit the complete snapshot only if the version matches. Every SDK state mutation requires CAS; there is no plain-save fallback. `MemoryStorage` implements CAS for tests only, not persistence or OS security.
 
 For a real import, run the SDK's load/CAS operations inside the same host database transaction as the asset insert. Protect credentials/usage using the application's secure-storage facilities. A framework-independent SDK cannot make an unrelated media database and file vault atomic by itself. The adapter must enlist those operations in the host transaction, including rollback. Concurrent owners get `storage_conflict`; reload and retry the same event UUID. Never catch storage corruption and substitute empty state.
 
@@ -74,11 +68,11 @@ const result = await client.consumeImport(importEventUuid, 1);
 const usage = await client.getImportUsage();
 ```
 
-Use `consumeImport` with a stable UUID per successful operation; receipts survive restarts and backups. A repeated UUID with different units conflicts. Trials and paid imports increment different counters and permanent lifetime history. The legacy `consumeTrial` helper has no caller-supplied replay ID; new integrations should use `consumeImport`. Paid quota exhaustion returns `quota_exhausted`; invalid usage returns `recovery_required`. Neither state should prevent reading existing media. `licensed` alone is not sufficient if the host bypasses consumption or media-transaction integrity.
+Use `consumeImport` with a stable UUID per successful operation; receipts survive restarts and backups. A repeated UUID with different units conflicts. Trials and paid imports increment different counters and permanent lifetime history. Use the same receipt-based operation for trial and paid consumption. Paid quota exhaustion returns `quota_exhausted`; invalid usage returns `recovery_required`. Neither state should prevent reading existing media. `licensed` alone is not sufficient if the host bypasses consumption or media-transaction integrity.
 
-For legacy state, call `adoptLegacyImportUsage({lifetimeImports,paidConsumed,trialConsumed,lifetimeKnown})` only with independently verified local history. It preserves known counters and refuses repeat initialization after account adoption. Missing/corrupt history requires recovery, not this migration helper. Existing SDK state and credentials are retained; v4/v2 remain valid for products/licenses not opted in. Once an account has used v5, the SDK rejects protocol downgrade and lower signed revisions/granted totals. Publish updated clients before enabling new contracts; older v4-only clients intentionally reject v5.
+Missing or corrupt usage requires recovery, never zero initialization. Only complete v1 secure state is accepted. The SDK rejects unknown versions, older signed revisions, incompatible accounts and conflicting same-revision terms.
 
-V5 adds `accountId`, `authorizationRevision`, `paidImportsGranted`, `recoveryGeneration`, `trialConverted:true`. V3 adds `converted`. All other base fields remain; schemas are in the current OpenAPI. Revision increments for authorized changes; refresh can mint a later lease at the same revision with unchanged authorization terms. The SDK rejects conflicting same-revision terms and earlier revisions. Issuance time remains a freshness check, not a replacement for revisions. Signed revoked/expired states still supersede active grants; local clocks and deadlines remain enforced.
+License v1 includes `accountId`, `authorizationRevision`, `paidImportsGranted`, `recoveryGeneration`, `trialConverted:true`. Trial v1 includes `converted`. All other base fields remain; schemas are in the current OpenAPI. Revision increments for authorized changes; refresh can mint a later lease at the same revision with unchanged authorization terms. The SDK rejects conflicting same-revision terms and earlier revisions. Issuance time remains a freshness check, not a replacement for revisions. Signed revoked/expired states still supersede active grants; local clocks and deadlines remain enforced.
 
 ## Customer-controlled encrypted backups
 
@@ -107,23 +101,22 @@ vp run license recovery-reject REQUEST_ID --product studio-proof --revision 1 --
 
 Use `--mode lost_history` only for a confirmed loss. It treats **all previously granted paid units as consumed**, forfeits trial and marks lifetime totals unknown. It preserves every surviving known counter; it does not invent an exact historical import total. New allowance is an explicit later purchase/goodwill decision, not an automatic refill. A restore merges maxima of surviving and backup counters and compatible event receipts; conflicting receipts fail. Lifetime history after a loss stays unknown with a preserved known lower bound. An expired license requires a deliberate time extension before claim; do not add new units before conservative lost-history recovery unless they are also meant to be treated as consumed.
 
-Recovery artifact fields: base issuer/product/key/installation/time, `kind:'usage-recovery'`, `v:1`, UUID `recoveryId`, accountId, challenge, mode, nullable usageDigest, paidImportsFloor, trialImportsFloor, recoveryGeneration, authorizationRevision. It is **not a license**; `verifySignedToken` rejects it and `verifyRecoveryToken` requires its separate schema and unexpired deadline. The claim response includes a normal v5 token, the recovery token and unsigned serverTime. No raw usage records/counts are uploaded. The optional commitment is SHA-256 over compact UTF-8 JSON in this exact order:
+Recovery artifact fields: base issuer/product/key/installation/time, `kind:'usage-recovery'`, `v:1`, UUID `recoveryId`, accountId, challenge, mode, nullable usageDigest, paidImportsFloor, trialImportsFloor, recoveryGeneration, authorizationRevision. It is **not a license**; `verifySignedToken` rejects it and `verifyRecoveryToken` requires its separate schema and unexpired deadline. The claim response includes a normal v1 token, the recovery token and unsigned serverTime. No raw usage records/counts are uploaded. The optional commitment is SHA-256 over compact UTF-8 JSON in this exact order:
 
 ```text
 ["keyforge-usage-recovery",1,challenge,accountId,paidConsumed,trialConsumed,
- lifetimeImports,lifetimeKnown,integrity,trialConverted,legacyPaidSeen,legacyVerified,
- authorizationRevision,recoveryGeneration,granted,termsHash,
+ lifetimeImports,lifetimeKnown,integrity,trialConverted,authorizationRevision,recoveryGeneration,granted,termsHash,
  [[eventUuid,units,source],...]]
 ```
 
 Sort receipt entries by ascending UUID string; booleans/null/numbers retain JSON types. The random challenge salts the commitment. Native integrations must implement the same ordering if exchanging SDK snapshots. Payload schemas cannot replace signature, challenge, ownership, clock or same-account checks.
 
-After expired/stale/rejected approval, explicitly `abandonUsageRecovery()` and request a fresh approval; never silently replace a pending UUID after a timeout. A claimed record replays only while its generation/owner remain current. Repeated local claim after successful adoption returns current authorization without reapplying the recovery. Multiple approvals cannot both change the same account revision. Licensing events record who approved and why within the same transaction as the operation; ordinary legacy audit logging is unchanged.
+After expired/stale/rejected approval, explicitly `abandonUsageRecovery()` and request a fresh approval; never silently replace a pending UUID after a timeout. A claimed record replays only while its generation/owner remain current. Repeated local claim after successful adoption returns current authorization without reapplying the recovery. Multiple approvals cannot both change the same account revision. Licensing events record who approved and why within the same transaction as the operation; ordinary audit logging is unchanged.
 
 This protects normal crashes, retries, concurrent instances and authorized recovery. It does not provide hardware attestation, a secure wall clock or protection against an attacker controlling the OS and rolling back **all** local secure state. Complete local-only history loss cannot yield an exact reconstructed total. Offline copies of old grants remain bounded by their signed deadlines, including after transfer/revocation. Server database rollback must be reconciled against client high-water revisions before service resumes; never lower a client revision to make a restored server accept it.
 
 ## API and acceptance
 
-Admin API (all product-scoped): PUT import-policy; GET/POST licenses/:id/import-account; POST licenses/:id/renew; POST licenses/:id/replace-key; GET recovery-requests; POST recovery-requests/:id/approve or /reject. Body schemas and CLI examples above document the workflow; the full route inventory is in [API reference](api.md). Customer recovery request/claim schemas and all new token payloads are in [OpenAPI](client-openapi.json).
+Admin API (all product-scoped): PUT import-policy; GET licenses/:id/import-account; POST licenses/:id/renew; POST licenses/:id/replace-key; GET recovery-requests; POST recovery-requests/:id/approve or /reject. Body schemas and CLI examples above document the workflow; the full route inventory is in [API reference](api.md). Customer recovery request/claim schemas and all new token payloads are in [OpenAPI](client-openapi.json).
 
-Run `vp run check`, `vp run test`, `vp run build:all`, OpenAPI drift and package/browser checks. `test/import-licensing.test.ts` exercises additive renewal, receipts, trial conversion, key replacement, CAS races, legacy migration, encrypted restore, conservative recovery, malformed signatures, expiry, stale approvals and isolated PostgreSQL concurrency when TEST_DATABASE_URL is configured. Never use production keys/data or enable live policy as a test. Deployment and package publication are separate release actions.
+Run `vp run check`, `vp run test`, `vp run build:all`, OpenAPI drift and package/browser checks. `test/import-licensing.test.ts` exercises additive renewal, receipts, trial conversion, key replacement, CAS races, fresh-state validation, encrypted restore, conservative recovery, malformed signatures, expiry, stale approvals and isolated PostgreSQL concurrency when TEST_DATABASE_URL is configured. Never use production keys/data or enable live policy as a test. Deployment and package publication are separate release actions.

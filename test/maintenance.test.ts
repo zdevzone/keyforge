@@ -27,6 +27,7 @@ import {
   workspacePath,
 } from "../src/maintenance.js";
 import { generateSigningKeyPair } from "../src/sign.js";
+import { seedLicense } from "./record-fixtures.js";
 async function fixture(t: any) {
   const root = await mkdtemp(join(tmpdir(), "kf-maintenance-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -44,7 +45,7 @@ async function fixture(t: any) {
 test("SQLite reset removes old ledger/operators, recreates schemas and preserves external secrets", async (t) => {
   const h = await fixture(t),
     db = await LicenseDatabase.open({ sqlitePath: h.env.LICENSE_DB_PATH });
-  await db.createLicense({
+  await seedLicense(db, {
     plan: "old",
     entitlements: {},
     issuedTo: "Old customer",
@@ -64,7 +65,16 @@ test("SQLite reset removes old ledger/operators, recreates schemas and preserves
   assert.equal(before.unrelated.length, 0);
   await resetAppDatabase(h);
   const fresh = await LicenseDatabase.open({ sqlitePath: h.env.LICENSE_DB_PATH });
-  assert.equal((await fresh.db.selectFrom("licenses").selectAll().execute()).length, 0);
+  assert.equal(
+    (
+      await fresh.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    0,
+  );
   await fresh.close();
   const auth = createAuth({
     dbPath: h.env.LICENSE_DB_PATH,
@@ -116,7 +126,7 @@ test("local cleanup preserves an aliased active database and removes only obsole
   const obsolete = join(h.root, "db/old.sqlite"),
     unrelated = join(h.root, "db/other.sqlite");
   const old = new SQLite(obsolete);
-  old.exec("CREATE TABLE licenses (id TEXT)");
+  old.exec("CREATE TABLE platform_records (id TEXT)");
   old.close();
   const other = new SQLite(unrelated);
   other.exec("CREATE TABLE other_application (id TEXT)");
@@ -248,12 +258,21 @@ test("Postgres database reset drops and recreates only its explicitly confirmed 
   };
   await resetAppDatabase({ ...options, scope: "app" });
   const db = await LicenseDatabase.open({ url: url.href });
-  await db.createLicense({ plan: "old", entitlements: {}, issuedTo: "Old", activationLimit: 1 });
+  await seedLicense(db, { plan: "old", entitlements: {}, issuedTo: "Old", activationLimit: 1 });
   await db.close();
   await resetAppDatabase(options);
   const fresh = await LicenseDatabase.open({ url: url.href });
   try {
-    assert.equal((await fresh.db.selectFrom("licenses").selectAll().execute()).length, 0);
+    assert.equal(
+      (
+        await fresh.db
+          .selectFrom("platform_records")
+          .selectAll()
+          .where("kind", "=", "license")
+          .execute()
+      ).length,
+      0,
+    );
   } finally {
     await fresh.close();
   }

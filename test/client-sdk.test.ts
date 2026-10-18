@@ -433,7 +433,7 @@ test("Linux/macOS registration and authenticated backfill preserve grants, seats
     });
     const client = new KeyForgeClient(h.options(storage, { deviceSignalsProvider: provider }));
     await client.startTrial();
-    await client.consumeTrial(3);
+    await client.consumeImport(randomUUID(), 3);
     const issued = await h.issue();
     await client.activate(issued.key);
     const original = (await storage.load())!;
@@ -446,7 +446,7 @@ test("Linux/macOS registration and authenticated backfill preserve grants, seats
     await client.register();
     assert.equal((await client.refresh()).state, "licensed");
     assert.deepEqual((await storage.load())!.registration, original.registration);
-    assert.equal((await storage.load())!.trialConsumed, 3);
+    assert.equal((await storage.load())!.importUsage.trialConsumed, 3);
     assert.deepEqual(
       (await h.admin("GET", "/machines")).machines.map((m: any) => [m.id, m.registrationCount]),
       groups,
@@ -480,7 +480,7 @@ test("Device backfill is authenticated, product isolated and leaves trials, seat
   });
   const client = new KeyForgeClient(options);
   await client.startTrial();
-  await client.consumeTrial(2);
+  await client.consumeImport(randomUUID(), 2);
   const issued = await h.issue();
   await client.activate(issued.key);
   const state = (await storage.load())!;
@@ -500,7 +500,7 @@ test("Device backfill is authenticated, product isolated and leaves trials, seat
     ),
     bindings.activations.map((b: any) => [b.installationId, b.activatedAt, b.deactivatedAt]),
   );
-  assert.equal((await storage.load())!.trialConsumed, 2);
+  assert.equal((await storage.load())!.importUsage.trialConsumed, 2);
   assert.deepEqual((await storage.load())!.registration, originalRegistration);
   const installation = (await h.admin("GET", "/installations")).installations[0];
   assert.equal(installation.signalAvailability, "Partial");
@@ -533,7 +533,7 @@ test("Device backfill is authenticated, product isolated and leaves trials, seat
   assert.equal(recollected, false);
 });
 
-test("Legacy backfill anchors by installation, never merges matching groups and tolerates missing signals", async (t) => {
+test("Signal updates anchor by installation, never merges matching groups and tolerates missing signals", async (t) => {
   const h = await fixture(t),
     storage = new MemoryStorage();
   const oldSignals = [
@@ -657,6 +657,39 @@ test("SDK online activation, offline restart, grace expiry and signed negative r
   assert.equal((await client.getAuthorization()).state, "revoked");
 });
 
+test("v1 generic license revisions reject replay and conflicting terms", async (t) => {
+  const h = await fixture(t),
+    storage = new MemoryStorage();
+  const client = new KeyForgeClient(h.options(storage));
+  const issued = await h.issue();
+  await client.activate(issued.key);
+  const state = (await storage.load())!;
+  const grant = await verifySignedToken(state.licenseToken!, {
+    productId: "default",
+    installationId: state.installationId,
+    publicKeys: { "sdk-key": h.pair.publicKey },
+  });
+  const replay = (changes: object) =>
+    new KeyForgeClient(
+      h.options(storage, {
+        fetch: async () => {
+          const body = Buffer.from(JSON.stringify({ ...grant, ...changes }));
+          const token =
+            body.toString("base64url") +
+            "." +
+            sign(null, body, h.pair.privateKey).toString("base64url");
+          return new Response(JSON.stringify({ token }));
+        },
+      }),
+    );
+  await assert.rejects(() => replay({ issuedTo: "Changed without revision" }).refresh(), {
+    code: "revision_conflict",
+  });
+  assert.equal((await client.getAuthorization()).state, "licensed");
+  await replay({ authorizationRevision: 2, issuedTo: "Updated customer" }).refresh();
+  await assert.rejects(() => replay({}).refresh(), { code: "stale_grant" });
+});
+
 test("SDK trial is explicit, allowance survives refresh/restart, disabled and spent trials fail closed", async (t) => {
   const h = await fixture(t);
   await h.product({ trial: { enabled: true, allowance: 3, durationDays: 2 } });
@@ -669,24 +702,23 @@ test("SDK trial is explicit, allowance survives refresh/restart, disabled and sp
   await client.register();
   assert.equal((await client.getAuthorization()).state, "unlicensed");
   assert.equal((await client.startTrial()).state, "trial");
-  const consumed = await client.consumeTrial(2);
-  assert.equal(consumed.state === "trial" && consumed.remaining, 1);
+  const consumed = await client.consumeImport(randomUUID(), 2);
+  assert.equal(
+    consumed.authorization.state === "trial" &&
+      (consumed.authorization.state === "trial" ? consumed.authorization.remaining : null),
+    1,
+  );
   const restarted = new KeyForgeClient(h.options(storage));
   const grant = await restarted.getAuthorization();
   assert.equal(grant.state === "trial" && grant.remaining, 1);
   const issued = await h.issue();
   await restarted.activate(issued.key);
   await restarted.refresh();
-  assert.equal((await storage.load())?.trialConsumed, 2);
+  assert.equal((await storage.load())?.importUsage.trialConsumed, 2);
   await restarted.deactivate();
   assert.equal((await restarted.getAuthorization()).state, "unlicensed");
-  assert.equal((await restarted.startTrial()).state, "trial");
-  assert.deepEqual(await restarted.consumeTrial(), { state: "expired", reason: "trial_exhausted" });
-  await restarted.startTrial();
-  assert.deepEqual(await restarted.getAuthorization(), {
-    state: "expired",
-    reason: "trial_exhausted",
-  });
+  await assert.rejects(() => restarted.startTrial(), { code: "trial_converted" });
+  assert.equal((await restarted.getAuthorization()).state, "unlicensed");
   const spent = new KeyForgeClient(
     h.options(new MemoryStorage(), { registration: { machineSignals: signals } }),
   );
@@ -1009,7 +1041,7 @@ test("SDK rejects clock rollback, storage corruption/context mixup and unsafe UR
   await assert.rejects(() => mixed.register(), { code: "storage_context_mismatch" });
   const invalidStorage: SecureStorage = {
     load: async () => ({ version: 2 }) as unknown as ClientState,
-    save: async () => {},
+    compareAndSwap: async () => true,
   };
   await assert.rejects(() => new KeyForgeClient(h.options(invalidStorage)).register(), {
     code: "invalid_stored_state",
@@ -1018,9 +1050,9 @@ test("SDK rejects clock rollback, storage corruption/context mixup and unsafe UR
   const concurrent = new KeyForgeClient(h.options());
   await Promise.all([concurrent.register(), concurrent.register(), concurrent.startTrial()]);
   await Promise.all([
-    concurrent.consumeTrial(),
-    concurrent.consumeTrial(),
-    concurrent.consumeTrial(),
+    concurrent.consumeImport(randomUUID()),
+    concurrent.consumeImport(randomUUID()),
+    concurrent.consumeImport(randomUUID()),
   ]);
   const grant = await concurrent.getAuthorization();
   assert.equal(grant.state === "trial" && grant.remaining, 19997);
@@ -1107,7 +1139,7 @@ test("Node reference uses real HTTP and SDK enforces durable identity before sen
   let calls = 0;
   const failing: SecureStorage = {
     load: async () => null,
-    save: async () => {
+    compareAndSwap: async () => {
       throw new Error("vault unavailable");
     },
   };

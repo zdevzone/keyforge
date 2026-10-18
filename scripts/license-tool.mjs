@@ -101,7 +101,6 @@ function usage() {
 
   vp run license imports-enable --entitlement imports --revision N
   vp run license imports-account <licenseId>
-  vp run license imports-adopt <licenseId> --granted N --revision N --reason TEXT
   vp run license renew <licenseId> --plan ID --mode renewal|top_up|extension --request-id UUID
       Renewal extends time and adds units once; top_up adds units only;
       extension changes time only. Optional --paid --method TEXT --reference TEXT.
@@ -340,23 +339,6 @@ switch (command) {
         null,
         2,
       ),
-    );
-    break;
-  }
-  case "imports-adopt": {
-    const requestId = flag("request-id") || randomUUID();
-    console.log("Operation ID (reuse unchanged on retry): " + requestId);
-    await admin(`/admin/licenses/${encodeURIComponent(rest[0])}/import-account`, {
-      method: "POST",
-      body: JSON.stringify({
-        requestId,
-        revision: Number(flag("revision")),
-        granted: Number(flag("granted")),
-        reason: flag("reason"),
-      }),
-    });
-    console.log(
-      "Legacy license adopted. The client must migrate verified surviving usage before using v5 grants.",
     );
     break;
   }

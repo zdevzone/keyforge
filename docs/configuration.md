@@ -6,7 +6,7 @@ For a complete first setup, follow the [beginner guide](getting-started.md). Cop
 
 `DATABASE_URL` selects Postgres for both the license ledger and Better Auth operator tables. When present, local database paths are ignored. There is no fallback to SQLite if the external database fails.
 
-Without `DATABASE_URL`, licensing and operator identity/session data share `LICENSE_DB_PATH` (default `licenses.sqlite`). Backups capture both datasets together. There is no legacy split-file import. See [Database setup and demo data](database.md) for fresh setup and demo resets. PostgreSQL continues using its shared database.
+Without `DATABASE_URL`, licensing and operator identity/session data share `LICENSE_DB_PATH` (default `licenses.sqlite`). Backups capture both datasets together. The database is created directly from the current schema. See [Database setup and demo data](database.md) for fresh setup and demo resets. PostgreSQL continues using its shared database.
 
 The CLI, server and admin seeding use the same selection rules. System settings shows the selected backend and warns when local paths are ignored. A ledger copy transfers licensing data only; it does not transfer operator accounts.
 
@@ -46,7 +46,7 @@ Generate signing material with `vp run license keygen`; it follows `LICENSE_SIGN
 | `LICENSE_BACKUP_CUSTOM_*` | Optional complete header values referenced by custom upload endpoints; no authentication required for public URLs. |
 | `LICENSE_BACKUP_VERIFY_DATABASE_URL` | Separate scratch administrator connection with temporary database creation permission. |
 
-Postgres pools use the shared pool factory, bounded connections, explicit TLS handling and error listeners. Ledger migrations serialize using a transaction-scoped advisory lock. Better Auth schema migration should run through one initial instance before expanding an operator-enabled deployment. For Postgres databases that ran Better Auth 1.7.0–1.7.2, startup automatically relaxes the obsolete required account.issuer column and removes its legacy index while preserving account values and password hashes. Duplicate provider/account identities are refused before that compatibility change. See the [upstream upgrade guide](https://better-auth.com/docs/guides/1-7-upgrade-guide#account-identity-keeps-the-provider-key).
+Postgres pools use the shared pool factory, bounded connections, explicit TLS handling and error listeners. Ledger migrations serialize using a transaction-scoped advisory lock. Better Auth schema migration should run through one initial instance before expanding an operator-enabled deployment.
 
 All backup providers can be configured simultaneously. Each owns an independent daily UTC schedule in the database. Custom URLs are managed through the console. See [backups and recovery](backups.md) for credential aliases, upload formats, local cache and retention behavior.
 

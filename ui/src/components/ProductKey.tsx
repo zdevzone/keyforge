@@ -9,7 +9,6 @@ export default function ProductKey({
   license: { id: string; keyReference: string; keyStored: boolean };
 }) {
   const [password, setPassword] = useState(""),
-    [original, setOriginal] = useState(""),
     [revealed, setRevealed] = useState("");
   const action = useAction();
   useEffect(() => {
@@ -32,11 +31,10 @@ export default function ProductKey({
           void action.run(async () => {
             const result = await request<{ key: string }>(
               productPath("/licenses/" + license.id + "/key"),
-              { method: "POST", body: { password, ...(original ? { key: original } : {}) } },
+              { method: "POST", body: { password } },
             );
             setRevealed(result.key);
             setPassword("");
-            setOriginal("");
           }, "Key revealed.");
         }}
       >
@@ -47,22 +45,8 @@ export default function ProductKey({
           onChange={setPassword}
           required
         />
-        {!license.keyStored && (
-          <>
-            <p className="text-sm text-amber-800">
-              The original hash-only key cannot be recovered. Re-enter the customer's original key
-              to retain it securely.
-            </p>
-            <TextField
-              label="Original product key"
-              value={original}
-              onChange={setOriginal}
-              required
-            />
-          </>
-        )}
-        <Button type="submit" disabled={action.busy}>
-          {license.keyStored ? "Reveal key" : "Verify and store original key"}
+        <Button type="submit" disabled={action.busy || !license.keyStored}>
+          Reveal key
         </Button>
         <Feedback action={action} />
       </form>

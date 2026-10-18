@@ -114,7 +114,7 @@ test("fresh contract removes legacy routes and preserves signed revocation", asy
   const verified = verifyLicenseToken(r.json().token, pair.publicKey);
   assert.equal(verified.valid, true);
   const payload = verified.payload as any;
-  assert.equal(payload.v, 4);
+  assert.equal(payload.v, 1);
   assert.equal(payload.productId, "default");
   assert.equal(payload.entitlements.imports, 100);
   assert.equal("allowance" in payload, false);
@@ -247,7 +247,7 @@ test("product isolation and staged rotation", async (t) => {
   assert.equal(verifyLicenseToken(after, key.publicKeyPem).valid, true);
   assert.equal(verifyLicenseToken(after, pair.publicKey).valid, false);
 });
-test("encrypted key storage never leaks through listings, and legacy reentry verifies hash", async (t) => {
+test("encrypted key storage never leaks through listings and authenticated reveal is audited", async (t) => {
   const h = await harness(t),
     l = await h.issue();
   const list = (await h.admin("GET", "/licenses")).json().licenses[0];
@@ -501,41 +501,6 @@ test("manual snapshots do not require schedule or archive keys; archives verify 
   assert.ok((await platform.records.get<any>("workspace:default", "backup", job.id))!.verifiedAt);
   const bytes = await service.bytes(completed);
   assert.equal(bytes.toString().includes("platform_records"), false);
-});
-test("existing ledger imports without erasing licenses and refuses legacy installation takeover", async (t) => {
-  const db = await LicenseDatabase.open({ sqlitePath: ":memory:" });
-  const l = await db.createLicense({
-    plan: "standard",
-    entitlements: { imports: 10 },
-    issuedTo: "Legacy",
-    activationLimit: 1,
-  });
-  await db.registerInstallation({ installationId: "legacy" });
-  await db.bindActivation(l.license.id, "legacy");
-  const app = await buildLicenseApp({
-    database: db,
-    privateKey: pair.privateKey,
-    adminToken: "test-admin",
-    keyring: ring,
-  });
-  t.after(async () => {
-    await app.close();
-    await db.close();
-  });
-  const list = await app.inject({
-    method: "GET",
-    url: prefix + "/licenses",
-    headers: { authorization: "Bearer test-admin" },
-  });
-  assert.equal(list.json().licenses[0].id, l.license.id);
-  assert.equal(list.json().licenses[0].keyStored, false);
-  const r = await app.inject({
-    method: "POST",
-    url: "/v1/products/default/register",
-    headers: { authorization: "Bearer " + randomBytes(32).toString("base64url") },
-    payload: { installationId: "legacy", requestId: randomUUID() },
-  });
-  assert.equal(r.statusCode, 401);
 });
 
 test("Postgres product workflow serializes seats and metered quotas", async (t) => {
