@@ -10,6 +10,8 @@ Initial registration, trial onboarding, product-key validation/activation and au
 
 An operator creates a product, active entitlement definitions and plans. Obtain its stable product ID and trusted Ed25519 public keys. Ship a pinned trust store in the application. Never ship admin tokens, signing keys, encryption rings or metering credentials to end-user devices.
 
+The initial seeded product has ID `default`; newly created products have their own IDs. Confirm the existing licenses' product with the operator instead of inventing an ID from the app's display name. For a migration, preserve that product and its approved public keys unless an explicit product migration is planned. The token issuer `default` is a separate fixed contract field and does not identify the licensed product. A safe integration handoff contains the server origin, product ID, `kid`-to-public-PEM trust map, token versions and links to this guide/OpenAPI. It contains no customer key or server administration credential.
+
 A plan name is a label; only its copied typed entitlement values grant features. For example, define `seats:number`, `export:boolean` and `tier:string`. Your code decides what each means. Server-side meters can enforce selected nonnegative integer numeric quotas for trusted backends.
 
 ## Registration and identity

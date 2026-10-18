@@ -1,8 +1,51 @@
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseEnv } from "node:util";
+
+export function localEnvironmentOptions(args) {
+  const option = (name) => {
+    const index = args.indexOf("--" + name);
+    if (index < 0) return undefined;
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw Error("--" + name + " requires a path.");
+    return value;
+  };
+  const selected = option("env-file");
+  return {
+    file: selected || ".env.local",
+    explicit: Boolean(selected),
+    // A named environment owns its keys; it must not silently reuse local keys.
+    secretsDir: option("secrets-dir") || (selected ? join(dirname(selected), "keys") : "./secrets"),
+  };
+}
+
+function encode(value) {
+  const quote = value.includes("'") ? '"' : "'";
+  if (value.includes(quote))
+    throw new Error(
+      "Environment values containing both quote characters need explicit manual configuration.",
+    );
+  return quote + value + quote;
+}
+
+async function writeAtomic(source, file) {
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = file + "." + randomUUID() + ".tmp";
+  await writeFile(temporary, source, { mode: 0o600, flag: "wx" });
+  await rename(temporary, file);
+}
+
+/** Replace a complete environment atomically, including multiline PEM values. */
+export async function writeEnvironment(settings, file) {
+  await writeAtomic(
+    Object.entries(settings)
+      .map(([key, value]) => key + "=" + encode(value))
+      .join("\n") + "\n",
+    file,
+  );
+}
 
 export async function readLocalEnv(file = ".env.local") {
   try {
@@ -28,14 +71,6 @@ export async function confirmLocalUpdate(message, yes = false) {
 }
 /** Preserve comments and unrelated variables; never print secret values. */
 export async function saveLocalEnv(settings, file = ".env.local") {
-  const encode = (value) => {
-    const quote = value.includes("'") ? '"' : "'";
-    if (value.includes(quote))
-      throw new Error(
-        "Environment values containing both quote characters need explicit manual configuration.",
-      );
-    return quote + value + quote;
-  };
   const { source } = await readLocalEnv(file);
   const remaining = new Map(Object.entries(settings));
   const lines = source.split(/\r?\n/).flatMap((line) => {
@@ -46,8 +81,5 @@ export async function saveLocalEnv(settings, file = ".env.local") {
     return [key + "=" + encode(settings[key])];
   });
   for (const [key, value] of remaining) lines.push(key + "=" + encode(value));
-  await mkdir(dirname(file), { recursive: true });
-  const temporary = file + "." + randomUUID() + ".tmp";
-  await writeFile(temporary, lines.join("\n").replace(/\n*$/, "\n"), { mode: 0o600, flag: "wx" });
-  await rename(temporary, file);
+  await writeAtomic(lines.join("\n").replace(/\n*$/, "\n"), file);
 }
