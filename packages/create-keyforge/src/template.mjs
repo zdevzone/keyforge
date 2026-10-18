@@ -39,6 +39,7 @@ const PRUNE = [
   "test/create-keyforge.test.ts",
   "test/client-sdk.test.ts",
   "test/integration-contract.test.ts",
+  "test/import-licensing.test.ts",
   // A dated review of upstream's deployment is not a new deployer's configuration.
   "docs/studio-proof-contract.md",
   "docs/examples/studio-proof-contract",

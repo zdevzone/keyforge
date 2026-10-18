@@ -96,6 +96,14 @@ export const docCatalog: DocEntry[] = [
     description: "Online onboarding, signed offline use, support and metering.",
   },
   {
+    slug: "import-licensing",
+    title: "Import licensing & recovery",
+    group: "Build an integration",
+    source: "docs/import-licensing.md",
+    description:
+      "Additive renewals, separate trial/paid usage, atomic storage and approved recovery.",
+  },
+  {
     slug: "sdk",
     title: "TypeScript SDK",
     group: "Build an integration",

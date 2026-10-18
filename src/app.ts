@@ -127,8 +127,8 @@ export async function buildLicenseApp(options: BuildLicenseAppOptions): Promise<
   app.get("/healthz", async () => ({
     ok: true,
     serverTime: now().toISOString(),
-    tokenVersions: { min: 4, max: 4 },
-    trialTokenVersions: { min: 2, max: 2 },
+    tokenVersions: { min: 4, max: 5 },
+    trialTokenVersions: { min: 2, max: 3 },
   }));
   const meta = async () => ({ name: config.branding.name, serverTime: now().toISOString() });
   app.get("/v1/meta", meta);

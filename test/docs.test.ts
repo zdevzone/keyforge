@@ -40,6 +40,7 @@ test("domain error codes are documented across all route modules", () => {
     "src/platform.ts",
     "src/license-delivery.ts",
     "src/finance.ts",
+    "src/import-licensing.ts",
     "src/notifications.ts",
     "src/platform-store.ts",
     "src/backups.ts",

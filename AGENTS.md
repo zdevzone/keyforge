@@ -22,7 +22,8 @@ Instructions for AI coding agents working in this repository.
 - `src/platform-store.ts`: scoped records, serialized writes and encryption
 - `src/backups.ts`: encrypted jobs, schedules, downloads and verification
 - `src/postgres-archive.ts`: bounded portable application-data archives for serverless hosts
-- `src/token-contract.ts`: license v4 and trial v2 schemas
+- `src/token-contract.ts`: legacy v4/v2, opt-in import-license v5/trial v3, and separate recovery v1 schemas
+- `src/import-licensing.ts`: opt-in cumulative allocations, atomic renewal sales, account ownership and approved recovery
 - `src/db.ts`: dual-engine historical ledger repository and migrations
 - `src/sign.ts`: Ed25519 signing and token helpers
 - `src/auth.ts`: Better Auth setup for the console (admin plugin, role backfill)
@@ -72,6 +73,7 @@ Instructions for AI coding agents working in this repository.
 - Do not change token signing format without coordinating client verification changes.
 - Preserve fail-closed behavior when signing key is missing.
 - Token payload changes require a version bump (`v`) and a compat story.
+- Import licensing is explicit per-product opt-in. Never silently adopt a legacy license, infer zero from missing local usage, refill on payment/refresh, or accept a recovery artifact as a license. Server mutations and licensing events share the existing transaction; SDK import mutations require host-supplied atomic CAS and a shared media transaction. Preserve unknown lifetime history as unknown after recovery.
 - Run `vp run typecheck` and `vp run test` after code changes before proposing completion.
 - Config schema changes must keep `packages/create-keyforge` generating valid
   output; `test/create-keyforge.test.ts` is what catches it.

@@ -38,8 +38,42 @@ export const trialSchema = z
     supportReference: z.string().nullable(),
   })
   .strict();
-export type LicenseToken = z.infer<typeof licenseSchema>;
-export type TrialToken = z.infer<typeof trialSchema>;
+export const importLicenseSchema = z
+  .object({
+    ...licenseSchema.shape,
+    v: z.literal(5),
+    accountId: id,
+    authorizationRevision: z.number().int().positive().safe(),
+    paidImportsGranted: z.number().int().nonnegative().safe(),
+    recoveryGeneration: z.number().int().nonnegative().safe(),
+    trialConverted: z.literal(true),
+  })
+  .strict()
+  .refine((p) => p.subject.id === p.installationId);
+export const importTrialSchema = trialSchema.extend({ v: z.literal(3), converted: z.boolean() });
+export const recoverySchema = z
+  .object({
+    ...common,
+    v: z.literal(1),
+    kind: z.literal("usage-recovery"),
+    recoveryId: z.string().uuid(),
+    accountId: id,
+    challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    mode: z.enum(["restore", "lost_history"]),
+    usageDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    paidImportsFloor: z.number().int().nonnegative().safe(),
+    trialImportsFloor: z.number().int().nonnegative().safe(),
+    recoveryGeneration: z.number().int().positive().safe(),
+    authorizationRevision: z.number().int().positive().safe(),
+    expiresAt: date,
+  })
+  .strict();
+export type RecoveryToken = z.infer<typeof recoverySchema>;
+export type LicenseToken = z.infer<typeof licenseSchema> | z.infer<typeof importLicenseSchema>;
+export type TrialToken = z.infer<typeof trialSchema> | z.infer<typeof importTrialSchema>;
 export type SignedToken = LicenseToken | TrialToken;
 
 export class TokenError extends Error {
@@ -78,10 +112,10 @@ function decodeBase64url(encoded: string): Uint8Array<ArrayBuffer> {
 
 /** Authenticates a token, including its context. Expiry/status are evaluated separately
  * so signed negative grants can replace a previously active cached grant. */
-export async function verifySignedToken(
+async function verifyAnyToken(
   token: string,
   context: VerificationContext,
-): Promise<SignedToken> {
+): Promise<SignedToken | RecoveryToken> {
   if (typeof token !== "string" || token.length > 65536) throw new TokenError("malformed_token");
   const parts = token.split(".");
   if (parts.length !== 2) throw new TokenError("malformed_token");
@@ -94,7 +128,9 @@ export async function verifySignedToken(
   } catch {
     throw new TokenError("malformed_token");
   }
-  const parsed = z.union([licenseSchema, trialSchema]).safeParse(input);
+  const parsed = z
+    .union([licenseSchema, trialSchema, importLicenseSchema, importTrialSchema, recoverySchema])
+    .safeParse(input);
   if (!parsed.success) throw new TokenError("invalid_payload");
   const p = parsed.data;
   if (
@@ -124,4 +160,23 @@ export async function verifySignedToken(
     throw new TokenError("invalid_clock");
   if (Date.parse(p.issuedAt) > now + tolerance) throw new TokenError("future_issuance");
   return p;
+}
+
+export async function verifySignedToken(
+  token: string,
+  context: VerificationContext,
+): Promise<SignedToken> {
+  const grant = await verifyAnyToken(token, context);
+  if (grant.kind === "usage-recovery") throw new TokenError("unexpected_token_kind");
+  return grant;
+}
+export async function verifyRecoveryToken(
+  token: string,
+  context: VerificationContext,
+): Promise<RecoveryToken> {
+  const grant = await verifyAnyToken(token, context);
+  if (grant.kind !== "usage-recovery") throw new TokenError("unexpected_token_kind");
+  if (Date.parse(grant.expiresAt) <= (context.now ?? Date.now()))
+    throw new TokenError("recovery_expired");
+  return grant;
 }

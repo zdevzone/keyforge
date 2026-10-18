@@ -22,6 +22,8 @@ The former read-only catalog now has definition/preset management, usage and pre
 
 ## Current limitations
 
+The opt-in [import-account contract](import-licensing.md) adds cumulative allocations, signed authorization revisions and staff-approved usage recovery. Existing v4 licenses are not automatically migrated. This source capability does not reconstruct completely lost local history or provide OS attestation; local storage and application media transactions remain host responsibilities.
+
 Product/domain data is JSON in a scoped record table. Lists load records and filter in memory, and one workspace write lock serializes mutations. This is a correctness-first implementation for modest self-hosted deployments, not a benchmarked high-volume multi-vendor system. Introduce indexed normalized domain tables and narrower locks before scaling.
 
 All operators belong to the same workspace. There is no vendor/organization isolation, product-specific staff membership, customer account portal login, payment gateway, automated usage pricing, webhooks, HA failover automation or realtime support notifications. A TypeScript client SDK, offline authorization evaluator, Node reference integration, client OpenAPI contract and AI integration skill are provided in the repository. The SDK is published as `@zdevzone/keyforge-client`; future package publication remains a separate release step. Customer replies require polling. Emails and attachments are absent. Audit events are written after domain transactions, so an audit write failure can leave a successful mutation without a corresponding event.
