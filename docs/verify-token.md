@@ -12,7 +12,7 @@ The signature covers the **decoded UTF-8 JSON bytes**, exactly as returned by ba
 
 Required fields: `v:4`, `kind:"license"`, `iss:"default"`, `productId`, `kid`, `licenseId`, `plan`, `entitlements`, `issuedTo`, `subject:{kind:"installation"|"service",id}`, `installationId`, `issuedAt`, nullable `expiresAt`, `offlineGraceUntil`, and `status:"active"|"revoked"|"expired"`. Entitlements are a map of finite numbers, strings or booleans. Subject ID must equal installation ID.
 
-Reject extra or missing fields, unknown versions, malformed timestamps or invalid types. Match issuer, product ID, subject kind and installation ID to your own expected context. Reject future issuance beyond your clock tolerance, negative status, passed expiry and passed offline deadline. The client should persist trusted server time observations to make basic clock rollback harder; this is not protection against a compromised device.
+Reject extra or missing fields, unknown versions, malformed timestamps or invalid types. Match issuer, product ID, subject kind and installation ID to your own expected context. Reject future issuance beyond your clock tolerance, negative status, passed expiry and passed offline deadline. Persist the maximum local clock and authenticated signed issuance time observed; the unsigned HTTP `serverTime` field is not a trusted time oracle. This makes basic clock rollback harder, but does not protect against a compromised device.
 
 ## Trial v2
 

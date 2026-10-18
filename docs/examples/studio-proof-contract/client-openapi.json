@@ -1,0 +1,2550 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KeyForge dependent-app API",
+    "version": "review-2026-10-18",
+    "description": "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded. Frozen documentation corrections for runtime a75fb8db6485ea2bacbe8831537feeeb1d8f31ad; see studio-proof-contract.md for gaps and policy."
+  },
+  "servers": [
+    {
+      "url": "https://license.example.com",
+      "description": "Replace with your KeyForge deployment URL"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "get Health",
+        "description": "Unsigned liveness and supported token versions, not a build identifier or authorization grant.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "tokenVersions": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "const": 4
+                        },
+                        "max": {
+                          "const": 4
+                        }
+                      },
+                      "required": ["min", "max"],
+                      "additionalProperties": false
+                    },
+                    "trialTokenVersions": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "const": 2
+                        },
+                        "max": {
+                          "const": 2
+                        }
+                      },
+                      "required": ["min", "max"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["ok", "serverTime", "tokenVersions", "trialTokenVersions"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta": {
+      "get": {
+        "operationId": "getServerMetadata",
+        "summary": "get Server Metadata",
+        "description": "Public deployment branding and runtime metadata. This unsigned response does not grant application features.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["name", "serverTime"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/keys": {
+      "get": {
+        "operationId": "getProductKeys",
+        "summary": "get Product Keys",
+        "description": "Discovery only. Trust must be established through the application's pinned update channel, never by automatically trusting this response.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kid": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "publicKeyPem": {
+                            "type": "string"
+                          },
+                          "retiredAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["kid", "publicKeyPem", "retiredAt"],
+                        "additionalProperties": true
+                      }
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["keys", "serverTime"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/register": {
+      "post": {
+        "operationId": "registerInstallation",
+        "summary": "register Installation",
+        "description": "Online registration pins a client-generated random 256-bit base64url bearer credential. Persist the credential, body and requestId before sending; replay exactly after interruption. machineSignals are optional hashed hints, not proof of identity. A returned trial must be explicitly selected and verified; registration alone need not enable trial use.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Register"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registration"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/validate": {
+      "post": {
+        "operationId": "validateKey",
+        "summary": "validate Key",
+        "description": "Online inspection only; consumes no seat and does not return an offline grant.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyOperation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/activate": {
+      "post": {
+        "operationId": "activateLicense",
+        "summary": "activate License",
+        "description": "Online activation binds an installation seat and returns a signed v4 token. Repeating the same key/identity reuses the binding. Verify and atomically persist the grant before enabling features.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyOperation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/refresh": {
+      "post": {
+        "operationId": "refreshLicense",
+        "summary": "refresh License",
+        "description": "Requires an existing binding. HTTP 200 may contain a signed revoked or expired license. Verify and persist negative grants; do not retain old authorization after a verified denial.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoundOperation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/deactivate": {
+      "post": {
+        "operationId": "deactivateLicense",
+        "summary": "deactivate License",
+        "description": "Online seat release. Clear local authorization after success; no offline seat release is supported.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoundOperation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["ok", "serverTime"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/device-signals": {
+      "put": {
+        "operationId": "updateDeviceSignals",
+        "summary": "update Device Signals",
+        "description": "Authenticated recognition-only backfill. Does not register again, merge groups, change trial counters, consume seats or reset usage. Reports hashes only; empty signals preserve historical recognition evidence while current availability becomes unavailable.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineSignals": {
+                    "type": "array",
+                    "maxItems": 3,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "machine-guid",
+                            "smbios-uuid",
+                            "volume-serial",
+                            "linux-machine-id",
+                            "macos-platform-uuid",
+                            "root-volume-uuid"
+                          ]
+                        },
+                        "hash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": ["kind", "hash"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["machineSignals"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["ok", "serverTime"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/notifications": {
+      "get": {
+        "operationId": "getNotifications",
+        "summary": "get Notifications",
+        "description": "Poll while online with backoff; only this installation's public replies, expiration notices and license deliveries are returned. No email or realtime transport.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notification"
+                      }
+                    },
+                    "preferences": {
+                      "$ref": "#/components/schemas/Preferences"
+                    }
+                  },
+                  "required": ["items", "preferences"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/notifications/preferences": {
+      "put": {
+        "operationId": "setNotificationPreferences",
+        "summary": "set Notification Preferences",
+        "description": "Installation-specific preferences. License deliveries are always shown.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Preferences"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    }
+                  },
+                  "required": ["ok"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/notifications/read": {
+      "post": {
+        "operationId": "markNotificationRead",
+        "summary": "mark Notification Read",
+        "description": "Mark an event read for this installation only.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "eventId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["eventId"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    }
+                  },
+                  "required": ["ok"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/licenses/{id}/collect": {
+      "post": {
+        "operationId": "collectLicense",
+        "summary": "collect License",
+        "description": "Retrieve a delivered key for its targeted installation; repeatable. Collection does not activate a license or consume a seat. Never log the returned key.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectedLicense"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/support": {
+      "get": {
+        "operationId": "listSupportThreads",
+        "summary": "list Support Threads",
+        "description": "Returns this installation's cases and public messages. Currently unpaginated; no internal notes or operator assignments.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requests": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Thread"
+                      }
+                    }
+                  },
+                  "required": ["requests"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSupportThread",
+        "summary": "create Support Thread",
+        "description": "Requires a license binding. Technical/feature/other categories require an active binding; licensing/billing also work with an existing expired/released binding. Trimmed subject is 3–120 characters and message 10–5000. Persist the exact request and UUID before sending; Idempotency-Key must equal requestId.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "clientRequestId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "receivedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": ["id", "clientRequestId", "status", "receivedAt"],
+                      "additionalProperties": false
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["request", "serverTime"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/support/{id}": {
+      "get": {
+        "operationId": "getSupportThread",
+        "summary": "get Support Thread",
+        "description": "Retrieve a public thread including revision for replies. Operator authors are presented as support.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "$ref": "#/components/schemas/Thread"
+                    }
+                  },
+                  "required": ["request"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/support/{id}/messages": {
+      "post": {
+        "operationId": "replyToSupportThread",
+        "summary": "reply To Support Thread",
+        "description": "Persist requestId/body across retries. Use the current revision; on revision_conflict retrieve the thread before asking the user to retry. Exact replay returns the existing message even with an old revision. Resolved cases reopen; closed cases require a new case. Customers cannot write internal notes.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportReply"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "$ref": "#/components/schemas/Thread"
+                    }
+                  },
+                  "required": ["request"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/license-request-catalog": {
+      "get": {
+        "operationId": "getLicenseRequestCatalog",
+        "summary": "get License Request Catalog",
+        "description": "Public product/plan choices for preinstallation requests.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "plans": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "description": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "description"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["id", "name", "plans"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["products"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/license-requests": {
+      "post": {
+        "operationId": "createLicenseRequest",
+        "summary": "create License Request",
+        "description": "Separate preinstallation credential: random 256-bit base64url secret, not an installation or admin credential. Exact id/body/secret replay is supported. The public status page keeps this secret in the URL fragment, never a query string.",
+        "security": [
+          {
+            "RequestCredential": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LicenseRequestCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "const": "requested"
+                    }
+                  },
+                  "required": ["id", "status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/license-requests/{id}": {
+      "get": {
+        "operationId": "getLicenseRequest",
+        "summary": "get License Request",
+        "description": "Only the holder of the private request secret may read status. No customer email account or portal login is implied.",
+        "security": [
+          {
+            "RequestCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request": {
+                      "$ref": "#/components/schemas/LicenseRequest"
+                    },
+                    "delivery": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "licenseId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "installationId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "requestId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["available", "retrieved", "manual", "failed"]
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "retrievedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "error": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "licenseId",
+                            "installationId",
+                            "requestId",
+                            "status",
+                            "createdAt",
+                            "retrievedAt",
+                            "error"
+                          ],
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["request", "delivery"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/license-requests/{id}/collect": {
+      "post": {
+        "operationId": "collectRequestedLicense",
+        "summary": "collect Requested License",
+        "description": "Private-secret retrieval after operator approval. Returned key is activated through the installation API later; pending requests return request_pending.",
+        "security": [
+          {
+            "RequestCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectedLicense"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/usage/summary": {
+      "post": {
+        "operationId": "getUsage",
+        "summary": "get Usage",
+        "description": "Trusted backend only. Never embed the product-scoped service credential in a desktop or browser app. Consumption uses a durable UUID eventId and identical units across retries; it does not reset on refresh.",
+        "security": [
+          {
+            "ServiceCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "licenseId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "meterId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["licenseId", "meterId"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quota": {
+                      "type": "integer"
+                    },
+                    "consumed": {
+                      "type": "integer"
+                    },
+                    "remaining": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["quota", "consumed", "remaining"],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/usage/consume": {
+      "post": {
+        "operationId": "consumeUsage",
+        "summary": "consume Usage",
+        "description": "Trusted backend only. Never embed the product-scoped service credential in a desktop or browser app. Consumption uses a durable UUID eventId and identical units across retries; it does not reset on refresh.",
+        "security": [
+          {
+            "ServiceCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "licenseId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "meterId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "eventId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "units": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": ["licenseId", "meterId", "eventId", "units"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quota": {
+                      "type": "integer"
+                    },
+                    "consumed": {
+                      "type": "integer"
+                    },
+                    "remaining": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["quota", "consumed", "remaining"],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LicenseToken": {
+        "type": "object",
+        "properties": {
+          "iss": {
+            "type": "string",
+            "const": "default"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "const": "license"
+          },
+          "v": {
+            "type": "number",
+            "const": 4
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "entitlements": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": ["number", "string", "boolean"]
+            }
+          },
+          "issuedTo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["installation", "service"]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": ["kind", "id"],
+            "additionalProperties": false
+          },
+          "offlineGraceUntil": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "revoked", "expired"]
+          }
+        },
+        "required": [
+          "iss",
+          "productId",
+          "kid",
+          "installationId",
+          "issuedAt",
+          "expiresAt",
+          "kind",
+          "v",
+          "licenseId",
+          "plan",
+          "entitlements",
+          "issuedTo",
+          "subject",
+          "offlineGraceUntil",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "TrialToken": {
+        "type": "object",
+        "properties": {
+          "iss": {
+            "type": "string",
+            "const": "default"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "const": "trial"
+          },
+          "v": {
+            "type": "number",
+            "const": 2
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["fresh", "spent"]
+          },
+          "allowance": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supportReference": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "iss",
+          "productId",
+          "kid",
+          "installationId",
+          "issuedAt",
+          "expiresAt",
+          "kind",
+          "v",
+          "verdict",
+          "allowance",
+          "supportReference"
+        ],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["error", "message"],
+        "additionalProperties": true
+      },
+      "Register": {
+        "type": "object",
+        "properties": {
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "appVersion": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "platform": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "userName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "userEmail": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "machineSignals": {
+            "description": "Legacy registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count."
+          }
+        },
+        "required": ["installationId", "requestId"],
+        "additionalProperties": false
+      },
+      "Registration": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "recorded": {
+            "type": "boolean"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trial": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": ["token"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["ok", "recorded", "serverTime", "trial"],
+        "additionalProperties": false
+      },
+      "KeyOperation": {
+        "type": "object",
+        "properties": {
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["installationId"],
+        "additionalProperties": false
+      },
+      "BoundOperation": {
+        "type": "object",
+        "properties": {
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["installationId"],
+        "additionalProperties": false
+      },
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["token", "serverTime"],
+        "additionalProperties": false
+      },
+      "Preferences": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "boolean"
+          },
+          "expirations": {
+            "type": "boolean"
+          }
+        },
+        "required": ["messages", "expirations"],
+        "additionalProperties": false
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["reply", "expiration", "license"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "ticketId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "deliveryStatus": {
+            "type": "string",
+            "enum": ["available", "retrieved", "manual", "failed"]
+          },
+          "collectPath": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "kind", "title", "date", "read"],
+        "additionalProperties": false
+      },
+      "Thread": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientRequestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["technical", "licensing", "billing", "feature_request", "other"]
+          },
+          "urgency": {
+            "type": "string",
+            "enum": ["low", "normal", "high", "critical"]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "in_progress", "waiting_customer", "resolved", "closed"]
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reporterName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "appVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clientCreatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "author": {
+                  "type": "string",
+                  "enum": ["customer", "support"]
+                },
+                "internal": {
+                  "const": false
+                },
+                "body": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": ["id", "author", "internal", "body", "createdAt"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "licenseId",
+          "installationId",
+          "clientRequestId",
+          "category",
+          "urgency",
+          "subject",
+          "message",
+          "status",
+          "receivedAt",
+          "updatedAt",
+          "reporterName",
+          "appVersion",
+          "platform",
+          "clientCreatedAt",
+          "messages"
+        ],
+        "additionalProperties": false
+      },
+      "ValidateResponse": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "const": true
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedTo": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entitlements": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "seatsInUse": {
+            "type": "integer"
+          },
+          "seatsAvailable": {
+            "type": "integer"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "valid",
+          "id",
+          "plan",
+          "issuedTo",
+          "expiresAt",
+          "entitlements",
+          "seatsInUse",
+          "seatsAvailable",
+          "serverTime"
+        ],
+        "additionalProperties": true
+      },
+      "SupportCreate": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["technical", "licensing", "billing", "feature_request", "other"]
+          },
+          "urgency": {
+            "type": "string",
+            "enum": ["low", "normal", "high", "critical"]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "reporter": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": false
+          },
+          "app": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "platform": {
+                "type": "string",
+                "maxLength": 100
+              }
+            },
+            "additionalProperties": false
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "requestId",
+          "category",
+          "urgency",
+          "subject",
+          "message",
+          "createdAt",
+          "licenseId"
+        ],
+        "additionalProperties": false
+      },
+      "SupportReply": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "internal": {
+            "const": false,
+            "default": false
+          }
+        },
+        "required": ["requestId", "revision", "message"],
+        "additionalProperties": false
+      },
+      "CollectedLicense": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "license": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "plan": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "issuedTo": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["id", "plan", "issuedTo", "expiresAt"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["key", "license"],
+        "additionalProperties": false
+      },
+      "LicenseRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["requested", "issued"]
+          },
+          "licenseId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "plan",
+          "name",
+          "email",
+          "status",
+          "licenseId",
+          "createdAt"
+        ],
+        "additionalProperties": true
+      },
+      "LicenseRequestCreate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          }
+        },
+        "required": ["id", "productId", "plan", "name", "email"],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "InstallationCredential": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Client-generated per-installation secret pinned at registration; not the product/license key."
+      },
+      "RequestCredential": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Private preinstallation request secret; separate from installation credentials."
+      },
+      "ServiceCredential": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Trusted-backend product-scoped usage credential with usage:read/usage:consume permissions."
+      }
+    }
+  },
+  "x-runtime-source-commit": "a75fb8db6485ea2bacbe8831537feeeb1d8f31ad"
+}

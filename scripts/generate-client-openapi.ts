@@ -117,6 +117,10 @@ const thread = object(
     "status",
     "receivedAt",
     "updatedAt",
+    "reporterName",
+    "appVersion",
+    "platform",
+    "clientCreatedAt",
     "messages",
   ],
 );
@@ -138,12 +142,10 @@ const schemas: Record<string, Schema> = {
       platform: string({ maxLength: 100 }),
       userName: string({ maxLength: 200 }),
       userEmail: string({ maxLength: 200 }),
-      machineSignals: array(
-        object({
-          kind: string({ enum: [...SIGNAL_KINDS] }),
-          hash: string({ pattern: "^[a-f0-9]{64}$" }),
-        }),
-      ),
+      machineSignals: {
+        description:
+          "Legacy registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count.",
+      },
     },
     ["installationId", "requestId"],
   ),
@@ -153,8 +155,12 @@ const schemas: Record<string, Schema> = {
     serverTime: timestamp,
     trial: nullable(object({ token: string() })),
   }),
-  KeyOperation: object({ installationId: id, key: string({ minLength: 1 }) }),
-  BoundOperation: object({ installationId: id, licenseId: id }),
+  KeyOperation: object({ installationId: id, key: string({ minLength: 1 }), licenseId: id }, [
+    "installationId",
+  ]),
+  BoundOperation: object({ installationId: id, key: string({ minLength: 1 }), licenseId: id }, [
+    "installationId",
+  ]),
   TokenResponse: tokenResponse,
   Preferences: preferences,
   Notification: notification,
@@ -191,11 +197,15 @@ const schemas: Record<string, Schema> = {
     ...(supportBody.required as string[]),
     "licenseId",
   ]),
-  SupportReply: object({
-    requestId: uuid,
-    revision: integer,
-    message: string({ minLength: 1, maxLength: 5000 }),
-  }),
+  SupportReply: object(
+    {
+      requestId: uuid,
+      revision: integer,
+      message: string({ minLength: 1, maxLength: 5000 }),
+      internal: { const: false, default: false },
+    },
+    ["requestId", "revision", "message"],
+  ),
   CollectedLicense: collected,
   LicenseRequest: requestInfo,
   LicenseRequestCreate: object({
@@ -247,10 +257,25 @@ const product = "/v1/products/{productId}",
   installation = product + "/installations/{installationId}";
 operation(
   "get",
+  "/healthz",
+  "getHealth",
+  "Unsigned liveness and supported token versions, not a build identifier or authorization grant.",
+  object({
+    ok: { const: true },
+    serverTime: timestamp,
+    tokenVersions: object({ min: { const: 4 }, max: { const: 4 } }),
+    trialTokenVersions: object({ min: { const: 2 }, max: { const: 2 } }),
+  }),
+  undefined,
+  200,
+  "",
+);
+operation(
+  "get",
   "/v1/meta",
   "getServerMetadata",
   "Public deployment branding and runtime metadata. This unsigned response does not grant application features.",
-  { type: "object", additionalProperties: true },
+  object({ name: string(), serverTime: timestamp }),
   undefined,
   200,
   "",

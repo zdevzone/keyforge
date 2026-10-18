@@ -145,6 +145,14 @@ export const docCatalog: DocEntry[] = [
     description: "Current boundaries and future hosted-service work.",
   },
   {
+    slug: "studio-proof-contract",
+    title: "Studio Proof contract review",
+    group: "Build an integration",
+    source: "docs/studio-proof-contract.md",
+    optional: true, // Deployment generators omit this upstream-specific review.
+    description: "Verified deployment contract, offline fixtures and unresolved product policies.",
+  },
+  {
     slug: "documentation-site",
     title: "Maintain these docs",
     group: "Reference",

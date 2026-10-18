@@ -23,6 +23,7 @@ const sources = import.meta.glob<string>(
     "../../../docs/verify-token.md",
     "../../../docs/dependent-app-ai-context.md",
     "../../../docs/integration-review.md",
+    "../../../docs/studio-proof-contract.md",
     "../../../docs/documentation-site.md",
     "../../../docs/publishing.md",
     "../../../docs/maintaining.md",

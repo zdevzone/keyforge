@@ -160,6 +160,7 @@ try {
     "api",
     ...(existsSync("packages/keyforge-client/README.md") ? ["sdk"] : []),
     "documentation-site",
+    ...(existsSync("docs/studio-proof-contract.md") ? ["studio-proof-contract"] : []),
   ]) {
     await page.goto(origin + "/docs/" + route);
     await page.locator(".docs-prose h1").waitFor();

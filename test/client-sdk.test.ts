@@ -1127,6 +1127,7 @@ test("OpenAPI request links and backend metering contracts are exercised without
     assert.ok(response.ok);
     return response.json() as Promise<T>;
   };
+  await call("GET", "/healthz");
   await call("GET", "/v1/meta");
   await call("GET", "/v1/products/default/keys");
   const catalog = await call<{ products: { plans: { id: string }[] }[] }>(
@@ -1200,7 +1201,10 @@ test("OpenAPI stays generated, valid and covers every public product/request rou
   const operations = Object.entries(clientOpenApi.paths).flatMap(([path, methods]) =>
     Object.keys(methods).map((method) => `${method} ${path}`),
   );
-  assert.deepEqual(h.routes.filter((r) => r.includes(" /v1/")).sort(), operations.sort());
+  assert.deepEqual(
+    h.routes.filter((r) => r.includes(" /v1/") || r === "get /healthz").sort(),
+    operations.sort(),
+  );
   for (const schema of Object.values(clientOpenApi.components.schemas))
     validate(
       { anyOf: [schema, { const: "__schema_compilation_probe__" }] },

@@ -320,6 +320,12 @@ test("scaffolds a working project from a local template", async (t) => {
     [],
     "scaffolded sources must not import packages/",
   );
+  for (const upstreamReview of [
+    "docs/studio-proof-contract.md",
+    "docs/examples/studio-proof-contract",
+    "test/integration-contract.test.ts",
+  ])
+    assert.equal(existsSync(join(directory, upstreamReview)), false, upstreamReview);
 
   // The generated secrets must be uncommittable by construction.
   await run("git", ["init", "--quiet"], { cwd: directory });

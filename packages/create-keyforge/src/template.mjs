@@ -38,6 +38,10 @@ const PRUNE = [
   // would fail on the first `npm test` in a project that has no packages/.
   "test/create-keyforge.test.ts",
   "test/client-sdk.test.ts",
+  "test/integration-contract.test.ts",
+  // A dated review of upstream's deployment is not a new deployer's configuration.
+  "docs/studio-proof-contract.md",
+  "docs/examples/studio-proof-contract",
   "test/scaffold-prompts.test.ts",
   "scripts/package-smoke.mjs",
   "scripts/release-packages.mjs",
