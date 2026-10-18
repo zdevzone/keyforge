@@ -6,14 +6,18 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
+import SQLite from "better-sqlite3";
+
 import { createAuth, closeAuth, ensureAuthSchema } from "../src/auth.js";
 import { BackupService } from "../src/backups.js";
 import { configSchema } from "../src/config.js";
 import { LicenseDatabase } from "../src/db.js";
+import { Records } from "../src/platform-store.js";
 import { Vault } from "../src/platform-store.js";
 import { Platform } from "../src/platform.js";
 import { resolveRuntime } from "../src/runtime.js";
 import { generateSigningKeyPair } from "../src/sign.js";
+import { seedLicense } from "./record-fixtures.js";
 
 const secret = "unified-session-test-secret-0123456789abcdef";
 async function fixture(t: any) {
@@ -45,7 +49,7 @@ test("shared SQLite backups restore auth and licensing together, retaining sessi
   const cookie = signed.headers.get("set-cookie")!.split(";")[0];
   await closeAuth(auth);
   const database = await LicenseDatabase.open({ sqlitePath: f.ledger });
-  const issued = await database.createLicense({
+  const issued = await seedLicense(database, {
     plan: "restore",
     issuedTo: "Recovery buyer",
     activationLimit: 1,
@@ -112,8 +116,35 @@ test("shared SQLite backups restore auth and licensing together, retaining sessi
   }
   const ledger = await LicenseDatabase.open({ sqlitePath: target });
   try {
-    assert.deepEqual(await ledger.getLicense(issued.license.id), issued.license);
+    assert.deepEqual(
+      await new Records(ledger.db).get("product:default", "license", issued.license.id),
+      issued.license,
+    );
   } finally {
     await ledger.close();
+  }
+});
+
+test("fresh v1 schema rejects a previous development database without importing it", async (t) => {
+  const f = await fixture(t);
+  const old = new SQLite(f.ledger);
+  old.exec(
+    "CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations VALUES ('001_initial', '2026-01-01'); CREATE TABLE licenses (id TEXT); INSERT INTO licenses VALUES ('old-demo')",
+  );
+  old.close();
+  await assert.rejects(() => LicenseDatabase.open({ sqlitePath: f.ledger }), /fresh v1 database/);
+  const check = new SQLite(f.ledger);
+  try {
+    assert.deepEqual(check.prepare("SELECT id FROM licenses").all(), [{ id: "old-demo" }]);
+    assert.equal(
+      (
+        check
+          .prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='platform_records'")
+          .get() as { n: number }
+      ).n,
+      0,
+    );
+  } finally {
+    check.close();
   }
 });

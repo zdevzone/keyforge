@@ -41,6 +41,7 @@ export interface RegistrationMetadata {
   machineSignals?: DeviceSignal[];
 }
 export interface ClientState {
+  format: "keyforge-client-state";
   version: 1;
   serverUrl: string;
   productId: string;
@@ -50,15 +51,14 @@ export interface ClientState {
   registration: RegistrationMetadata & { installationId: string; requestId: string };
   registered: boolean;
   trialStarted: boolean;
-  trialConsumed: number;
   trialToken: string | null;
   licenseToken: string | null;
   denial: string | null;
   lastObservedTime: number;
   deviceSignals?: DeviceSignalsReport;
-  storageRevision?: number;
-  importUsage?: ImportUsage | null;
-  pendingRecovery?: {
+  storageRevision: number;
+  importUsage: ImportUsage;
+  pendingRecovery: {
     requestId: string;
     licenseId: string;
     challenge: string;
@@ -67,13 +67,12 @@ export interface ClientState {
     id?: string;
   } | null;
 }
-/** One owner per installation. load returns a snapshot; save atomically replaces it.
+/** One owner per installation. load returns a snapshot; compareAndSwap atomically replaces it.
  * Production implementations must protect credentials using platform secure storage. */
 export interface SecureStorage {
   load(): Promise<ClientState | null>;
-  save(state: ClientState): Promise<void>;
   /** Must be a database transaction or equivalent atomic operation, across all processes. */
-  compareAndSwap?(expectedRevision: number | null, state: ClientState): Promise<boolean>;
+  compareAndSwap(expectedRevision: number | null, state: ClientState): Promise<boolean>;
 }
 export type Authorization =
   | { state: "unlicensed"; reason: string }

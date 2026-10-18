@@ -46,13 +46,13 @@ Initial collection happens only when creating SDK state. The SDK atomically save
 
 Call `await client.updateDeviceSignals()` while online to recollect and send recognition hints through the installation-authenticated PUT. It preserves the original registration body. Updates never increment trial counters, reset local consumption/server meters, change bindings, release seats, create licenses or modify sales. If collection is unavailable, current installation availability becomes Unavailable; historical evidence stays retained. Retrying an interrupted update is safe.
 
-Legacy manual hashes still work and old records are retained. Namespaced hashes do not automatically match their legacy equivalents. Backfill authenticates the existing installation and adds evidence to its associated group without merging groups, even when another group has matching hashes. A legacy authenticated identity without a group gets a reporting group with zero counted registrations; backfill itself grants no trial. Credentialless legacy identities cannot be claimed.
+Authenticated signal updates enrich an existing registered identity without consuming seats or restarting trials. Only the documented v1 hash scheme is used.
 
 Two distinct matching kinds can associate a **new registration** with a group under existing trial policy; common hashes are excluded. Hardware may be missing, replaced, cloned or forged. Matching never transfers a paid seat. Lost credentials require a new identity and operator-assisted seat recovery. Windows reinstalls and hardware/volume changes may affect recognition. Restore secure app state when possible; never use a hash as a credential.
 
 ## Console interpretation
 
-- **Installations:** authenticated identities, active licensed counts, current signal kinds and group references. Available means all three kinds; Partial means one or two; Unavailable means none. Legacy rows without individual metadata fall back to historical evidence until backfilled.
+- **Installations:** authenticated identities, active licensed counts, current signal kinds and group references. Available means all three kinds; Partial means one or two; Unavailable means none. Missing individual signal metadata is shown as Unavailable; group evidence is never substituted for an installation report.
 - **Machines:** reported groups and historical evidence, registration counts and trial clear state. Availability describes retained evidence, not a live inspection. Last registration and last signal update are separate timestamps.
 - **License activations:** binding history and active installation seats, with group references. Release permissions and installation limits are unchanged.
 

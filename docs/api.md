@@ -4,7 +4,7 @@ Vercel-only internal worker: `GET /api/internal/backups/tick` requires `Authoriz
 
 For dependent apps, use the [client OpenAPI document](client-openapi.json) and [TypeScript SDK guide](../packages/keyforge-client/README.md). The machine-readable contract covers current public routes and explicitly separates installation, private-request and trusted-backend credentials. Its request/response examples are exercised against the server by `test/client-sdk.test.ts`; regenerate with `vp run docs:client-api`.
 
-This is the fresh product-scoped contract. Legacy unscoped routes are removed. License tokens are v4; trial tokens are v2. All timestamps are ISO 8601. API responses are non-cacheable.
+This is the fresh product-scoped v1 contract. License, trial and usage-recovery tokens are v1; no older formats are accepted. All timestamps are ISO 8601. API responses are non-cacheable.
 
 ## Authentication and roles
 
@@ -21,7 +21,7 @@ Better Auth endpoints live under /api/auth/* (GET/POST): sign-in/email, sign-out
 Product IDs are lowercase slugs. Definition IDs permit letters, digits, underscore, dot and hyphen (up to 64). Updates to existing catalog, product, meter, schedule and support records require their current integer revision; stale values return revision_conflict. Archive records instead of deleting data used by history.
 
 - Product create: id/name; patch: name/archived/graceDays/trial/revision. Trial contains enabled, nullable nonnegative integer allowance and nullable positive durationDays.
-- Definition PUT: id/type/description/archived, optional defaultValue/minimum/maximum/revision. Types are number/string/boolean/mixed; mixed legacy definitions must be resolved before new grants.
+- Definition PUT: id/type/description/archived, optional defaultValue/minimum/maximum/revision. Types are number/string/boolean.
 - Plan PUT: id/description/entitlements/durationDays/activationLimit/archived/revision, price (integer santim or null) and currency (ETB). Configure a price before issuance. Entitlements must match active definitions. durationDays is positive or null.
 - Catalog import: catalog:{version:1,definitions,plans}, preview boolean; apply also requires the preview fingerprint. Export excludes secrets and licenses.
 - License POST: requestId UUID and plan required; issuedTo, installationId or licenseRequestId, subjectKind installation/service, planRevision, expectedPrice optional. Optional payment:{date,method,reference} records the full plan price received on today’s UTC date. Terms cannot be overridden. Atomically returns HTTP 201 with license/key, immutable ETB sale and delivery status. Exact retries reuse the request ID; changed payloads conflict. No price means issuance is refused.
@@ -88,7 +88,6 @@ The table is generated from an isolated server's route registration. Product-sco
 | POST | `/admin/products/:productId/licenses/:id/deactivate` |
 | GET | `/admin/products/:productId/licenses/:id/delivery` |
 | GET | `/admin/products/:productId/licenses/:id/import-account` |
-| POST | `/admin/products/:productId/licenses/:id/import-account` |
 | POST | `/admin/products/:productId/licenses/:id/key` |
 | POST | `/admin/products/:productId/licenses/:id/renew` |
 | POST | `/admin/products/:productId/licenses/:id/replace-key` |
@@ -196,7 +195,6 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `idempotency_conflict` |
 | `import_account_missing` |
 | `import_account_required` |
-| `import_migration_required` |
 | `initial_sale_exists` |
 | `installation_unauthorized` |
 | `insufficient_role` |
@@ -214,7 +212,6 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `invalid_request_secret` |
 | `invalid_support_request` |
 | `key_already_staged` |
-| `key_mismatch` |
 | `key_required` |
 | `license_` |
 | `license_expired` |
@@ -300,7 +297,7 @@ Financial routes require an admin session or privileged admin bearer token; supp
 
 Sale and entry UUIDs provide idempotency: retries with identical normalized payloads return the original record; changed payloads return `idempotency_conflict`. Dates cannot be future-dated, and entries cannot precede their sale. Overpayments, excessive credits, and refunds exceeding the referenced receipt are rejected. Historical daily balances cannot become negative through backdating. Financial records are append-only through these APIs; corrections retain history using refunds, credits and new sale records.
 
-A cash refund reopens the amount owed. A credit reduces the agreed charge; when cancelling a paid charge, record its refund then credit. This distinguishes money returned from debt cancelled. A zero-value sale is `complimentary`, never evidence of cash received. Legacy licenses have no sales record until explicitly recorded. Default price changes do not rewrite sale snapshots. Renewals record a new sale; expiry changes remain a separate explicit licensing action. New issuance atomically records a plan-priced sale, unpaid unless a payment is supplied. Existing licenses without sales remain unchanged. No token payload, signing, activation or validation behavior changes.
+A cash refund reopens the amount owed. A credit reduces the agreed charge; when cancelling a paid charge, record its refund then credit. This distinguishes money returned from debt cancelled. A zero-value sale is `complimentary`, never evidence of cash received. Every issued v1 license has a linked sales snapshot. Default price changes do not rewrite sale snapshots. Renewals record a new sale; expiry changes remain a separate explicit licensing action. New issuance atomically records a plan-priced sale, unpaid unless a payment is supplied. Existing licenses without sales remain unchanged. No token payload, signing, activation or validation behavior changes.
 
 New errors: `future_date`, `initial_sale_exists`, `unknown_sale`, `invalid_date`, `overpayment`, `reason_required`, `excess_credit`, `invalid_refund`, `invalid_payment_reference`, `historical_overpayment`. These are validation errors (400), except unknown sale (404) and initial sale conflict (409).
 
@@ -322,7 +319,7 @@ Notifications are a **pull-based current-attention feed**, not background email 
 
 Dependent apps must poll the authenticated notification endpoint, render unread items, open the existing support thread API, and POST read markers. Preference controls can use the corresponding PUT endpoint. Replying continues through the existing installation support message endpoint. Preinstallation requests now use a private status page; no email transport is introduced. A saved operator reply is available for retrieval; it is not falsely labelled delivered or read.
 
-All new data uses versioned `platform_records` kinds (`price`, `sale`, `financial_entry`, `conversation_read`, `notification_read`, `notification_preferences`) and existing SQLite/Postgres transaction locking. No SQL schema migration or rewrite of legacy licenses/tickets is required. Existing full database backups include these records. Very large datasets may later warrant indexed relational tables; current list views are paginated and exports include all filtered records.
+All new data uses versioned `platform_records` kinds (`price`, `sale`, `financial_entry`, `conversation_read`, `notification_read`, `notification_preferences`) and existing SQLite/Postgres transaction locking. The fresh v1 schema does not import previous development databases. Existing full database backups include these records. Very large datasets may later warrant indexed relational tables; current list views are paginated and exports include all filtered records.
 
 ## Notification history and bulk controls
 

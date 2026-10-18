@@ -1,0 +1,10 @@
+{
+  "contract": "keyforge-v1",
+  "testOnly": true,
+  "sha256": {
+    "fixtures.json": "1b1e0f80ac50589d8eedc8de3555ec8c122444e17bd09483accce5c0795d49cc",
+    "license-v1.schema.json": "679831da516919910361c90864c6d1d2edada74c6b18f3fcdb4032e0f36a0a3b",
+    "trial-v1.schema.json": "d2cc2f508e05214d8d164a0c6c3bc5ab837b0297d260f259129e53ca98d31f20",
+    "recovery-v1.schema.json": "f69ee8c310aab924386b3e1278c80f183b5e33653b70032366e7777617b2953c"
+  }
+}

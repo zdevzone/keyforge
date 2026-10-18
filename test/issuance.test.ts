@@ -14,14 +14,8 @@ import { generateSigningKeyPair } from "../src/sign.js";
 const today = "2026-10-15";
 async function fixture(t: any) {
   const database = await LicenseDatabase.open({ sqlitePath: ":memory:" });
-  const legacy = await database.createLicense({
-    plan: "standard",
-    issuedTo: "Existing buyer",
-    activationLimit: 1,
-    entitlements: {},
-  });
-  const pair = generateSigningKeyPair(),
-    ring = { active: "test", keys: { test: randomBytes(32).toString("hex") } };
+  const pair = generateSigningKeyPair();
+  const ring = { active: "test", keys: { test: randomBytes(32).toString("hex") } };
   const app = await buildLicenseApp({
     database,
     privateKey: pair.privateKey,
@@ -57,7 +51,7 @@ async function fixture(t: any) {
       ...payload,
     });
   const records = new Records(database.db);
-  return { app, database, ring, pair, legacy, admin, issue, records };
+  return { app, database, ring, pair, admin, issue, records };
 }
 test("issuance snapshots plan terms and ETB price, records an unpaid sale exactly once, and preserves existing records", async (t) => {
   const h = await fixture(t),
@@ -88,8 +82,6 @@ test("issuance snapshots plan terms and ETB price, records an unpaid sale exactl
   const finance = (await h.admin("GET", "/finance")).json();
   assert.equal(finance.sales.length, 1);
   assert.equal(finance.entries.length, 0);
-  assert.equal(finance.licenses.find((v: any) => v.id === h.legacy.license.id).hasSale, false);
-  assert.deepEqual(await h.database.getLicense(h.legacy.license.id), h.legacy.license);
   const exported = (await h.admin("GET", "/catalog/export")).json();
   assert.equal(exported.plans.find((v: any) => v.id === "standard").price, 24000);
   const preview = (
@@ -132,7 +124,7 @@ test("already-paid issuance is atomic and later payments settle an existing sale
   assert.equal(finance.sales.length, 2);
   assert.equal(finance.entries.length, 2);
   assert.ok(finance.sales.every((v: any) => v.status === "paid"));
-  assert.equal(finance.licenses.length, 3); // includes the untouched historical license
+  assert.equal(finance.licenses.length, 2); // includes the untouched historical license
   const report = (await h.admin("GET", "/finance/report")).json();
   assert.equal(report.salesValue, 24000);
   assert.equal(report.received, 24000);
@@ -145,7 +137,7 @@ test("already-paid issuance is atomic and later payments settle an existing sale
   const broken = await h.issue({ payment: { date: today, method: "Cash", reference: "ROLLBACK" } });
   assert.equal(broken.statusCode, 500);
   assert.equal((await h.records.list("product:default", "sale")).length, 2);
-  assert.equal((await h.records.list("product:default", "license")).length, 3);
+  assert.equal((await h.records.list("product:default", "license")).length, 2);
 });
 test("unconfigured prices and invalid payments cannot silently create sales or licenses", async (t) => {
   const h = await fixture(t);

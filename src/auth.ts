@@ -130,18 +130,8 @@ export function createAuth(options: CreateAuthOptions) {
 
 export type AuthInstance = ReturnType<typeof createAuth>;
 
-/**
- * Create or update Better Auth's tables, then make sure every operator has a
- * role.
- *
- * The admin plugin adds a `role` column whose default is the lesser role, so a
- * database written before roles existed would come back with its operators
- * demoted — locking the vendor out of their own console on the first upgrade.
- * Those operators had full access by definition (there was nothing else), so
- * they are restored to `admin`. Idempotent: only null/empty roles are touched.
- */
-export async function ensureAuthSchema(auth: AuthInstance): Promise<number> {
-  await migrateLegacyPostgresAccountIssuer(auth);
+/** Create and validate the current operator schema for a fresh setup. */
+export async function ensureAuthSchema(auth: AuthInstance): Promise<void> {
   const { runMigrations } = await getMigrations(auth.options);
   await runMigrations();
   const checked = await getMigrations(auth.options);
@@ -155,7 +145,6 @@ export async function ensureAuthSchema(auth: AuthInstance): Promise<number> {
       "Operator schema validation failed after migrations. " +
         [...checked.schemaProblems, ...checked.unsafeChanges].join(" "),
     );
-  const promoted = await backfillOperatorRoles(auth);
   const handle = authHandles.get(auth)!;
   const statement = `CREATE TABLE IF NOT EXISTS ${BOOTSTRAP_ADMIN_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), user_id TEXT NOT NULL)`;
   if ("connect" in handle) {
@@ -172,60 +161,6 @@ export async function ensureAuthSchema(auth: AuthInstance): Promise<number> {
       client.release();
     }
   } else handle.exec(statement);
-  return promoted;
-}
-
-/** Better Auth 1.7.0–1.7.2 required account.issuer; 1.7.3+ no longer writes it.
- * Follow the upstream upgrade guide without dropping historical account data.
- * The transaction lock works through managed transaction poolers too. */
-async function migrateLegacyPostgresAccountIssuer(auth: AuthInstance): Promise<void> {
-  const handle = authHandles.get(auth);
-  if (!handle || !("connect" in handle)) return;
-  const client = await handle.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock(4919071115)");
-    const { rows } = await client.query<{ table_schema: string }>(
-      "SELECT table_schema FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'account' AND column_name = 'issuer'",
-    );
-    if (rows.length) {
-      const schema = '"' + rows[0].table_schema.replaceAll('"', '""') + '"';
-      const duplicates = await client.query(
-        `SELECT 1 FROM ${schema}."account" GROUP BY "providerId", "accountId" HAVING count(*) > 1 LIMIT 1`,
-      );
-      if (duplicates.rows.length)
-        throw new Error(
-          "Operator account provider/account keys are duplicated. Resolve those identities before upgrading Better Auth; no issuer compatibility changes were applied.",
-        );
-      await client.query(`ALTER TABLE ${schema}."account" ALTER COLUMN "issuer" DROP NOT NULL`);
-      await client.query(`DROP INDEX IF EXISTS ${schema}."account_issuer_accountId_uidx"`);
-    }
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function backfillOperatorRoles(auth: AuthInstance): Promise<number> {
-  const adapter = await auth.$context.then((context) => context.adapter);
-  const operators = (await adapter.findMany({
-    model: "user",
-    limit: 1000,
-  })) as Array<{ id: string; role?: string | null }>;
-  let promoted = 0;
-  for (const operator of operators) {
-    if (operator.role) continue;
-    await adapter.update({
-      model: "user",
-      where: [{ field: "id", value: operator.id }],
-      update: { role: "admin" },
-    });
-    promoted += 1;
-  }
-  return promoted;
 }
 
 export interface SeedOperatorOptions {

@@ -13,7 +13,7 @@ const common = {
 export const licenseSchema = z
   .object({
     ...common,
-    v: z.literal(4),
+    v: z.literal(1),
     kind: z.literal("license"),
     licenseId: id,
     plan: id,
@@ -25,32 +25,30 @@ export const licenseSchema = z
     subject: z.object({ kind: z.enum(["installation", "service"]), id }).strict(),
     offlineGraceUntil: date,
     status: z.enum(["active", "revoked", "expired"]),
-  })
-  .strict()
-  .refine((p) => p.subject.id === p.installationId);
-export const trialSchema = z
-  .object({
-    ...common,
-    v: z.literal(2),
-    kind: z.literal("trial"),
-    verdict: z.enum(["fresh", "spent"]),
-    allowance: z.number().int().nonnegative().nullable(),
-    supportReference: z.string().nullable(),
-  })
-  .strict();
-export const importLicenseSchema = z
-  .object({
-    ...licenseSchema.shape,
-    v: z.literal(5),
-    accountId: id,
+    accountId: id.nullable(),
     authorizationRevision: z.number().int().positive().safe(),
-    paidImportsGranted: z.number().int().nonnegative().safe(),
+    paidImportsGranted: z.number().int().nonnegative().safe().nullable(),
     recoveryGeneration: z.number().int().nonnegative().safe(),
     trialConverted: z.literal(true),
   })
   .strict()
-  .refine((p) => p.subject.id === p.installationId);
-export const importTrialSchema = trialSchema.extend({ v: z.literal(3), converted: z.boolean() });
+  .refine((p) => p.subject.id === p.installationId)
+  .refine((p) =>
+    p.accountId === null
+      ? p.paidImportsGranted === null && p.recoveryGeneration === 0
+      : p.paidImportsGranted !== null && p.subject.kind === "installation",
+  );
+export const trialSchema = z
+  .object({
+    ...common,
+    v: z.literal(1),
+    kind: z.literal("trial"),
+    verdict: z.enum(["fresh", "spent"]),
+    allowance: z.number().int().nonnegative().nullable(),
+    supportReference: z.string().nullable(),
+    converted: z.boolean(),
+  })
+  .strict();
 export const recoverySchema = z
   .object({
     ...common,
@@ -72,8 +70,8 @@ export const recoverySchema = z
   })
   .strict();
 export type RecoveryToken = z.infer<typeof recoverySchema>;
-export type LicenseToken = z.infer<typeof licenseSchema> | z.infer<typeof importLicenseSchema>;
-export type TrialToken = z.infer<typeof trialSchema> | z.infer<typeof importTrialSchema>;
+export type LicenseToken = z.infer<typeof licenseSchema>;
+export type TrialToken = z.infer<typeof trialSchema>;
 export type SignedToken = LicenseToken | TrialToken;
 
 export class TokenError extends Error {
@@ -128,9 +126,7 @@ async function verifyAnyToken(
   } catch {
     throw new TokenError("malformed_token");
   }
-  const parsed = z
-    .union([licenseSchema, trialSchema, importLicenseSchema, importTrialSchema, recoverySchema])
-    .safeParse(input);
+  const parsed = z.union([licenseSchema, trialSchema, recoverySchema]).safeParse(input);
   if (!parsed.success) throw new TokenError("invalid_payload");
   const p = parsed.data;
   if (

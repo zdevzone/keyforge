@@ -16,7 +16,7 @@ export const licenseTokenSchema = z
   .object({
     ...common,
     kind: z.literal("license"),
-    v: z.literal(4),
+    v: z.literal(1),
     licenseId: id,
     plan: id,
     entitlements: entitlementsSchema,
@@ -24,35 +24,30 @@ export const licenseTokenSchema = z
     subject: z.object({ kind: z.enum(["installation", "service"]), id }).strict(),
     offlineGraceUntil: date,
     status: z.enum(["active", "revoked", "expired"]),
-  })
-  .strict()
-  .refine((p) => p.subject.id === p.installationId);
-export const trialTokenSchema = z
-  .object({
-    ...common,
-    kind: z.literal("trial"),
-    v: z.literal(2),
-    verdict: z.enum(["fresh", "spent"]),
-    allowance: z.number().int().nonnegative().nullable(),
-    supportReference: z.string().nullable(),
-  })
-  .strict();
-export const importLicenseTokenSchema = z
-  .object({
-    ...licenseTokenSchema.shape,
-    v: z.literal(5),
-    accountId: id,
+    accountId: id.nullable(),
     authorizationRevision: z.number().int().positive().safe(),
-    paidImportsGranted: z.number().int().nonnegative().safe(),
+    paidImportsGranted: z.number().int().nonnegative().safe().nullable(),
     recoveryGeneration: z.number().int().nonnegative().safe(),
     trialConverted: z.literal(true),
   })
   .strict()
-  .refine((p) => p.subject.id === p.installationId);
-export const importTrialTokenSchema = trialTokenSchema.extend({
-  v: z.literal(3),
-  converted: z.boolean(),
-});
+  .refine((p) => p.subject.id === p.installationId)
+  .refine((p) =>
+    p.accountId === null
+      ? p.paidImportsGranted === null && p.recoveryGeneration === 0
+      : p.paidImportsGranted !== null && p.subject.kind === "installation",
+  );
+export const trialTokenSchema = z
+  .object({
+    ...common,
+    kind: z.literal("trial"),
+    v: z.literal(1),
+    verdict: z.enum(["fresh", "spent"]),
+    allowance: z.number().int().nonnegative().nullable(),
+    supportReference: z.string().nullable(),
+    converted: z.boolean(),
+  })
+  .strict();
 export const recoveryTokenSchema = z
   .object({
     ...common,
@@ -73,9 +68,4 @@ export const recoveryTokenSchema = z
     expiresAt: date,
   })
   .strict();
-export const productTokenSchema = z.union([
-  licenseTokenSchema,
-  trialTokenSchema,
-  importLicenseTokenSchema,
-  importTrialTokenSchema,
-]);
+export const productTokenSchema = z.union([licenseTokenSchema, trialTokenSchema]);

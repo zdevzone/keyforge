@@ -80,7 +80,6 @@ export interface Schedule extends RecordValue {
   retentionDays: number;
   destination: string;
   nextAt: string;
-  migratedTo?: string;
 }
 export const backupScheduleSchema = z
   .object({
@@ -130,7 +129,6 @@ export class BackupService {
     );
   }
   async statuses() {
-    await this.storage.migrate();
     const statuses = await this.destinations.statuses(await this.custom());
     for (const provider of storageProvider.options) {
       if (!(await this.storage.version(provider))) continue;
@@ -202,23 +200,7 @@ export class BackupService {
     }
     if (!this.options.remoteOnly) await mkdir(this.directory, { recursive: true, mode: 0o700 });
   }
-  async migrateSchedules() {
-    await atomic(this.platform.options.database, async (r) => {
-      const legacy = await r.get<Schedule>(WORKSPACE, "backup-schedule", "default");
-      if (!legacy || legacy.migratedTo) return;
-      if (!(await r.get(WORKSPACE, "backup-schedule", legacy.destination)))
-        await r.put(WORKSPACE, "backup-schedule", {
-          ...legacy,
-          id: legacy.destination,
-          minuteUTC: legacy.minuteUTC ?? 0,
-        });
-      await r.put(WORKSPACE, "backup-schedule", {
-        ...legacy,
-        enabled: false,
-        migratedTo: legacy.destination,
-      });
-    });
-  }
+
   async saveSchedule(destination: string, input: z.infer<typeof backupScheduleSchema>) {
     const status = (await this.statuses()).find((d) => d.id === destination);
     if (!status || status.archived)
@@ -392,7 +374,6 @@ export class BackupService {
     }
   }
   async tick() {
-    await this.migrateSchedules();
     const now = this.platform.time();
     let claim: BackupJob | null = null;
     const statuses = await this.statuses();
@@ -751,8 +732,6 @@ export async function registerBackups(
         });
       }
     };
-  await service.migrateSchedules();
-  await service.storage.migrate();
   const publicDestination = (value: CustomDestination) => {
     const { encryptedHeaderValue: _secret, ...safe } = value;
     return { ...safe, hasAuthorization: Boolean(_secret || value.headerValueEnv) };
@@ -807,7 +786,6 @@ export async function registerBackups(
     handler(async () => {
       const destinations = await service.statuses();
       const schedules = await platform.records.list<Schedule>(WORKSPACE, "backup-schedule");
-      const legacy = await platform.records.get<Schedule>(WORKSPACE, "backup-schedule", "default");
       return {
         jobs: (await platform.records.list<BackupJob>(WORKSPACE, "backup"))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -824,9 +802,6 @@ export async function registerBackups(
             storageProvider.options.map(async (id) => [id, await service.storage.metadata(id)]),
           ),
         ),
-        schedule: legacy?.migratedTo
-          ? (schedules.find((s) => s.id === legacy.migratedTo) ?? null)
-          : (schedules.find((s) => s.id === "local") ?? null),
         archiveEncryption: Boolean(options.keyring),
         s3Configured: destinations.find((d) => d.id === "s3")?.configured ?? false,
         engine: platform.options.database.engine,

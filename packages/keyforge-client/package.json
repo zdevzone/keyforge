@@ -1,6 +1,6 @@
 {
   "name": "@zdevzone/keyforge-client",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Typed KeyForge installation client and signed offline authorization verifier",
   "license": "MIT",
   "repository": {

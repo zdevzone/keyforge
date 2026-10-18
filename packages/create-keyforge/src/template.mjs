@@ -42,7 +42,6 @@ const PRUNE = [
   "test/import-licensing.test.ts",
   // A dated review of upstream's deployment is not a new deployer's configuration.
   "docs/studio-proof-contract.md",
-  "docs/examples/studio-proof-contract",
   "test/scaffold-prompts.test.ts",
   "scripts/package-smoke.mjs",
   "scripts/release-packages.mjs",

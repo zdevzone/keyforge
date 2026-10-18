@@ -8,7 +8,7 @@ Implement against [the TypeScript SDK](../packages/keyforge-client/README.md), [
 - Optional Node desktop recognition uses `@zdevzone/keyforge-client/device-signals` to choose Windows, Linux or macOS. Follow [device identity](device-identity.md); missing signals must not block installation-based licensing or trigger elevation. Other languages use the same REST/OpenAPI contract, but must implement secure storage and signed offline verification themselves until a native SDK exists.
 - Persist UUID registration/support/message/meter event IDs and request bodies across retries; never generate a replacement ID after a network timeout.
 - Device register/validate/activate/refresh/deactivate authenticate with the installation credential. Admin credentials never belong in a dependent app.
-- Activation and refresh return license token v4. Registration may return trial token v2. Tokens have two base64url segments and an Ed25519 signature over the decoded UTF-8 JSON bytes, not JWT signing semantics.
+- Activation and refresh return license token v1. Registration may return trial token v1. Tokens have two base64url segments and an Ed25519 signature over the decoded UTF-8 JSON bytes, not JWT signing semantics.
 - Pin trusted public keys. Verify signature, full shape, version, kid, issuer default, expected product, installation, subject kind/id, active status, issue time, expiry and offline deadline before trusting entitlements.
 - An HTTP 200 refresh may carry a signed revoked/expired status. Stop authorization after verifying that negative grant.
 - Enforce typed entitlement values explicitly. Plan names are labels. Entitlement defaults are suggestions, not grants. Unknown capabilities fail closed.

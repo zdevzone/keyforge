@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import SQLite from "better-sqlite3";
 import type { FastifyInstance } from "fastify";
 
 import { buildLicenseApp } from "../src/app.js";
@@ -219,11 +218,6 @@ test("support is refused every license mutation, admin is allowed", async () => 
       },
       {
         method: "POST" as const,
-        url: `/admin/products/default/licenses/${licenseId}/import-account`,
-        payload: {},
-      },
-      {
-        method: "POST" as const,
         url: `/admin/products/default/licenses/${licenseId}/renew`,
         payload: {},
       },
@@ -420,47 +414,6 @@ test("/admin/config reports the viewer's own role", async () => {
     assert.equal(asCli.json().viewer.actor, "cli");
   } finally {
     await h.cleanup();
-  }
-});
-
-test("operators created before roles existed are restored to admin, not demoted", async () => {
-  // A pre-M3 auth database: Better Auth's own tables, no role column at all.
-  const legacyPath = join(tmpdir(), `keyforge-legacy-auth-${randomUUID()}.sqlite`);
-  const legacy = new SQLite(legacyPath);
-  legacy.exec(`
-    CREATE TABLE keyforge_auth_user (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      emailVerified INTEGER NOT NULL DEFAULT 0,
-      image TEXT,
-      createdAt DATE NOT NULL,
-      updatedAt DATE NOT NULL
-    );
-    INSERT INTO keyforge_auth_user (id, name, email, emailVerified, createdAt, updatedAt)
-    VALUES ('old-1', 'Founder', 'founder@example.com', 1, '2025-01-01', '2025-01-01');
-  `);
-  legacy.close();
-
-  try {
-    const auth = createAuth({ dbPath: legacyPath, secret: SECRET, baseURL: BASE_URL });
-    const promoted = await ensureAuthSchema(auth);
-    assert.equal(promoted, 1, "the pre-roles operator should be promoted");
-
-    const context = await auth.$context;
-    const user = (await context.adapter.findOne({
-      model: "user",
-      where: [{ field: "email", value: "founder@example.com" }],
-    })) as { role?: string } | null;
-    assert.equal(user?.role, "admin", "an operator who had full access must keep it");
-
-    // Booting again promotes nobody — the backfill is idempotent.
-    assert.equal(await ensureAuthSchema(auth), 0);
-    await closeAuth(auth);
-  } finally {
-    for (const suffix of ["", "-wal", "-shm"]) {
-      await rm(`${legacyPath}${suffix}`, { force: true });
-    }
   }
 });
 
