@@ -1,5 +1,7 @@
 # Signed token verification
 
+Opt-in import licensing adds strict license v5, trial v3 and a **separate** recovery v1 schema. See [import licensing](import-licensing.md) and the current OpenAPI for fields, revision/generation checks and migration rules. V4/v2 remain supported unchanged. Recovery artifacts must never be accepted as application licenses.
+
 A token is two unpadded base64url strings separated by one dot:
 
 ```text

@@ -82,8 +82,9 @@ console.log(
   "Clean-source SDK pack contains every JavaScript/type export; all three package archives passed inspection.",
 );
 
-// A committed template is sufficient: the code under test is the packed new
-// generator, and upstream workspaces must never reach its generated app.
+// CI defaults to the committed source. A local review can supply a git tree
+// snapshot of pending changes without committing or touching the real index.
+// Upstream workspaces must never reach the generated app.
 await run(
   "git",
   [
@@ -91,7 +92,7 @@ await run(
     "--format=tar.gz",
     "--prefix=keyforge-main/",
     "--output=" + join(artifact, "template.tgz"),
-    "HEAD",
+    process.env.PACKAGE_SMOKE_REF || "HEAD",
   ],
   root,
 );

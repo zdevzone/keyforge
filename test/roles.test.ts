@@ -212,6 +212,32 @@ test("support is refused every license mutation, admin is allowed", async () => 
     assert.equal(refusedIssue.json().error, "insufficient_role");
 
     for (const call of [
+      { method: "PUT" as const, url: "/admin/products/default/import-policy", payload: {} },
+      {
+        method: "GET" as const,
+        url: `/admin/products/default/licenses/${licenseId}/import-account`,
+      },
+      {
+        method: "POST" as const,
+        url: `/admin/products/default/licenses/${licenseId}/import-account`,
+        payload: {},
+      },
+      {
+        method: "POST" as const,
+        url: `/admin/products/default/licenses/${licenseId}/renew`,
+        payload: {},
+      },
+      {
+        method: "POST" as const,
+        url: `/admin/products/default/licenses/${licenseId}/replace-key`,
+        payload: {},
+      },
+      { method: "GET" as const, url: "/admin/products/default/recovery-requests" },
+      {
+        method: "POST" as const,
+        url: "/admin/products/default/recovery-requests/test/approve",
+        payload: {},
+      },
       {
         method: "PATCH" as const,
         url: `/admin/products/default/licenses/${licenseId}`,

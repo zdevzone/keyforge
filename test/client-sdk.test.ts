@@ -925,6 +925,24 @@ test("verifier rejects altered, malformed, unknown-version/key, wrong context an
     );
   };
   assert.ok(productTokenSchema.safeParse(await verifySignedToken(token, context)).success);
+  for (const pem of [
+    h.pair.publicKey.replace(/\n/g, "\r\n"),
+    h.pair.publicKey.replace(/\n/g, " \t") + "\n",
+  ])
+    assert.equal(
+      (await verifySignedToken(token, { ...context, publicKeys: { "sdk-key": pem } })).kind,
+      "license",
+    );
+  for (const pem of [
+    "-----BEGIN PUBLIC KEY-----" + "\t".repeat(1000000),
+    "-----BEGIN PUBLIC KEY-----" + "\t".repeat(2048) + "-----END PUBLIC KEY-----",
+    h.pair.publicKey.replace("END PUBLIC KEY", "END PRIVATE KEY"),
+    "unexpected-prefix" + h.pair.publicKey,
+  ])
+    await assert.rejects(
+      () => verifySignedToken(token, { ...context, publicKeys: { "sdk-key": pem } }),
+      { code: "invalid_signature" },
+    );
   for (const [body, code] of [
     [{ ...payload, v: 3 }, "invalid_payload"],
     [{ ...payload, kid: "unknown" }, "unknown_key"],
@@ -1210,5 +1228,9 @@ test("OpenAPI stays generated, valid and covers every public product/request rou
       { anyOf: [schema, { const: "__schema_compilation_probe__" }] },
       "__schema_compilation_probe__",
     );
-  assert.deepEqual([...methods].sort(), operations.sort());
+  // Recovery routes are exercised by the dedicated import-contract integration suite.
+  assert.deepEqual(
+    [...methods].sort(),
+    operations.filter((op) => !op.includes("/recovery-requests")).sort(),
+  );
 });

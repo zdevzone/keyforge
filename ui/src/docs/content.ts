@@ -18,6 +18,7 @@ const sources = import.meta.glob<string>(
     "../../../docs/cli.md",
     "../../../docs/api.md",
     "../../../docs/dependent-app-integration.md",
+    "../../../docs/import-licensing.md",
     "../../../docs/device-identity.md",
     "../../../docs/windows-device-identity.md",
     "../../../docs/verify-token.md",

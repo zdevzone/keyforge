@@ -37,4 +37,45 @@ export const trialTokenSchema = z
     supportReference: z.string().nullable(),
   })
   .strict();
-export const productTokenSchema = z.union([licenseTokenSchema, trialTokenSchema]);
+export const importLicenseTokenSchema = z
+  .object({
+    ...licenseTokenSchema.shape,
+    v: z.literal(5),
+    accountId: id,
+    authorizationRevision: z.number().int().positive().safe(),
+    paidImportsGranted: z.number().int().nonnegative().safe(),
+    recoveryGeneration: z.number().int().nonnegative().safe(),
+    trialConverted: z.literal(true),
+  })
+  .strict()
+  .refine((p) => p.subject.id === p.installationId);
+export const importTrialTokenSchema = trialTokenSchema.extend({
+  v: z.literal(3),
+  converted: z.boolean(),
+});
+export const recoveryTokenSchema = z
+  .object({
+    ...common,
+    v: z.literal(1),
+    kind: z.literal("usage-recovery"),
+    recoveryId: z.string().uuid(),
+    accountId: id,
+    challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    mode: z.enum(["restore", "lost_history"]),
+    usageDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    paidImportsFloor: z.number().int().nonnegative().safe(),
+    trialImportsFloor: z.number().int().nonnegative().safe(),
+    recoveryGeneration: z.number().int().positive().safe(),
+    authorizationRevision: z.number().int().positive().safe(),
+    expiresAt: date,
+  })
+  .strict();
+export const productTokenSchema = z.union([
+  licenseTokenSchema,
+  trialTokenSchema,
+  importLicenseTokenSchema,
+  importTrialTokenSchema,
+]);

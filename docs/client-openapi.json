@@ -3,7 +3,7 @@
   "info": {
     "title": "KeyForge dependent-app API",
     "version": "1.0.0",
-    "description": "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded."
+    "description": "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Import policy opt-in adds license v5, trial v3 and separate usage-recovery v1; legacy v4/v2 remain supported. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded."
   },
   "servers": [
     {
@@ -41,7 +41,7 @@
                           "const": 4
                         },
                         "max": {
-                          "const": 4
+                          "const": 5
                         }
                       },
                       "required": ["min", "max"],
@@ -54,7 +54,7 @@
                           "const": 2
                         },
                         "max": {
-                          "const": 2
+                          "const": 3
                         }
                       },
                       "required": ["min", "max"],
@@ -581,6 +581,193 @@
                     }
                   },
                   "required": ["ok", "serverTime"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/recovery-requests": {
+      "post": {
+        "operationId": "requestUsageRecovery",
+        "summary": "request Usage Recovery",
+        "description": "Installation-authenticated request only; never grants recovery without independent admin approval. Persist UUID/challenge before networking, reuse exact body. Send only an optional nonce-bound usage commitment, not usage history.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "licenseId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "challenge": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "usageDigest": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["requestId", "licenseId", "challenge", "usageDigest"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["requested", "approved", "claimed", "rejected"]
+                    }
+                  },
+                  "required": ["id", "status"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/products/{productId}/installations/{installationId}/recovery-requests/{id}/claim": {
+      "post": {
+        "operationId": "claimUsageRecovery",
+        "summary": "claim Usage Recovery",
+        "description": "Claims an approved, unexpired recovery once on the server. Exact retries are safe while the generation remains current. Verify the separate recovery signature, challenge, account, generation and candidate commitment before atomically adopting it with the v5 license. Approval expires after 24 hours.",
+        "security": [
+          {
+            "InstallationCredential": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "installationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recoveryToken": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["recoveryToken", "token", "serverTime"],
                   "additionalProperties": false
                 }
               }
@@ -1899,6 +2086,348 @@
           "verdict",
           "allowance",
           "supportReference"
+        ],
+        "additionalProperties": false
+      },
+      "ImportLicenseToken": {
+        "type": "object",
+        "properties": {
+          "iss": {
+            "type": "string",
+            "const": "default"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "const": "license"
+          },
+          "v": {
+            "type": "number",
+            "const": 5
+          },
+          "licenseId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "entitlements": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": ["number", "string", "boolean"]
+            }
+          },
+          "issuedTo": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["installation", "service"]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": ["kind", "id"],
+            "additionalProperties": false
+          },
+          "offlineGraceUntil": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "revoked", "expired"]
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "authorizationRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "paidImportsGranted": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "recoveryGeneration": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "trialConverted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "iss",
+          "productId",
+          "kid",
+          "installationId",
+          "issuedAt",
+          "expiresAt",
+          "kind",
+          "v",
+          "licenseId",
+          "plan",
+          "entitlements",
+          "issuedTo",
+          "subject",
+          "offlineGraceUntil",
+          "status",
+          "accountId",
+          "authorizationRevision",
+          "paidImportsGranted",
+          "recoveryGeneration",
+          "trialConverted"
+        ],
+        "additionalProperties": false
+      },
+      "ImportTrialToken": {
+        "type": "object",
+        "properties": {
+          "iss": {
+            "type": "string",
+            "const": "default"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "const": "trial"
+          },
+          "v": {
+            "type": "number",
+            "const": 3
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["fresh", "spent"]
+          },
+          "allowance": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supportReference": {
+            "type": ["string", "null"]
+          },
+          "converted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "iss",
+          "productId",
+          "kid",
+          "installationId",
+          "issuedAt",
+          "expiresAt",
+          "kind",
+          "v",
+          "verdict",
+          "allowance",
+          "supportReference",
+          "converted"
+        ],
+        "additionalProperties": false
+      },
+      "UsageRecoveryToken": {
+        "type": "object",
+        "properties": {
+          "iss": {
+            "type": "string",
+            "const": "default"
+          },
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "installationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "v": {
+            "type": "number",
+            "const": 1
+          },
+          "kind": {
+            "type": "string",
+            "const": "usage-recovery"
+          },
+          "recoveryId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "challenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["restore", "lost_history"]
+          },
+          "usageDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paidImportsFloor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "trialImportsFloor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "recoveryGeneration": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "authorizationRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "iss",
+          "productId",
+          "kid",
+          "installationId",
+          "issuedAt",
+          "expiresAt",
+          "v",
+          "kind",
+          "recoveryId",
+          "accountId",
+          "challenge",
+          "mode",
+          "usageDigest",
+          "paidImportsFloor",
+          "trialImportsFloor",
+          "recoveryGeneration",
+          "authorizationRevision"
         ],
         "additionalProperties": false
       },

@@ -1,5 +1,7 @@
 # Integrate a dependent product or service
 
+For opt-in additive import licensing, read [the import-account contract](import-licensing.md). It adds v5 paid grants, v3 trials, atomic usage storage and a separate approved recovery artifact, while retaining v4/v2 behavior for existing licenses. Enabling it is an explicit operator migration, not an automatic change to deployed products.
+
 Keyforge supplies authorization data. Your application verifies it and enforces your product's features. The open-source server belongs to one company, with an independent catalog, signing keys, installations and licenses for each product.
 
 For JavaScript/TypeScript apps, start with the [client SDK](../packages/keyforge-client/README.md) and [client OpenAPI contract](client-openapi.json). The SDK handles credential creation, registration replay, signed grants and offline authorization; supply a secure storage adapter for your desktop framework. A [bundled AI integration skill](../packages/keyforge-client/skill/keyforge-integrate/SKILL.md) guides coding agents through connecting an existing app. No MCP server is required.

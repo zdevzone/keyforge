@@ -181,6 +181,12 @@ export function registerFinance(app: FastifyInstance, p: Platform, wrap: any, ap
           }
           const license = await r.get<Grant>(s, "license", input.licenseId);
           if (!license) throw new DomainError("unknown_license", "No such license.", 404);
+          if (license.importAccountId)
+            throw new DomainError(
+              "use_license_renewal",
+              "Record import-account purchases through the license renewal workflow.",
+              409,
+            );
           if (
             input.kind === "initial" &&
             (await r.list<Sale>(s, "sale")).some(

@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { encodeBase64url, TokenError, verifySignedToken, type SignedToken } from "./tokens.js";
+import {
+  encodeBase64url,
+  TokenError,
+  verifyRecoveryToken,
+  verifySignedToken,
+  type SignedToken,
+} from "./tokens.js";
 import { DEVICE_SIGNAL_KINDS } from "./types.js";
 import type {
   Authorization,
@@ -15,6 +21,14 @@ import type {
   SupportRequest,
   ValidationResult,
 } from "./types.js";
+import {
+  decryptUsageBackup,
+  emptyImportUsage,
+  encryptUsageBackup,
+  importUsageSchema,
+  usageDigest,
+  recoveryUsageDigest,
+} from "./usage.js";
 
 export class KeyForgeError extends Error {
   constructor(
@@ -34,6 +48,11 @@ export class MemoryStorage implements SecureStorage {
   }
   async save(state: ClientState) {
     this.state = structuredClone(state);
+  }
+  async compareAndSwap(expectedRevision: number | null, state: ClientState) {
+    if ((this.state ? (this.state.storageRevision ?? 0) : null) !== expectedRevision) return false;
+    this.state = structuredClone(state);
+    return true;
   }
 }
 export interface ClientOptions {
@@ -91,6 +110,20 @@ const stateSchema = z
     licenseToken: z.string().nullable(),
     denial: z.string().nullable(),
     lastObservedTime: z.number().finite().nonnegative(),
+    storageRevision: z.number().int().nonnegative().safe().optional(),
+    importUsage: importUsageSchema.nullable().optional(),
+    pendingRecovery: z
+      .object({
+        requestId: z.string().uuid(),
+        licenseId: z.string(),
+        challenge: z.string(),
+        usageDigest: z.string().nullable(),
+        candidate: importUsageSchema.nullable(),
+        id: z.string().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     deviceSignals: z
       .object({
         signals: metadataSchema.shape.machineSignals.unwrap(),
@@ -212,11 +245,27 @@ export class KeyForgeClient {
       licenseToken: null,
       denial: null,
       lastObservedTime: this.now(),
+      storageRevision: 0,
+      importUsage: emptyImportUsage(),
+      pendingRecovery: null,
       ...(deviceSignals ? { deviceSignals } : {}),
     };
     // Identity and exact registration body must be durable before the first network request.
-    await this.options.storage.save(state);
+    await this.persist(state, true);
     return state;
+  }
+  private requireAtomicStorage() {
+    if (!this.options.storage.compareAndSwap) throw new KeyForgeError("atomic_storage_required");
+  }
+  private async persist(state: ClientState, creating = false) {
+    const revision = state.storageRevision ?? 0;
+    if (!Number.isSafeInteger(revision + 1)) throw new KeyForgeError("invalid_stored_state");
+    const next = { ...state, storageRevision: revision + 1 };
+    if (this.options.storage.compareAndSwap) {
+      if (!(await this.options.storage.compareAndSwap(creating ? null : revision, next)))
+        throw new KeyForgeError("storage_conflict");
+    } else await this.options.storage.save(next);
+    state.storageRevision = next.storageRevision;
   }
   private async collectDeviceSignals(): Promise<DeviceSignalsReport> {
     try {
@@ -248,7 +297,7 @@ export class KeyForgeClient {
         machineSignals: report.signals,
       });
       state.deviceSignals = report;
-      await this.options.storage.save(state);
+      await this.persist(state);
       return structuredClone(report);
     });
   }
@@ -360,11 +409,13 @@ export class KeyForgeClient {
     if (response.trial) {
       const grant = await verifySignedToken(response.trial.token, this.context(state));
       if (grant.kind !== "trial") throw new TokenError("unexpected_token_kind");
+      if (grant.v === 3 && grant.converted && state.importUsage)
+        state.importUsage.trialConverted = true;
       state.trialToken = response.trial.token;
       this.observe(state, grant);
     }
     state.registered = true;
-    await this.options.storage.save(state);
+    await this.persist(state);
   }
   private observe(state: ClientState, grant?: SignedToken) {
     state.lastObservedTime = Math.max(
@@ -373,12 +424,12 @@ export class KeyForgeClient {
       grant ? Date.parse(grant.issuedAt) : 0,
     );
   }
-  private async evaluate(state: ClientState): Promise<Authorization> {
+  private async evaluate(state: ClientState, persistClock = true): Promise<Authorization> {
     const now = this.now();
     if (now + (this.options.clockToleranceMs ?? 300000) < state.lastObservedTime)
       return { state: "reconnect_required", reason: "clock_rollback" };
     this.observe(state);
-    await this.options.storage.save(state);
+    if (persistClock) await this.persist(state);
     if (state.denial) return { state: "reconnect_required", reason: state.denial };
     const token = state.licenseToken ?? (state.trialStarted ? state.trialToken : null);
     if (!token) return { state: "unlicensed", reason: "activation_required" };
@@ -399,14 +450,37 @@ export class KeyForgeClient {
         return { state: "expired", reason: "license_expired" };
       if (Date.parse(grant.offlineGraceUntil) <= time)
         return { state: "reconnect_required", reason: "offline_grace_expired" };
+      if (grant.v === 5) {
+        const usage = state.importUsage;
+        if (
+          !usage?.integrity ||
+          usage.accountId !== grant.accountId ||
+          usage.recoveryGeneration !== grant.recoveryGeneration
+        )
+          return { state: "recovery_required", reason: "usage_integrity_required" };
+        if (usage.paidConsumed >= grant.paidImportsGranted)
+          return { state: "quota_exhausted", reason: "paid_imports_exhausted" };
+      }
       const deadline = new Date(
         Math.min(
           Date.parse(grant.offlineGraceUntil),
           grant.expiresAt ? Date.parse(grant.expiresAt) : Infinity,
         ),
       ).toISOString();
-      return { state: "licensed", token: grant, entitlements: grant.entitlements, deadline };
+      return {
+        state: "licensed",
+        token: grant,
+        entitlements: grant.entitlements,
+        deadline,
+        ...(grant.v === 5
+          ? { remainingImports: grant.paidImportsGranted - state.importUsage!.paidConsumed }
+          : {}),
+      };
     }
+    if (state.importUsage?.trialConverted || (grant.v === 3 && grant.converted))
+      return { state: "expired", reason: "trial_converted" };
+    if (grant.v === 3 && !state.importUsage?.integrity)
+      return { state: "recovery_required", reason: "usage_integrity_required" };
     if (grant.verdict !== "fresh") return { state: "expired", reason: "trial_spent" };
     if (grant.expiresAt !== null && Date.parse(grant.expiresAt) <= time)
       return { state: "expired", reason: "trial_expired" };
@@ -430,6 +504,8 @@ export class KeyForgeClient {
         installationId: state.installationId,
         trialAvailable:
           grant?.kind === "trial" &&
+          !state.importUsage?.trialConverted &&
+          !(grant.v === 3 && grant.converted) &&
           grant.verdict === "fresh" &&
           (grant.expiresAt === null ||
             Date.parse(grant.expiresAt) > Math.max(this.now(), state.lastObservedTime)) &&
@@ -442,11 +518,12 @@ export class KeyForgeClient {
       const state = await this.load(),
         wasRegistered = state.registered;
       await this.ensureRegistered(state);
+      if (state.importUsage?.trialConverted) throw new KeyForgeError("trial_converted");
       // Explicit trial onboarding requires connectivity even if registration was completed earlier.
       if (wasRegistered)
         await this.request(state, "POST", this.productPath("/register"), state.registration);
       state.trialStarted = true;
-      await this.options.storage.save(state);
+      await this.persist(state);
       return this.evaluate(state);
     });
   }
@@ -464,10 +541,17 @@ export class KeyForgeClient {
         (authorization.remaining !== null && units > authorization.remaining)
       )
         throw new KeyForgeError("trial_unavailable");
+      if (authorization.token.v === 3) this.requireAtomicStorage();
       if (!Number.isSafeInteger(state.trialConsumed + units))
         throw new KeyForgeError("invalid_units");
       state.trialConsumed += units;
-      await this.options.storage.save(state);
+      if (state.importUsage) {
+        if (!Number.isSafeInteger(state.importUsage.lifetimeImports + units))
+          throw new KeyForgeError("invalid_units");
+        state.importUsage.trialConsumed = state.trialConsumed;
+        state.importUsage.lifetimeImports += units;
+      }
+      await this.persist(state);
       return this.evaluate(state);
     });
   }
@@ -500,6 +584,51 @@ export class KeyForgeClient {
     const grant = await verifySignedToken(token, this.context(state));
     if (grant.kind !== "license" || (expectedLicenseId && grant.licenseId !== expectedLicenseId))
       throw new TokenError("unexpected_license");
+    if (grant.v === 4 && state.importUsage?.accountId) throw new TokenError("protocol_downgrade");
+    if (grant.v === 4 && state.importUsage) state.importUsage.legacyPaidSeen = true;
+    if (grant.v === 5) {
+      this.requireAtomicStorage();
+      const usage = state.importUsage;
+      if (!usage || (usage.legacyPaidSeen && !usage.legacyVerified)) {
+        state.denial = "usage_migration_required";
+        await this.persist(state);
+        throw new KeyForgeError("usage_migration_required");
+      }
+      if (usage.accountId && usage.accountId !== grant.accountId)
+        throw new TokenError("account_mismatch");
+      if (
+        grant.authorizationRevision < usage.authorizationRevision ||
+        grant.recoveryGeneration < usage.recoveryGeneration ||
+        grant.paidImportsGranted < usage.granted
+      )
+        throw new TokenError("stale_grant");
+      // Mint time / lease renewal may change at the same revision; entitlement terms may not.
+      const terms = await usageDigest({
+        accountId: grant.accountId,
+        licenseId: grant.licenseId,
+        plan: grant.plan,
+        entitlements: grant.entitlements,
+        issuedTo: grant.issuedTo,
+        subject: grant.subject,
+        expiresAt: grant.expiresAt,
+        status: grant.status === "expired" ? "active" : grant.status,
+        granted: grant.paidImportsGranted,
+        generation: grant.recoveryGeneration,
+      });
+      if (
+        grant.authorizationRevision === usage.authorizationRevision &&
+        usage.termsHash &&
+        usage.termsHash !== terms
+      )
+        throw new TokenError("revision_conflict");
+      usage.accountId = grant.accountId;
+      usage.authorizationRevision = grant.authorizationRevision;
+      usage.granted = grant.paidImportsGranted;
+      usage.termsHash = terms;
+      usage.trialConverted = true;
+      state.trialStarted = false;
+      if (grant.recoveryGeneration !== usage.recoveryGeneration) usage.integrity = false;
+    }
     if (state.licenseToken) {
       let prior: SignedToken | null = null;
       try {
@@ -521,7 +650,7 @@ export class KeyForgeClient {
     state.denial = null;
     this.observe(state, grant);
     // Persist authenticated negative status before returning it, including HTTP 200 revocations.
-    await this.options.storage.save(state);
+    await this.persist(state);
   }
   refresh(): Promise<Authorization> {
     return this.serial(async () => {
@@ -544,10 +673,11 @@ export class KeyForgeClient {
             "unknown_license",
             "unknown_product",
             "product_archived",
+            "recovery_required",
           ].includes(error.code)
         ) {
           state.denial = error.code;
-          await this.options.storage.save(state);
+          await this.persist(state);
         }
         throw error;
       }
@@ -568,7 +698,239 @@ export class KeyForgeClient {
       state.licenseToken = null;
       state.trialStarted = false;
       state.denial = null;
-      await this.options.storage.save(state);
+      await this.persist(state);
+    });
+  }
+  /** Initialize a legacy client's VERIFIED surviving history once; never use this to repair corrupt usage. */
+  adoptLegacyImportUsage(input: {
+    lifetimeImports: number;
+    paidConsumed: number;
+    trialConsumed: number;
+    lifetimeKnown: boolean;
+  }) {
+    return this.serial(async () => {
+      this.requireAtomicStorage();
+      const state = await this.load();
+      if (state.importUsage?.accountId || state.importUsage?.legacyVerified)
+        throw new KeyForgeError("usage_already_initialized");
+      const previous = state.importUsage ?? emptyImportUsage();
+      const usage = importUsageSchema.parse({ ...previous, ...input, legacyVerified: true });
+      if (
+        usage.trialConsumed < state.trialConsumed ||
+        usage.paidConsumed < previous.paidConsumed ||
+        usage.lifetimeImports < previous.lifetimeImports
+      )
+        throw new KeyForgeError("usage_rollback");
+      state.importUsage = usage;
+      state.trialConsumed = usage.trialConsumed;
+      await this.persist(state);
+    });
+  }
+  getImportUsage() {
+    return this.serial(async () => structuredClone((await this.load()).importUsage ?? null));
+  }
+  /** One stable UUID per successful asset operation. Production adapters must share the asset transaction. */
+  consumeImport(eventId: string, units = 1) {
+    return this.serial(async () => {
+      this.requireAtomicStorage();
+      if (
+        !z.string().uuid().safeParse(eventId).success ||
+        !Number.isSafeInteger(units) ||
+        units <= 0
+      )
+        throw new KeyForgeError("invalid_units");
+      const state = await this.load(),
+        usage = state.importUsage;
+      if (!usage?.integrity) throw new KeyForgeError("usage_integrity_required");
+      const prior = usage.events[eventId];
+      if (prior) {
+        if (prior.units !== units) throw new KeyForgeError("idempotency_conflict");
+        return { recorded: false, receipt: prior, authorization: await this.evaluate(state) };
+      }
+      const auth = await this.evaluate(state, false);
+      const source = auth.state === "trial" ? "trial" : "paid";
+      if (auth.state !== "trial" && (auth.state !== "licensed" || auth.token.v !== 5))
+        throw new KeyForgeError("imports_unavailable");
+      const remaining = auth.state === "trial" ? auth.remaining : auth.remainingImports!;
+      if (remaining !== null && units > remaining) throw new KeyForgeError("quota_exhausted");
+      const next = usage.lifetimeImports + units;
+      if (!Number.isSafeInteger(next)) throw new KeyForgeError("invalid_units");
+      usage.lifetimeImports = next;
+      if (source === "trial") {
+        usage.trialConsumed += units;
+        state.trialConsumed = usage.trialConsumed;
+      } else usage.paidConsumed += units;
+      const receipt = { units, source } as const;
+      usage.events[eventId] = receipt;
+      await this.persist(state);
+      return { recorded: true, receipt, authorization: await this.evaluate(state, false) };
+    });
+  }
+  markUsageRecoveryRequired() {
+    return this.serial(async () => {
+      this.requireAtomicStorage();
+      const state = await this.load();
+      if (state.importUsage) state.importUsage.integrity = false;
+      await this.persist(state);
+    });
+  }
+  private backupContext() {
+    return JSON.stringify(["keyforge-usage-backup", 1, this.url, this.options.productId]);
+  }
+  exportUsageBackup(password: string) {
+    return this.serial(async () => {
+      const usage = (await this.load()).importUsage;
+      if (!usage?.integrity) throw new KeyForgeError("usage_integrity_required");
+      return encryptUsageBackup(usage, password, this.backupContext());
+    });
+  }
+  /** A pending UUID/challenge/candidate is durable before contacting the server. Retry this method unchanged. */
+  requestUsageRecovery(licenseId: string, backup?: { encrypted: string; password: string }) {
+    return this.serial(async () => {
+      this.requireAtomicStorage();
+      const state = await this.load();
+      await this.ensureRegistered(state);
+      let pending = state.pendingRecovery;
+      if (!pending) {
+        const candidate = backup
+          ? await decryptUsageBackup(backup.encrypted, backup.password, this.backupContext())
+          : null;
+        const challenge = encodeBase64url(crypto.getRandomValues(new Uint8Array(32)));
+        pending = {
+          requestId: crypto.randomUUID(),
+          licenseId,
+          challenge,
+          candidate,
+          usageDigest: candidate ? await recoveryUsageDigest(challenge, candidate) : null,
+        };
+        state.pendingRecovery = pending;
+        await this.persist(state);
+      } else if (pending.licenseId !== licenseId || backup)
+        throw new KeyForgeError("recovery_pending");
+      const result = await this.request<{ id: string; status: string }>(
+        state,
+        "POST",
+        this.installationPath(state, "/recovery-requests"),
+        {
+          requestId: pending.requestId,
+          licenseId,
+          challenge: pending.challenge,
+          usageDigest: pending.usageDigest,
+        },
+      );
+      if (typeof result?.id !== "string") throw new KeyForgeError("invalid_response");
+      pending.id = result.id;
+      await this.persist(state);
+      return result;
+    });
+  }
+  claimUsageRecovery(): Promise<Authorization> {
+    return this.serial(async () => {
+      this.requireAtomicStorage();
+      const state = await this.load(),
+        pending = state.pendingRecovery;
+      if (!pending?.id) {
+        if (state.importUsage?.integrity && state.importUsage.recoveryGeneration > 0)
+          return this.evaluate(state);
+        throw new KeyForgeError("recovery_required");
+      }
+      const response = await this.request<{ recoveryToken: string; token: string }>(
+        state,
+        "POST",
+        this.installationPath(
+          state,
+          "/recovery-requests/" + encodeURIComponent(pending.id) + "/claim",
+        ),
+      );
+      const recovery = await verifyRecoveryToken(response.recoveryToken, {
+        ...this.context(state),
+        now: Math.max(this.now(), state.lastObservedTime),
+      });
+      const grant = await verifySignedToken(response.token, this.context(state));
+      const old = state.importUsage;
+      if (
+        recovery.challenge !== pending.challenge ||
+        grant.kind !== "license" ||
+        grant.v !== 5 ||
+        grant.licenseId !== pending.licenseId ||
+        grant.accountId !== recovery.accountId ||
+        grant.recoveryGeneration !== recovery.recoveryGeneration ||
+        grant.authorizationRevision < recovery.authorizationRevision ||
+        (old?.accountId && old.accountId !== recovery.accountId) ||
+        (old && recovery.recoveryGeneration <= old.recoveryGeneration)
+      )
+        throw new TokenError("recovery_mismatch");
+      if (
+        recovery.mode === "restore" &&
+        (!pending.candidate ||
+          recovery.usageDigest !== pending.usageDigest ||
+          recovery.usageDigest !==
+            (await recoveryUsageDigest(pending.challenge, pending.candidate)) ||
+          pending.candidate.accountId !== recovery.accountId)
+      )
+        throw new TokenError("recovery_mismatch");
+      const usage = structuredClone(
+        recovery.mode === "restore" ? pending.candidate! : emptyImportUsage(),
+      );
+      const previous = old ?? emptyImportUsage();
+      usage.paidConsumed = Math.max(
+        usage.paidConsumed,
+        previous.paidConsumed,
+        recovery.paidImportsFloor,
+      );
+      usage.trialConsumed = Math.max(
+        usage.trialConsumed,
+        previous.trialConsumed,
+        state.trialConsumed,
+        recovery.trialImportsFloor,
+      );
+      usage.lifetimeImports = Math.max(usage.lifetimeImports, previous.lifetimeImports);
+      for (const [id, event] of Object.entries(previous.events)) {
+        const candidate = usage.events[id];
+        if (candidate && (candidate.units !== event.units || candidate.source !== event.source))
+          throw new KeyForgeError("usage_conflict");
+      }
+      usage.events = { ...usage.events, ...previous.events };
+      // Distinct surviving receipts are evidence of distinct successful imports,
+      // even when neither snapshot contains the other's latest counters.
+      const receipts = Object.values(usage.events);
+      usage.paidConsumed = Math.max(
+        usage.paidConsumed,
+        receipts.filter((e) => e.source === "paid").reduce((n, e) => n + e.units, 0),
+      );
+      usage.trialConsumed = Math.max(
+        usage.trialConsumed,
+        receipts.filter((e) => e.source === "trial").reduce((n, e) => n + e.units, 0),
+      );
+      usage.lifetimeImports = Math.max(
+        usage.lifetimeImports,
+        receipts.reduce((n, e) => n + e.units, 0),
+      );
+      usage.accountId = recovery.accountId;
+      usage.recoveryGeneration = recovery.recoveryGeneration;
+      usage.authorizationRevision = Math.max(
+        previous.authorizationRevision,
+        recovery.authorizationRevision,
+      );
+      usage.termsHash = null;
+      usage.granted = Math.max(usage.granted, previous.granted);
+      usage.trialConverted = true;
+      usage.integrity = true;
+      // A valid old snapshot is not proof that the lost interval contained no imports.
+      usage.lifetimeKnown = false;
+      state.importUsage = importUsageSchema.parse(usage);
+      state.trialConsumed = usage.trialConsumed;
+      state.pendingRecovery = null;
+      // saveLicense persists both adoption and intent clearing in a single atomic snapshot.
+      await this.saveLicense(state, response.token, pending.licenseId);
+      return this.evaluate(state);
+    });
+  }
+  abandonUsageRecovery() {
+    return this.serial(async () => {
+      const state = await this.load();
+      state.pendingRecovery = null;
+      await this.persist(state);
     });
   }
   getNotifications() {

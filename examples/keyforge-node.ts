@@ -14,17 +14,22 @@ import { createWindowsDeviceSignalsProvider } from "../packages/keyforge-client/
  * Supply the desktop framework's secure storage adapter in a production integration. */
 export async function runReference(
   options: ClientOptions,
-  action: { key?: string; trial?: boolean } = {},
+  action: { key?: string; trial?: boolean; importEventId?: string } = {},
 ) {
   const client = new KeyForgeClient(options);
-  const authorization = action.key
+  let authorization = action.key
     ? await client.activate(action.key)
     : action.trial
       ? await client.startTrial()
       : await client.getAuthorization();
   // Feature checks belong at the protected operation, not only in onboarding UI.
+  // For import accounts, enlist secure-storage CAS and the asset insert in one host transaction.
+  const importReceipt = action.importEventId
+    ? await client.consumeImport(action.importEventId)
+    : undefined;
+  if (importReceipt) authorization = importReceipt.authorization;
   const canUsePaidFeatures = authorization.state === "licensed";
-  return { client, authorization, canUsePaidFeatures };
+  return { client, authorization, canUsePaidFeatures, importReceipt };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
