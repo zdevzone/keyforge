@@ -303,6 +303,7 @@ test("scaffolds a working project from a local template", async (t) => {
     "Dockerfile",
     "docs/keyforge.md",
     "docs/examples/keyforge.config.example.json",
+    "docs/examples/client-contract/manifest.json",
   ]) {
     assert.ok(existsSync(join(directory, kept)), `${kept} should be scaffolded`);
   }
@@ -322,7 +323,6 @@ test("scaffolds a working project from a local template", async (t) => {
   );
   for (const upstreamReview of [
     "docs/studio-proof-contract.md",
-    "docs/examples/studio-proof-contract",
     "test/integration-contract.test.ts",
   ])
     assert.equal(existsSync(join(directory, upstreamReview)), false, upstreamReview);

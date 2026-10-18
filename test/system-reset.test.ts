@@ -21,6 +21,7 @@ import { createPostgresPool } from "../src/database.js";
 import { LicenseDatabase } from "../src/db.js";
 import { atomic, DomainError, Records, Vault } from "../src/platform-store.js";
 import { generateSigningKeyPair } from "../src/sign.js";
+import { seedLicense } from "./record-fixtures.js";
 
 const password = "Reset-fixture-password-2026!";
 const baseURL = "http://localhost:4100";
@@ -89,7 +90,7 @@ async function fixture(t: TestContext, url?: string, verificationUrl?: string) {
     ])
       await r.put("product:default", kind, { id: randomUUID(), fixture: true });
   });
-  await database.createLicense({
+  await seedLicense(database, {
     plan: "standard",
     entitlements: {},
     issuedTo: "Old customer",
@@ -171,7 +172,16 @@ test("online reset preserves the original seeded identity, current password and 
   assert.equal((await f.app.inject({ url: "/admin/config", headers: f.headers })).statusCode, 200);
   assert.equal((await f.app.inject({ url: "/admin/config", headers: f.second })).statusCode, 401);
   assert.equal((await f.app.inject({ url: "/admin/config", headers: f.lesser })).statusCode, 401);
-  assert.equal((await f.database.db.selectFrom("licenses").selectAll().execute()).length, 0);
+  assert.equal(
+    (
+      await f.database.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    0,
+  );
   const kinds = await f.database.db
     .selectFrom("platform_records")
     .select("kind")
@@ -196,7 +206,7 @@ test("online reset preserves the original seeded identity, current password and 
     await readFile(join(f.root, "signing.key"), "utf8"),
     "external key material stays outside reset",
   );
-  await f.database.createLicense({
+  await seedLicense(f.database, {
     plan: "new",
     entitlements: {},
     issuedTo: "New customer",
@@ -204,7 +214,16 @@ test("online reset preserves the original seeded identity, current password and 
   });
   const replay = await f.reset(false, requestId);
   assert.equal(replay.json().replayed, true);
-  assert.equal((await f.database.db.selectFrom("licenses").selectAll().execute()).length, 1);
+  assert.equal(
+    (
+      await f.database.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    1,
+  );
   await seedOperator({ ...f.options, email: "second@example.test" });
   assert.equal(
     (await f.app.inject({ url: "/admin/system/reset", headers: f.headers })).json().preservedAdmin
@@ -238,7 +257,16 @@ test("reset requires an admin, same-origin request, exact confirmation, and a kn
     false,
   );
   assert.equal((await f.reset()).json().error, "reset_unavailable");
-  assert.equal((await f.database.db.selectFrom("licenses").selectAll().execute()).length, 1);
+  assert.equal(
+    (
+      await f.database.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    1,
+  );
 });
 
 test("reset backup is verified before deletion and remains downloadable with the complete original database", async (t) => {
@@ -263,7 +291,14 @@ test("reset backup is verified before deletion and remains downloadable with the
       (restored.prepare(`SELECT count(*) AS n FROM ${AUTH_PREFIX}user`).get() as any).n,
       3,
     );
-    assert.equal((restored.prepare("SELECT count(*) AS n FROM licenses").get() as any).n, 1);
+    assert.equal(
+      (
+        restored
+          .prepare("SELECT count(*) AS n FROM platform_records WHERE kind = 'license'")
+          .get() as any
+      ).n,
+      1,
+    );
     assert.equal(restored.pragma("integrity_check", { simple: true }), "ok");
   } finally {
     restored.close();
@@ -278,12 +313,21 @@ test("backup verification failure and database deletion failure both preserve ex
   assert.equal((await f.reset(true)).json().error, "backup_corrupt");
   assert.equal((await readdir(join(f.root, "backups"))).length, 0);
   mock.mock.restore();
-  await sql`CREATE TRIGGER reject_reset BEFORE DELETE ON licenses BEGIN SELECT RAISE(ABORT, 'fixture reset failure'); END`.execute(
+  await sql`CREATE TRIGGER reject_reset BEFORE DELETE ON platform_records BEGIN SELECT RAISE(ABORT, 'fixture reset failure'); END`.execute(
     f.database.db,
   );
   const failed = await f.reset(true);
   assert.equal(failed.statusCode, 500, failed.body);
-  assert.equal((await f.database.db.selectFrom("licenses").selectAll().execute()).length, 1);
+  assert.equal(
+    (
+      await f.database.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    1,
+  );
   assert.equal((await f.app.inject({ url: "/admin/config", headers: f.second })).statusCode, 200);
   assert.equal(
     (await f.app.inject({ url: "/admin/backups", headers: f.headers })).json().jobs.length,
@@ -344,10 +388,19 @@ test("Postgres online reset retains the seeded admin and a restore-verified arch
   assert.ok(result.json().backupId);
   assert.equal((await f.app.inject({ url: "/admin/config", headers: f.headers })).statusCode, 200);
   assert.equal((await f.app.inject({ url: "/admin/config", headers: f.second })).statusCode, 401);
-  assert.equal((await f.database.db.selectFrom("licenses").selectAll().execute()).length, 0);
+  assert.equal(
+    (
+      await f.database.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    0,
+  );
   const jobs = (await f.app.inject({ url: "/admin/backups", headers: f.headers })).json().jobs;
   assert.ok(jobs[0].verifiedAt);
-  await f.database.createLicense({
+  await seedLicense(f.database, {
     plan: "again",
     entitlements: {},
     issuedTo: "Later customer",
@@ -356,5 +409,14 @@ test("Postgres online reset retains the seeded admin and a restore-verified arch
   const withoutBackup = await f.reset(false);
   assert.equal(withoutBackup.statusCode, 200, withoutBackup.body);
   assert.equal(withoutBackup.json().backupId, null);
-  assert.equal((await f.database.db.selectFrom("licenses").selectAll().execute()).length, 0);
+  assert.equal(
+    (
+      await f.database.db
+        .selectFrom("platform_records")
+        .selectAll()
+        .where("kind", "=", "license")
+        .execute()
+    ).length,
+    0,
+  );
 });

@@ -44,7 +44,7 @@
     },
     "v": {
       "type": "number",
-      "const": 4
+      "const": 1
     },
     "licenseId": {
       "type": "string",
@@ -64,7 +64,11 @@
         "maxLength": 64
       },
       "additionalProperties": {
-        "type": ["number", "string", "boolean"]
+        "type": [
+          "number",
+          "string",
+          "boolean"
+        ]
       }
     },
     "issuedTo": {
@@ -75,7 +79,10 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["installation", "service"]
+          "enum": [
+            "installation",
+            "service"
+          ]
         },
         "id": {
           "type": "string",
@@ -83,7 +90,10 @@
           "maxLength": 200
         }
       },
-      "required": ["kind", "id"],
+      "required": [
+        "kind",
+        "id"
+      ],
       "additionalProperties": false
     },
     "offlineGraceUntil": {
@@ -93,7 +103,49 @@
     },
     "status": {
       "type": "string",
-      "enum": ["active", "revoked", "expired"]
+      "enum": [
+        "active",
+        "revoked",
+        "expired"
+      ]
+    },
+    "accountId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "authorizationRevision": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "paidImportsGranted": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recoveryGeneration": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "trialConverted": {
+      "type": "boolean",
+      "const": true
     }
   },
   "required": [
@@ -111,7 +163,12 @@
     "issuedTo",
     "subject",
     "offlineGraceUntil",
-    "status"
+    "status",
+    "accountId",
+    "authorizationRevision",
+    "paidImportsGranted",
+    "recoveryGeneration",
+    "trialConverted"
   ],
   "additionalProperties": false
 }

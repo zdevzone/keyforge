@@ -189,7 +189,7 @@ export default function Entitlements() {
 function DefinitionEditor({ value, done }: { value: any; done: () => void }) {
   const [id, setId] = useState(value.id || ""),
     [description, setDescription] = useState(value.description || ""),
-    [type, setType] = useState(value.type === "mixed" ? "number" : value.type || "number"),
+    [type, setType] = useState(value.type || "number"),
     [defaultValue, setDefault] = useState(
       value.defaultValue === undefined ? "" : String(value.defaultValue),
     ),

@@ -3,7 +3,7 @@
   "info": {
     "title": "KeyForge dependent-app API",
     "version": "1.0.0",
-    "description": "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Import policy opt-in adds license v5, trial v3 and separate usage-recovery v1; legacy v4/v2 remain supported. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded."
+    "description": "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License, trial and separate usage-recovery payloads use only v1. Import-account fields are explicitly nullable for products without import quotas; no older token format is accepted. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded."
   },
   "servers": [
     {
@@ -38,10 +38,10 @@
                       "type": "object",
                       "properties": {
                         "min": {
-                          "const": 4
+                          "const": 1
                         },
                         "max": {
-                          "const": 5
+                          "const": 1
                         }
                       },
                       "required": ["min", "max"],
@@ -51,17 +51,36 @@
                       "type": "object",
                       "properties": {
                         "min": {
-                          "const": 2
+                          "const": 1
                         },
                         "max": {
-                          "const": 3
+                          "const": 1
+                        }
+                      },
+                      "required": ["min", "max"],
+                      "additionalProperties": false
+                    },
+                    "recoveryTokenVersions": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "const": 1
+                        },
+                        "max": {
+                          "const": 1
                         }
                       },
                       "required": ["min", "max"],
                       "additionalProperties": false
                     }
                   },
-                  "required": ["ok", "serverTime", "tokenVersions", "trialTokenVersions"],
+                  "required": [
+                    "ok",
+                    "serverTime",
+                    "tokenVersions",
+                    "trialTokenVersions",
+                    "recoveryTokenVersions"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -317,7 +336,7 @@
       "post": {
         "operationId": "activateLicense",
         "summary": "activate License",
-        "description": "Online activation binds an installation seat and returns a signed v4 token. Repeating the same key/identity reuses the binding. Verify and atomically persist the grant before enabling features.",
+        "description": "Online activation binds an installation seat and returns a signed v1 token. Repeating the same key/identity reuses the binding. Verify and atomically persist the grant before enabling features.",
         "security": [
           {
             "InstallationCredential": []
@@ -710,7 +729,7 @@
       "post": {
         "operationId": "claimUsageRecovery",
         "summary": "claim Usage Recovery",
-        "description": "Claims an approved, unexpired recovery once on the server. Exact retries are safe while the generation remains current. Verify the separate recovery signature, challenge, account, generation and candidate commitment before atomically adopting it with the v5 license. Approval expires after 24 hours.",
+        "description": "Claims an approved, unexpired recovery once on the server. Exact retries are safe while the generation remains current. Verify the separate recovery signature, challenge, account, generation and candidate commitment before atomically adopting it with the v1 license. Approval expires after 24 hours.",
         "security": [
           {
             "InstallationCredential": []
@@ -1936,205 +1955,7 @@
           },
           "v": {
             "type": "number",
-            "const": 4
-          },
-          "licenseId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "plan": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "entitlements": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
-            },
-            "additionalProperties": {
-              "type": ["number", "string", "boolean"]
-            }
-          },
-          "issuedTo": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": ["installation", "service"]
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200
-              }
-            },
-            "required": ["kind", "id"],
-            "additionalProperties": false
-          },
-          "offlineGraceUntil": {
-            "type": "string",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["active", "revoked", "expired"]
-          }
-        },
-        "required": [
-          "iss",
-          "productId",
-          "kid",
-          "installationId",
-          "issuedAt",
-          "expiresAt",
-          "kind",
-          "v",
-          "licenseId",
-          "plan",
-          "entitlements",
-          "issuedTo",
-          "subject",
-          "offlineGraceUntil",
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "TrialToken": {
-        "type": "object",
-        "properties": {
-          "iss": {
-            "type": "string",
-            "const": "default"
-          },
-          "productId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "kid": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "installationId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "issuedAt": {
-            "type": "string",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time",
-                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "kind": {
-            "type": "string",
-            "const": "trial"
-          },
-          "v": {
-            "type": "number",
-            "const": 2
-          },
-          "verdict": {
-            "type": "string",
-            "enum": ["fresh", "spent"]
-          },
-          "allowance": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "supportReference": {
-            "type": ["string", "null"]
-          }
-        },
-        "required": [
-          "iss",
-          "productId",
-          "kid",
-          "installationId",
-          "issuedAt",
-          "expiresAt",
-          "kind",
-          "v",
-          "verdict",
-          "allowance",
-          "supportReference"
-        ],
-        "additionalProperties": false
-      },
-      "ImportLicenseToken": {
-        "type": "object",
-        "properties": {
-          "iss": {
-            "type": "string",
-            "const": "default"
-          },
-          "productId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "kid": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "installationId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "issuedAt": {
-            "type": "string",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time",
-                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "kind": {
-            "type": "string",
-            "const": "license"
-          },
-          "v": {
-            "type": "number",
-            "const": 5
+            "const": 1
           },
           "licenseId": {
             "type": "string",
@@ -2186,9 +2007,16 @@
             "enum": ["active", "revoked", "expired"]
           },
           "accountId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "authorizationRevision": {
             "type": "integer",
@@ -2196,9 +2024,16 @@
             "maximum": 9007199254740991
           },
           "paidImportsGranted": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recoveryGeneration": {
             "type": "integer",
@@ -2234,7 +2069,7 @@
         ],
         "additionalProperties": false
       },
-      "ImportTrialToken": {
+      "TrialToken": {
         "type": "object",
         "properties": {
           "iss": {
@@ -2279,7 +2114,7 @@
           },
           "v": {
             "type": "number",
-            "const": 3
+            "const": 1
           },
           "verdict": {
             "type": "string",
@@ -2480,7 +2315,7 @@
             "maxLength": 200
           },
           "machineSignals": {
-            "description": "Legacy registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count."
+            "description": "Registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count."
           }
         },
         "required": ["installationId", "requestId"],

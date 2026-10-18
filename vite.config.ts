@@ -39,6 +39,7 @@ export default defineConfig({
       "dist",
       "node_modules",
       "**/*.md",
+      "docs/examples/client-contract/*.json",
       "package-lock.json",
       "ui/package-lock.json",
       ".github/",

@@ -1,10 +1,8 @@
 # Database setup and demo data
 
-## Upgrade existing installations
+## Fresh v1 baseline
 
-Back up the unified database (licensing and operators together), and keep separate recovery copies of signing keys and encryption rings before upgrading. Boot migrations preserve historical records and import historical ledger records into the `default` product once; they do not import the retired split auth database. Old license hashes cannot be reversed: an admin can securely re-enter the original product key after password verification to retain it encrypted. Historical installation IDs cannot be claimed without a credential; dependent apps must register a new identity.
-
-The current release replaces the old unscoped device API. Integrators must adopt product-scoped routes, license token v4 and trial token v2. Existing client binaries require an application update; no compatibility adapter is provided. Preserve old public keys in client trust stores for the chosen transition period. See [client integration](dependent-app-integration.md) and [token verification](verify-token.md).
+The development baseline uses only product-scoped v1 records and a fresh schema. Previous databases, tokens and client state are not converted or accepted. Stop the development server and use the explicit offline reset below, or create a new empty database. Retain signing keys and encryption keyrings; no key rotation is needed. Never point the reset at a deployed database without a separate deliberate maintenance operation. See [client integration](dependent-app-integration.md) and [token verification](verify-token.md).
 
 ## Reset from Settings
 
@@ -34,6 +32,6 @@ The reset removes demo users, sessions and application records, recreates the sc
 
 The demo seeder requires signing keys, `LICENSE_AUTH_SECRET` and the data encryption ring. It writes credentials and fixture IDs to `.artifacts/demo/manifest.json`; keep this private. Repeating `vp run demo:seed --maintenance` reuses the current dataset. A reset creates a new one. `--clean-local` removes recognized obsolete app databases and demo backup archives; unrelated files are retained.
 
-Old split-file data and split archives are not imported. Remove obsolete demo files after stopping their writers and checking their paths. Production backups still use the regular [backup and restore workflow](backups.md), with one SQLite snapshot containing both authentication and licensing.
+Only current v1 databases and archives are supported. Use a fresh development database rather than importing a pre-baseline dataset. Production backups still use the regular [backup and restore workflow](backups.md), with one SQLite snapshot containing both authentication and licensing.
 
 Application-level Settings reset retains encrypted backup storage configurations, their historical credential versions and the default destination, alongside the original seeded administrator. A full schema/database drop remains a different administrative operation and removes database-managed configuration too. Retain independent provider-credential recovery copies before a full drop.

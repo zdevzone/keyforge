@@ -4,9 +4,9 @@ Release from the public [zdevzone/keyforge](https://github.com/zdevzone/keyforge
 
 | Order | Package | Next stable version |
 | --- | --- | --- |
-| 1 | `@zdevzone/keyforge-client` | `0.1.1` |
-| 2 | `create-keyforge` | `1.0.2` |
-| 3 | `create-keyforge-client` | `0.1.1` |
+| 1 | `@zdevzone/keyforge-client` | `0.2.0` |
+| 2 | `create-keyforge` | `1.0.3` |
+| 3 | `create-keyforge-client` | `0.2.0` |
 
 Previously published stable versions remain available until a deliberate stable release. `@keyforge/client` is unrelated to this project; do not publish to it. Never unpublish packages to repair a release or reuse an old version.
 
@@ -96,9 +96,9 @@ vp -C packages/keyforge-client pm pack --pack-destination ../../.artifacts
 vp -C packages/create-keyforge pm pack --pack-destination ../../.artifacts
 vp -C packages/create-keyforge-client pm pack --pack-destination ../../.artifacts
 
-tar -tzf .artifacts/zdevzone-keyforge-client-0.1.1.tgz
-tar -tzf .artifacts/create-keyforge-1.0.2.tgz
-tar -tzf .artifacts/create-keyforge-client-0.1.1.tgz
+tar -tzf .artifacts/zdevzone-keyforge-client-0.2.0.tgz
+tar -tzf .artifacts/create-keyforge-1.0.3.tgz
+tar -tzf .artifacts/create-keyforge-client-0.2.0.tgz
 ```
 
 Review the archives before continuing. The SDK must include `package/dist/index.js`, declarations and Windows/Linux/macOS/automatic device-signal modules. A README-and-skill-only archive is broken: stop. Never disable lifecycle scripts. No signing keys, environment files, databases or credentials belong in these archives.
@@ -106,15 +106,15 @@ Review the archives before continuing. The SDK must include `package/dist/index.
 ```bash
 # 1. SDK
 vp -C packages/keyforge-client pm publish --access public --tag latest --registry=https://registry.npmjs.org/
-npm view @zdevzone/keyforge-client@0.1.1 version --registry=https://registry.npmjs.org/
+npm view @zdevzone/keyforge-client@0.2.0 version --registry=https://registry.npmjs.org/
 
 # 2. Server CLI
 vp -C packages/create-keyforge pm publish --access public --tag latest --registry=https://registry.npmjs.org/
-npm view create-keyforge@1.0.2 version --registry=https://registry.npmjs.org/
+npm view create-keyforge@1.0.3 version --registry=https://registry.npmjs.org/
 
 # 3. Client CLI
 vp -C packages/create-keyforge-client pm publish --access public --tag latest --registry=https://registry.npmjs.org/
-npm view create-keyforge-client@0.1.1 version --registry=https://registry.npmjs.org/
+npm view create-keyforge-client@0.2.0 version --registry=https://registry.npmjs.org/
 ```
 
 ## Manual release: Windows PowerShell
@@ -148,9 +148,9 @@ Invoke-Checked vp @('-C', 'packages/keyforge-client', 'pm', 'pack', '--pack-dest
 Invoke-Checked vp @('-C', 'packages/create-keyforge', 'pm', 'pack', '--pack-destination', '../../.artifacts')
 Invoke-Checked vp @('-C', 'packages/create-keyforge-client', 'pm', 'pack', '--pack-destination', '../../.artifacts')
 
-Invoke-Checked tar.exe @('-tzf', '.artifacts/zdevzone-keyforge-client-0.1.1.tgz')
-Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-1.0.2.tgz')
-Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-client-0.1.1.tgz')
+Invoke-Checked tar.exe @('-tzf', '.artifacts/zdevzone-keyforge-client-0.2.0.tgz')
+Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-1.0.3.tgz')
+Invoke-Checked tar.exe @('-tzf', '.artifacts/create-keyforge-client-0.2.0.tgz')
 ```
 
 Review the archives as described above, then publish in order. Complete npm's sign-in or two-factor prompts when requested.
@@ -158,15 +158,15 @@ Review the archives as described above, then publish in order. Complete npm's si
 ```powershell
 # 1. SDK
 Invoke-Checked vp @('-C', 'packages/keyforge-client', 'pm', 'publish', '--access', 'public', '--tag', 'latest', '--registry=https://registry.npmjs.org/')
-Invoke-Checked npm.cmd @('view', '@zdevzone/keyforge-client@0.1.1', 'version', '--registry=https://registry.npmjs.org/')
+Invoke-Checked npm.cmd @('view', '@zdevzone/keyforge-client@0.2.0', 'version', '--registry=https://registry.npmjs.org/')
 
 # 2. Server CLI
 Invoke-Checked vp @('-C', 'packages/create-keyforge', 'pm', 'publish', '--access', 'public', '--tag', 'latest', '--registry=https://registry.npmjs.org/')
-Invoke-Checked npm.cmd @('view', 'create-keyforge@1.0.2', 'version', '--registry=https://registry.npmjs.org/')
+Invoke-Checked npm.cmd @('view', 'create-keyforge@1.0.3', 'version', '--registry=https://registry.npmjs.org/')
 
 # 3. Client CLI
 Invoke-Checked vp @('-C', 'packages/create-keyforge-client', 'pm', 'publish', '--access', 'public', '--tag', 'latest', '--registry=https://registry.npmjs.org/')
-Invoke-Checked npm.cmd @('view', 'create-keyforge-client@0.1.1', 'version', '--registry=https://registry.npmjs.org/')
+Invoke-Checked npm.cmd @('view', 'create-keyforge-client@0.2.0', 'version', '--registry=https://registry.npmjs.org/')
 ```
 
 The listed archive filenames and version checks match the current manifests. Update those examples to your new versions on subsequent releases. The SDK's `prepack` hook builds and verifies exports automatically for manual publication; GitHub Actions publishes the verified archives directly.
@@ -176,8 +176,8 @@ The listed archive filenames and version checks match the current manifests. Upd
 From a separate directory outside the repository, test both generators:
 
 ```sh
-vp create keyforge@1.0.2
-vp create keyforge-client@0.1.1
+vp create keyforge@1.0.3
+vp create keyforge-client@0.2.0
 ```
 
 These same commands work in PowerShell. Interactive choices support Up/Down, Enter and Ctrl+C. Vite+ should finish at the generated project's root, without looking for removed upstream workspaces.

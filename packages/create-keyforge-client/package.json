@@ -1,6 +1,6 @@
 {
   "name": "create-keyforge-client",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Create a Node.js KeyForge integration starter with explicit secure storage",
   "license": "MIT",
   "repository": {
@@ -27,5 +27,5 @@
   "engines": {
     "node": "^22.18.0 || ^24.11.0 || ^26.0.0"
   },
-  "keyforgeSdkVersion": "^0.1.1"
+  "keyforgeSdkVersion": "^0.2.0"
 }

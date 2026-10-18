@@ -31,7 +31,7 @@ const rateLimitSchema = z.object({
 });
 
 const planPresetSchema = z.object({
-  /** Preset entitlements the issue form starts from; all editable per license. */
+  /** Bootstrap plan entitlements; issuance uses the selected plan unchanged. */
   entitlements: entitlementsSchema.prefault({}),
   /** Days until expiry, from issue time. Omit for perpetual. */
   durationDays: z.number().int().positive().optional(),
@@ -102,7 +102,7 @@ export const configSchema = z.object({
     .object({
       defaultPlan: z.string().min(1).default("standard"),
       defaultActivationLimit: z.number().int().positive().default(1),
-      /** Plan name -> preset. Drives the issue form; not an enforcement list. */
+      /** Plan name -> initial plan definition. New licenses must select an existing plan. */
       planPresets: z.record(z.string().min(1), planPresetSchema).prefault({
         standard: { entitlements: {} },
       }),

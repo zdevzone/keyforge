@@ -23,8 +23,8 @@ import { migrateToLatest } from "./migrations.js";
  * own. Two writable ledgers with automatic failover would eventually issue one
  * product key twice and count a seat twice, which is worse than a gap.
  *
- * Whole tables, every time. `licenses` has no `updated_at`, so an edit through
- * `PATCH /admin/licenses/:id` changes nothing a timestamp-based sync could
+ * Whole tables, every time. Scoped records are the source of truth; an edit through
+ * `PATCH /admin/products/:productId/licenses/:id` changes nothing a timestamp-based sync could
  * notice: an incremental copy would silently miss it. At a license server's row
  * counts a full snapshot is both correct and quick, so correct wins.
  *
@@ -44,24 +44,7 @@ interface LedgerTable {
   numeric: string[];
 }
 
-/**
- * The tables, in **insert order**: `installations.license_id` and
- * `activations.license_id` both reference `licenses`, so licenses go first and
- * deletes run in reverse. (`audit_log.license_id` is a plain column with no
- * foreign key — the audit trail outlives the licenses it describes.) The three
- * machine tables follow the same rule among themselves: signals and
- * installations both reference a group.
- *
- * **Every ledger table has to be listed here.** A table left out is not copied,
- * not compared, and not reported — `verify` calls a mirror missing it a match.
- * The trial ledger is the one where that is worst: silently dropping it during
- * a move to Postgres hands every customer in the file a fresh trial, and
- * nothing about the migration looks wrong.
- *
- * Columns are listed rather than `SELECT *`: a database that predates
- * migration 003 still carries a legacy `allowance` column, and column order is
- * not guaranteed to match between two engines.
- */
+/** Current application tables, copied as a consistent complete snapshot. */
 export const LEDGER_TABLES: LedgerTable[] = [
   {
     name: "platform_records",
@@ -71,106 +54,10 @@ export const LEDGER_TABLES: LedgerTable[] = [
   },
   { name: "platform_lock", columns: ["id", "value"], key: ["id"], numeric: ["value"] },
   {
-    name: "licenses",
-    columns: [
-      "id",
-      "key_hash",
-      "plan",
-      "entitlements",
-      "issued_to",
-      "status",
-      "activation_limit",
-      "issued_at",
-      "expires_at",
-      "revoked_at",
-    ],
-    key: ["id"],
-    numeric: ["activation_limit"],
-  },
-  {
-    name: "installations",
-    columns: [
-      "installation_id",
-      "registered_at",
-      "last_seen_at",
-      "app_version",
-      "platform",
-      "user_name",
-      "user_email",
-      "license_id",
-    ],
-    key: ["installation_id"],
-    numeric: [],
-  },
-  {
-    name: "activations",
-    columns: ["license_id", "installation_id", "activated_at", "deactivated_at"],
-    key: ["license_id", "installation_id"],
-    numeric: [],
-  },
-  {
-    name: "machine_groups",
-    columns: [
-      "id",
-      "support_reference",
-      "first_registered_at",
-      "last_registered_at",
-      "registration_count",
-      "recheck_count",
-      "trial_spent_reported",
-      "cleared_at",
-      "cleared_at_count",
-    ],
-    key: ["id"],
-    // cleared_at_count is nullable, and normalizeValue keeps null as null —
-    // listing it here only decides how a present value is compared.
-    numeric: ["registration_count", "recheck_count", "trial_spent_reported", "cleared_at_count"],
-  },
-  {
-    name: "machine_signals",
-    columns: ["group_id", "kind", "hash", "first_seen_at", "last_seen_at"],
-    key: ["group_id", "kind", "hash"],
-    numeric: [],
-  },
-  {
-    name: "machine_installations",
-    columns: ["group_id", "installation_id", "first_seen_at"],
-    key: ["group_id", "installation_id"],
-    numeric: [],
-  },
-  {
     name: "audit_log",
     columns: ["id", "at", "actor", "action", "license_id", "detail"],
     key: ["id"],
     numeric: ["id"],
-  },
-  {
-    name: "support_requests",
-    columns: [
-      "id",
-      "client_request_id",
-      "license_id",
-      "installation_id",
-      "category",
-      "urgency",
-      "subject",
-      "message",
-      "reporter_name",
-      "app_version",
-      "platform",
-      "status",
-      "client_created_at",
-      "received_at",
-      "updated_at",
-    ],
-    key: ["id"],
-    numeric: [],
-  },
-  {
-    name: "support_rate_limit_buckets",
-    columns: ["license_id", "installation_id", "window_start", "request_count"],
-    key: ["license_id", "installation_id", "window_start"],
-    numeric: ["request_count"],
   },
 ];
 
@@ -259,7 +146,7 @@ async function assertLedgerSchema(handle: DatabaseHandle, role: string): Promise
     if (missing.length > 0) {
       throw new Error(
         `The ${role} database is on an older schema: ${table.name} is missing ` +
-          `${missing.join(", ")}. Start the service against it once so migrations run, then retry.`,
+          `${missing.join(", ")}. Use a current v1 source database.`,
       );
     }
   }

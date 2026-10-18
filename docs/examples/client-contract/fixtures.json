@@ -1,0 +1,165 @@
+{
+  "testOnly": true,
+  "context": {
+    "productId": "fixture-product",
+    "installationId": "11111111-1111-4111-8111-111111111111",
+    "now": 1893499200000
+  },
+  "publicKeys": {
+    "test-only-v1": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAdyyKRCt9sG4WbPvBzLy83m8+unak6Y7z/8UZUCI31u8=\n-----END PUBLIC KEY-----\n"
+  },
+  "samples": [
+    {
+      "name": "paid-import-license",
+      "payload": {
+        "iss": "default",
+        "productId": "fixture-product",
+        "kid": "test-only-v1",
+        "installationId": "11111111-1111-4111-8111-111111111111",
+        "issuedAt": "2030-01-01T00:00:00.000Z",
+        "expiresAt": null,
+        "kind": "license",
+        "v": 1,
+        "licenseId": "fixture-license",
+        "plan": "standard",
+        "entitlements": {
+          "imports": 50000
+        },
+        "issuedTo": "Test studio",
+        "subject": {
+          "kind": "installation",
+          "id": "11111111-1111-4111-8111-111111111111"
+        },
+        "offlineGraceUntil": "2030-01-31T00:00:00.000Z",
+        "status": "active",
+        "accountId": "fixture-account",
+        "authorizationRevision": 2,
+        "paidImportsGranted": 50000,
+        "recoveryGeneration": 0,
+        "trialConverted": true
+      },
+      "token": "eyJpc3MiOiJkZWZhdWx0IiwicHJvZHVjdElkIjoiZml4dHVyZS1wcm9kdWN0Iiwia2lkIjoidGVzdC1vbmx5LXYxIiwiaW5zdGFsbGF0aW9uSWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJpc3N1ZWRBdCI6IjIwMzAtMDEtMDFUMDA6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6bnVsbCwia2luZCI6ImxpY2Vuc2UiLCJ2IjoxLCJsaWNlbnNlSWQiOiJmaXh0dXJlLWxpY2Vuc2UiLCJwbGFuIjoic3RhbmRhcmQiLCJlbnRpdGxlbWVudHMiOnsiaW1wb3J0cyI6NTAwMDB9LCJpc3N1ZWRUbyI6IlRlc3Qgc3R1ZGlvIiwic3ViamVjdCI6eyJraW5kIjoiaW5zdGFsbGF0aW9uIiwiaWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEifSwib2ZmbGluZUdyYWNlVW50aWwiOiIyMDMwLTAxLTMxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOiJhY3RpdmUiLCJhY2NvdW50SWQiOiJmaXh0dXJlLWFjY291bnQiLCJhdXRob3JpemF0aW9uUmV2aXNpb24iOjIsInBhaWRJbXBvcnRzR3JhbnRlZCI6NTAwMDAsInJlY292ZXJ5R2VuZXJhdGlvbiI6MCwidHJpYWxDb252ZXJ0ZWQiOnRydWV9.Qp8XFw7vQq28klrnlxchAXzIO0TQaRlW0InD4r1-iI7oEnhii5UrdQHgz7eMbeoF14qAhPQyt-1j_EMYhIV_Cw"
+    },
+    {
+      "name": "ordinary-license",
+      "payload": {
+        "iss": "default",
+        "productId": "fixture-product",
+        "kid": "test-only-v1",
+        "installationId": "11111111-1111-4111-8111-111111111111",
+        "issuedAt": "2030-01-01T00:00:00.000Z",
+        "expiresAt": null,
+        "kind": "license",
+        "v": 1,
+        "licenseId": "fixture-license",
+        "plan": "standard",
+        "entitlements": {
+          "imports": 50000
+        },
+        "issuedTo": "Test studio",
+        "subject": {
+          "kind": "installation",
+          "id": "11111111-1111-4111-8111-111111111111"
+        },
+        "offlineGraceUntil": "2030-01-31T00:00:00.000Z",
+        "status": "active",
+        "accountId": null,
+        "authorizationRevision": 2,
+        "paidImportsGranted": null,
+        "recoveryGeneration": 0,
+        "trialConverted": true
+      },
+      "token": "eyJpc3MiOiJkZWZhdWx0IiwicHJvZHVjdElkIjoiZml4dHVyZS1wcm9kdWN0Iiwia2lkIjoidGVzdC1vbmx5LXYxIiwiaW5zdGFsbGF0aW9uSWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJpc3N1ZWRBdCI6IjIwMzAtMDEtMDFUMDA6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6bnVsbCwia2luZCI6ImxpY2Vuc2UiLCJ2IjoxLCJsaWNlbnNlSWQiOiJmaXh0dXJlLWxpY2Vuc2UiLCJwbGFuIjoic3RhbmRhcmQiLCJlbnRpdGxlbWVudHMiOnsiaW1wb3J0cyI6NTAwMDB9LCJpc3N1ZWRUbyI6IlRlc3Qgc3R1ZGlvIiwic3ViamVjdCI6eyJraW5kIjoiaW5zdGFsbGF0aW9uIiwiaWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEifSwib2ZmbGluZUdyYWNlVW50aWwiOiIyMDMwLTAxLTMxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOiJhY3RpdmUiLCJhY2NvdW50SWQiOm51bGwsImF1dGhvcml6YXRpb25SZXZpc2lvbiI6MiwicGFpZEltcG9ydHNHcmFudGVkIjpudWxsLCJyZWNvdmVyeUdlbmVyYXRpb24iOjAsInRyaWFsQ29udmVydGVkIjp0cnVlfQ.lPwxbe0LD0jhRnhNRKPG2E4aVl-WVCzexaOTQ5PllUfEEr0I8XseS3LQkxEUU42fWA7ynI8zZc8ROkYiNC1MDQ"
+    },
+    {
+      "name": "revoked-license",
+      "payload": {
+        "iss": "default",
+        "productId": "fixture-product",
+        "kid": "test-only-v1",
+        "installationId": "11111111-1111-4111-8111-111111111111",
+        "issuedAt": "2030-01-01T00:00:00.000Z",
+        "expiresAt": null,
+        "kind": "license",
+        "v": 1,
+        "licenseId": "fixture-license",
+        "plan": "standard",
+        "entitlements": {
+          "imports": 50000
+        },
+        "issuedTo": "Test studio",
+        "subject": {
+          "kind": "installation",
+          "id": "11111111-1111-4111-8111-111111111111"
+        },
+        "offlineGraceUntil": "2030-01-31T00:00:00.000Z",
+        "status": "revoked",
+        "accountId": "fixture-account",
+        "authorizationRevision": 2,
+        "paidImportsGranted": 50000,
+        "recoveryGeneration": 0,
+        "trialConverted": true
+      },
+      "token": "eyJpc3MiOiJkZWZhdWx0IiwicHJvZHVjdElkIjoiZml4dHVyZS1wcm9kdWN0Iiwia2lkIjoidGVzdC1vbmx5LXYxIiwiaW5zdGFsbGF0aW9uSWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJpc3N1ZWRBdCI6IjIwMzAtMDEtMDFUMDA6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6bnVsbCwia2luZCI6ImxpY2Vuc2UiLCJ2IjoxLCJsaWNlbnNlSWQiOiJmaXh0dXJlLWxpY2Vuc2UiLCJwbGFuIjoic3RhbmRhcmQiLCJlbnRpdGxlbWVudHMiOnsiaW1wb3J0cyI6NTAwMDB9LCJpc3N1ZWRUbyI6IlRlc3Qgc3R1ZGlvIiwic3ViamVjdCI6eyJraW5kIjoiaW5zdGFsbGF0aW9uIiwiaWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEifSwib2ZmbGluZUdyYWNlVW50aWwiOiIyMDMwLTAxLTMxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOiJyZXZva2VkIiwiYWNjb3VudElkIjoiZml4dHVyZS1hY2NvdW50IiwiYXV0aG9yaXphdGlvblJldmlzaW9uIjoyLCJwYWlkSW1wb3J0c0dyYW50ZWQiOjUwMDAwLCJyZWNvdmVyeUdlbmVyYXRpb24iOjAsInRyaWFsQ29udmVydGVkIjp0cnVlfQ.qT8_F0F6Vof0PBpCEh_ZhAl-OEgU2yaUdl5WHebfgorpmXCUTF-Os3DQFsWj7s11PibrYFl853EYcZ5wseGHDw"
+    },
+    {
+      "name": "trial",
+      "payload": {
+        "iss": "default",
+        "productId": "fixture-product",
+        "kid": "test-only-v1",
+        "installationId": "11111111-1111-4111-8111-111111111111",
+        "issuedAt": "2030-01-01T00:00:00.000Z",
+        "expiresAt": null,
+        "kind": "trial",
+        "v": 1,
+        "verdict": "fresh",
+        "allowance": 20000,
+        "supportReference": null,
+        "converted": false
+      },
+      "token": "eyJpc3MiOiJkZWZhdWx0IiwicHJvZHVjdElkIjoiZml4dHVyZS1wcm9kdWN0Iiwia2lkIjoidGVzdC1vbmx5LXYxIiwiaW5zdGFsbGF0aW9uSWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJpc3N1ZWRBdCI6IjIwMzAtMDEtMDFUMDA6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6bnVsbCwia2luZCI6InRyaWFsIiwidiI6MSwidmVyZGljdCI6ImZyZXNoIiwiYWxsb3dhbmNlIjoyMDAwMCwic3VwcG9ydFJlZmVyZW5jZSI6bnVsbCwiY29udmVydGVkIjpmYWxzZX0.aiDty9lSZw-31y45Qg-YSDOJ2NKQutRWulYHDDuNPkY8_iP8JITIyvbbSlWiBy1LB_hU-CfrT4-XEgtFlHZfBw"
+    },
+    {
+      "name": "converted-trial",
+      "payload": {
+        "iss": "default",
+        "productId": "fixture-product",
+        "kid": "test-only-v1",
+        "installationId": "11111111-1111-4111-8111-111111111111",
+        "issuedAt": "2030-01-01T00:00:00.000Z",
+        "expiresAt": null,
+        "kind": "trial",
+        "v": 1,
+        "verdict": "spent",
+        "allowance": 0,
+        "supportReference": null,
+        "converted": true
+      },
+      "token": "eyJpc3MiOiJkZWZhdWx0IiwicHJvZHVjdElkIjoiZml4dHVyZS1wcm9kdWN0Iiwia2lkIjoidGVzdC1vbmx5LXYxIiwiaW5zdGFsbGF0aW9uSWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJpc3N1ZWRBdCI6IjIwMzAtMDEtMDFUMDA6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6bnVsbCwia2luZCI6InRyaWFsIiwidiI6MSwidmVyZGljdCI6InNwZW50IiwiYWxsb3dhbmNlIjowLCJzdXBwb3J0UmVmZXJlbmNlIjpudWxsLCJjb252ZXJ0ZWQiOnRydWV9.GF4Th1dRvOcWASH-FTmDinALVpdh9QMhbQImJlQKOgiAnre2S4VQnACGzQlNsQxvTBT3UoYI_z27O_WwmUckCw"
+    },
+    {
+      "name": "usage-recovery",
+      "payload": {
+        "iss": "default",
+        "productId": "fixture-product",
+        "kid": "test-only-v1",
+        "installationId": "11111111-1111-4111-8111-111111111111",
+        "issuedAt": "2030-01-01T00:00:00.000Z",
+        "expiresAt": "2030-01-02T00:00:00.000Z",
+        "v": 1,
+        "kind": "usage-recovery",
+        "recoveryId": "22222222-2222-4222-8222-222222222222",
+        "accountId": "fixture-account",
+        "challenge": "ERERERERERERERERERERERERERERERERERERERERERE",
+        "mode": "lost_history",
+        "usageDigest": null,
+        "paidImportsFloor": 50000,
+        "trialImportsFloor": 20000,
+        "recoveryGeneration": 1,
+        "authorizationRevision": 3
+      },
+      "token": "eyJpc3MiOiJkZWZhdWx0IiwicHJvZHVjdElkIjoiZml4dHVyZS1wcm9kdWN0Iiwia2lkIjoidGVzdC1vbmx5LXYxIiwiaW5zdGFsbGF0aW9uSWQiOiIxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJpc3N1ZWRBdCI6IjIwMzAtMDEtMDFUMDA6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6IjIwMzAtMDEtMDJUMDA6MDA6MDAuMDAwWiIsInYiOjEsImtpbmQiOiJ1c2FnZS1yZWNvdmVyeSIsInJlY292ZXJ5SWQiOiIyMjIyMjIyMi0yMjIyLTQyMjItODIyMi0yMjIyMjIyMjIyMjIiLCJhY2NvdW50SWQiOiJmaXh0dXJlLWFjY291bnQiLCJjaGFsbGVuZ2UiOiJFUkVSRVJFUkVSRVJFUkVSRVJFUkVSRVJFUkVSRVJFUkVSRVJFUkVSRVJFIiwibW9kZSI6Imxvc3RfaGlzdG9yeSIsInVzYWdlRGlnZXN0IjpudWxsLCJwYWlkSW1wb3J0c0Zsb29yIjo1MDAwMCwidHJpYWxJbXBvcnRzRmxvb3IiOjIwMDAwLCJyZWNvdmVyeUdlbmVyYXRpb24iOjEsImF1dGhvcml6YXRpb25SZXZpc2lvbiI6M30.Dv_UuaG8JMVKoeYrFpBtnFaXUNMtf8Yl4q76wEFrQwrncHaVW7GXbQsrVQrRsbONelo9zePcWTnAtObghc3vDg"
+    }
+  ]
+}

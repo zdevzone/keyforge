@@ -122,14 +122,14 @@ export const docCatalog: DocEntry[] = [
     title: "Windows adapter reference",
     group: "Build an integration",
     source: "docs/windows-device-identity.md",
-    description: "Windows sources, normalization and compatibility vectors.",
+    description: "Windows sources, normalization and v1 vectors.",
   },
   {
     slug: "verify-token",
     title: "Token verification",
     group: "Build an integration",
     source: "docs/verify-token.md",
-    description: "Ed25519 license v4 and trial v2 verification for any language.",
+    description: "Ed25519 license, trial and recovery v1 verification for any language.",
   },
   {
     slug: "dependent-app-ai-context",

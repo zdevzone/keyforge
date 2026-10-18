@@ -104,11 +104,6 @@ export function registerNotifications(
         .filter((v) => v.owner === owner)
         .map((v) => [v.eventId, v]),
     );
-    const reads = new Set(
-      (await records.list<any>(s, "notification_read"))
-        .filter((v) => v.owner === owner)
-        .map((v) => v.eventId),
-    );
     return {
       items: existing
         .filter((n) => n.owner === owner && !states.get(n.eventId)?.deleted)
@@ -120,7 +115,7 @@ export function registerNotifications(
           href: n.href,
           date: n.date,
           createdAt: n.createdAt,
-          read: states.get(n.eventId)?.read ?? reads.has(n.eventId),
+          read: states.get(n.eventId)?.read ?? false,
         }))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
       preferences: { ...defaults, ...preference },

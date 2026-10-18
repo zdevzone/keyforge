@@ -2,7 +2,7 @@
 
 Admins use **Settings → Backups** to configure destinations, enable independent daily UTC schedules, run **Back up now**, download archives, inspect upload results and verify recovery. All features are available in the self-hosted open-source server. The backup API and console require admin access.
 
-On Vercel, follow [the serverless deployment and recovery guide](vercel.md). That mode requires durable remote archives, supports private Vercel Blob configured in Settings (or imported once from `BLOB_READ_WRITE_TOKEN`), uses portable PostgreSQL archives, and replaces the continuous worker with authenticated hosted invocations. Local-only/custom upload-only destinations are disabled. Native-tool and persistent-directory instructions below describe persistent-server mode.
+On Vercel, follow [the serverless deployment and recovery guide](vercel.md). That mode requires durable remote archives, supports private Vercel Blob configured in Settings, uses portable PostgreSQL archives, and replaces the continuous worker with authenticated hosted invocations. Local-only/custom upload-only destinations are disabled. Native-tool and persistent-directory instructions below describe persistent-server mode.
 
 ## Bring your own storage (BYOC)
 
@@ -10,11 +10,11 @@ Use **Configure storage** in Settings → Backups for private Vercel Blob, S3, R
 
 Provider settings are stored as versioned, authenticated ciphertext in the application database, using the external **data** keyring. Jobs pin the credential version used when created; later edits do not retarget older archives. Retain old credentials at the provider while those archives are needed. The **backup** keyring still encrypts archives and remains external, as do signing/authentication keys. Application reset retains storage configuration so its verified backup remains accessible. Keep independent recovery copies of provider credentials and keyrings: a completely unavailable database cannot supply its own recovery credentials.
 
-On upgrade, explicitly configured environment credentials are imported once, without overwriting existing database settings. This requires a data keyring. After an upload/download/delete test and archive verification, remove the imported variables and redeploy; future changes need no restart. Automatic cloud credential chains remain a compatibility fallback, and are not copied from temporary instance roles into the database.
+Configure provider credentials in Settings for durable, versioned jobs. Deployment-supplied provider defaults remain optional for operators using managed instance credentials; they are not imported into database settings. Jobs using those defaults depend on the deployment retaining them. There is no conversion of old jobs or schedules.
 
-Custom upload endpoints accept an optional complete authorization header value directly; it is encrypted in the database too. Legacy environment references remain accepted for existing installations. These endpoints still require a persistent local archive and are unavailable on ephemeral Vercel hosts.
+Custom upload endpoints accept a complete authorization header value, encrypted in the database. They require a persistent local archive and are unavailable on ephemeral Vercel hosts.
 
-## Legacy environment imports
+## Optional deployment defaults
 
 | Destination | Server configuration |
 | --- | --- |

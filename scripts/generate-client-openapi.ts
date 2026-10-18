@@ -10,8 +10,6 @@ import { supportRequestBodySchema } from "../src/support.js";
 import {
   licenseTokenSchema,
   trialTokenSchema,
-  importLicenseTokenSchema,
-  importTrialTokenSchema,
   recoveryTokenSchema,
 } from "../src/token-contract.js";
 
@@ -135,8 +133,6 @@ const supportProperties = supportBody.properties as Record<string, Schema>;
 const schemas: Record<string, Schema> = {
   LicenseToken: fromZod(licenseTokenSchema),
   TrialToken: fromZod(trialTokenSchema),
-  ImportLicenseToken: fromZod(importLicenseTokenSchema),
-  ImportTrialToken: fromZod(importTrialTokenSchema),
   UsageRecoveryToken: fromZod(recoveryTokenSchema),
   Error: object(
     { error: string(), message: string(), retryable: boolean, serverTime: timestamp },
@@ -153,7 +149,7 @@ const schemas: Record<string, Schema> = {
       userEmail: string({ maxLength: 200 }),
       machineSignals: {
         description:
-          "Legacy registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count.",
+          "Registration accepts any JSON and normalizes recognized kind/lowercase SHA-256 pairs, dropping invalid entries and duplicate pairs. Recommended clients send at most three typed signals; unlike backfill this route does not enforce that count.",
       },
     },
     ["installationId", "requestId"],
@@ -272,8 +268,9 @@ operation(
   object({
     ok: { const: true },
     serverTime: timestamp,
-    tokenVersions: object({ min: { const: 4 }, max: { const: 5 } }),
-    trialTokenVersions: object({ min: { const: 2 }, max: { const: 3 } }),
+    tokenVersions: object({ min: { const: 1 }, max: { const: 1 } }),
+    trialTokenVersions: object({ min: { const: 1 }, max: { const: 1 } }),
+    recoveryTokenVersions: object({ min: { const: 1 }, max: { const: 1 } }),
   }),
   undefined,
   200,
@@ -328,7 +325,7 @@ operation(
   "post",
   product + "/activate",
   "activateLicense",
-  "Online activation binds an installation seat and returns a signed v4 token. Repeating the same key/identity reuses the binding. Verify and atomically persist the grant before enabling features.",
+  "Online activation binds an installation seat and returns a signed v1 token. Repeating the same key/identity reuses the binding. Verify and atomically persist the grant before enabling features.",
   ref("TokenResponse"),
   ref("KeyOperation"),
 );
@@ -382,7 +379,7 @@ operation(
   "post",
   installation + "/recovery-requests/{id}/claim",
   "claimUsageRecovery",
-  "Claims an approved, unexpired recovery once on the server. Exact retries are safe while the generation remains current. Verify the separate recovery signature, challenge, account, generation and candidate commitment before atomically adopting it with the v5 license. Approval expires after 24 hours.",
+  "Claims an approved, unexpired recovery once on the server. Exact retries are safe while the generation remains current. Verify the separate recovery signature, challenge, account, generation and candidate commitment before atomically adopting it with the v1 license. Approval expires after 24 hours.",
   object({ recoveryToken: string(), token: string(), serverTime: timestamp }),
 );
 operation(
@@ -521,7 +518,7 @@ export const clientOpenApi = {
     title: "KeyForge dependent-app API",
     version: "1.0.0",
     description:
-      "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License v4 and trial v2 payloads are documented in components. Import policy opt-in adds license v5, trial v3 and separate usage-recovery v1; legacy v4/v2 remain supported. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded.",
+      "Current product-scoped API. Tokens are two base64url segments (not JWTs); Ed25519 signs the decoded UTF-8 JSON bytes. License, trial and separate usage-recovery payloads use only v1. Import-account fields are explicitly nullable for products without import quotas; no older token format is accepted. Full contextual, time and status checks are required. Private/admin routes are deliberately excluded.",
   },
   servers: [
     {

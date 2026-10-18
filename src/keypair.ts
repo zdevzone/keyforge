@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
  * defers every possible mistake to the first customer activation: a key that is
  * RSA rather than Ed25519, a *public* key pasted where the private one belongs,
  * or newlines mangled by a dashboard's env editor all load without complaint and
- * then throw inside `signLicenseToken`. The service answers health checks the
+ * then throw during token signing. The service answers health checks the
  * whole time. This module turns all of that into a startup failure with a
  * sentence attached.
  *

@@ -1,6 +1,5 @@
 # Integrate a dependent product or service
 
-For opt-in additive import licensing, read [the import-account contract](import-licensing.md). It adds v5 paid grants, v3 trials, atomic usage storage and a separate approved recovery artifact, while retaining v4/v2 behavior for existing licenses. Enabling it is an explicit operator migration, not an automatic change to deployed products.
 
 Keyforge supplies authorization data. Your application verifies it and enforces your product's features. The open-source server belongs to one company, with an independent catalog, signing keys, installations and licenses for each product.
 
@@ -34,7 +33,7 @@ Content-Type: application/json
 
 The first registration pins the credential hash. Later calls must prove the same identity; an installation ID alone is not authentication. Exact retries reuse the same body/request ID and return the saved response. Reusing an ID with different content returns 409.
 
-Optional `machineSignals` are scoped SHA-256 hashes with kinds `machine-guid`, `smbios-uuid`, `volume-serial`, `linux-machine-id`, `macos-platform-uuid` and `root-volume-uuid`; send at most three current signals and never raw hardware identifiers. Follow the [normalization and hashing contract](device-identity.md). Two agreeing distinct kinds are required for machine matching; common identifiers are excluded from evidence. Signals are anti-abuse hints that a modified client can forge, not proof of physical identity. A matching machine is spent after its first trial registration; support can clear it for one additional registration. When trial policy is enabled, registration returns a signed trial v2 token. Persist the first valid grant; do not manufacture a new trial on refresh or reinstall.
+Optional `machineSignals` are scoped SHA-256 hashes with kinds `machine-guid`, `smbios-uuid`, `volume-serial`, `linux-machine-id`, `macos-platform-uuid` and `root-volume-uuid`; send at most three current signals and never raw hardware identifiers. Follow the [normalization and hashing contract](device-identity.md). Two agreeing distinct kinds are required for machine matching; common identifiers are excluded from evidence. Signals are anti-abuse hints that a modified client can forge, not proof of physical identity. A matching machine is spent after its first trial registration; support can clear it for one additional registration. When trial policy is enabled, registration returns a signed trial v1 token. Persist the first valid grant; do not manufacture a new trial on refresh or reinstall.
 
 Old migrated installation IDs have no credential and cannot be claimed. Use a new ID. Lost credentials require a new registration and operator-assisted seat recovery.
 

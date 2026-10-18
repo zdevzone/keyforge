@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,19 +37,7 @@ const ADMIN = "test-admin-token";
 const { privateKey } = generateSigningKeyPair();
 const auth = { authorization: `Bearer ${ADMIN}` };
 
-const LEDGER = [
-  "platform_records",
-  "platform_lock",
-  "licenses",
-  "installations",
-  "activations",
-  "machine_groups",
-  "machine_signals",
-  "machine_installations",
-  "audit_log",
-  "support_requests",
-  "support_rate_limit_buckets",
-] as const;
+const LEDGER = ["platform_records", "platform_lock", "audit_log"] as const;
 
 function tempDir(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), "keyforge-replica-"));
@@ -60,57 +48,6 @@ function tempDir(t: TestContext): string {
 /** A ledger with something in every table, produced the way a vendor would. */
 async function seed(sqlitePath: string): Promise<void> {
   const database = await LicenseDatabase.open({ sqlitePath });
-  // Historical tables must survive upgrades and database copies too.
-  const first = await database.createLicense({
-    plan: "standard",
-    activationLimit: 2,
-    entitlements: { seats: 3 },
-  });
-  for (const installationId of ["machine-1", "machine-2"]) {
-    await database.registerInstallation({ installationId, appVersion: "1.4.0", platform: "linux" });
-    await database.recordTrialRegistration({
-      installationId,
-      machineSignals: [
-        {
-          kind: "machine-guid",
-          hash: createHash("sha256")
-            .update("guid-" + installationId)
-            .digest("hex"),
-        },
-        {
-          kind: "smbios-uuid",
-          hash: createHash("sha256")
-            .update("bios-" + installationId)
-            .digest("hex"),
-        },
-      ],
-    });
-    await database.bindActivation(first.license.id, installationId);
-    await database.linkInstallationToLicense(installationId, first.license.id);
-  }
-  await database.ingestSupportRequest({
-    licenseId: first.license.id,
-    installationId: "machine-1",
-    request: {
-      clientRequestId: randomUUID(),
-      category: "technical",
-      urgency: "normal",
-      subject: "Historical support",
-      message: "Retain this request across a database copy.",
-      reporterName: null,
-      appVersion: null,
-      platform: null,
-      clientCreatedAt: new Date().toISOString(),
-    },
-    now: new Date(),
-    maxRequests: 5,
-    windowMs: 3600000,
-  });
-  await database.appendAudit({
-    actor: "fixture",
-    action: "legacy.seed",
-    licenseId: first.license.id,
-  });
   const app = await buildLicenseApp({
     database,
     privateKey,
@@ -139,6 +76,11 @@ async function seed(sqlitePath: string): Promise<void> {
       },
     });
     assert.equal(response.statusCode, 201, response.body);
+    await database.appendAudit({
+      actor: "fixture",
+      action: "license.issue",
+      licenseId: response.json().license.id,
+    });
   } finally {
     await app.close();
     await database.close();
@@ -293,14 +235,6 @@ test("a destination that already holds data is not overwritten by accident", asy
   // With --replace it becomes the source exactly: no leftovers, no orphans.
   await copyLedger({ from: resolveTarget(other), to: resolveTarget(standby), replace: true });
   assert.deepEqual(await dump(standby), await dump(other));
-  const orphans = await dump(standby);
-  const ids = new Set(orphans.licenses.map((row) => (row as { id: string }).id));
-  for (const row of orphans.activations) {
-    assert.ok(
-      ids.has((row as { license_id: string }).license_id),
-      "no activation may outlive its license",
-    );
-  }
 });
 
 /**
@@ -353,25 +287,27 @@ test("verify names what differs instead of just failing", async (t) => {
 
   // One edited row — the case a row count alone would call identical.
   const handle = connectDatabase(resolveTarget(standby));
-  await sql`UPDATE licenses SET issued_to = 'Someone Else'`.execute(handle.db);
+  await sql`UPDATE platform_records SET data = replace(data, 'Ada Lovelace', 'Someone Else') WHERE kind = 'license'`.execute(
+    handle.db,
+  );
   await handle.close();
 
   const result = await verifyLedger({ from: resolveTarget(origin), to: resolveTarget(standby) });
   assert.equal(result.match, false);
-  const licenses = result.tables.find((verdict) => verdict.table === "licenses");
+  const licenses = result.tables.find((verdict) => verdict.table === "platform_records");
   assert.equal(licenses?.match, false);
   assert.equal(licenses?.from, licenses?.to, "counts match; only the contents differ");
-  assert.match(String(licenses?.difference), /issued_to/);
+  assert.match(String(licenses?.difference), /data/);
   // The other tables are untouched and must not be reported as suspect.
   assert.equal(result.tables.find((verdict) => verdict.table === "audit_log")?.match, true);
 
   // A missing row is located too.
   const second = connectDatabase(resolveTarget(standby));
-  await sql`DELETE FROM activations`.execute(second.db);
+  await sql`DELETE FROM platform_records WHERE kind = 'license'`.execute(second.db);
   await second.close();
   const after = await verifyLedger({ from: resolveTarget(origin), to: resolveTarget(standby) });
   assert.match(
-    String(after.tables.find((verdict) => verdict.table === "activations")?.difference),
+    String(after.tables.find((verdict) => verdict.table === "platform_records")?.difference),
     /missing from the destination/,
   );
 });

@@ -45,7 +45,6 @@ interface Current extends RecordValue {
 
 /** Provider secrets are encrypted with the external data key, never returned to the console. */
 export class BackupStorage {
-  private migrated = false;
   constructor(
     private platform: Platform,
     private initial: StorageOptions,
@@ -89,41 +88,6 @@ export class BackupStorage {
     });
     await r.put<Current>(WORKSPACE, "backup-storage-current", { id: provider, version: id });
     return id;
-  }
-  async migrate() {
-    if (this.migrated || !this.platform.vault.ring) return;
-    await atomic(this.platform.options.database, async (r) => {
-      for (const provider of storageProvider.options) {
-        if (await r.get(WORKSPACE, "backup-storage-current", provider)) continue;
-        const config = this.initial[provider];
-        if (
-          !config ||
-          ("token" in config
-            ? !config.token
-            : !config.bucket ||
-              !config.credentials?.accessKeyId ||
-              !config.credentials.secretAccessKey)
-        )
-          continue;
-        const value: Settings =
-          "token" in config
-            ? { token: config.token }
-            : {
-                bucket: config.bucket,
-                region: config.region,
-                endpoint: config.endpoint,
-                ...config.credentials,
-              };
-        const version = await this.store(r, provider, value, 0);
-        // Pin archives made before this migration to their original destination credentials.
-        for (const job of await r.list<
-          RecordValue & { destination?: string; storageVersion?: string }
-        >(WORKSPACE, "backup"))
-          if (job.destination === provider && !job.storageVersion)
-            await r.put(WORKSPACE, "backup", { ...job, storageVersion: version });
-      }
-    });
-    this.migrated = true;
   }
   async version(provider: string, records = this.platform.records) {
     return (await records.get<Current>(WORKSPACE, "backup-storage-current", provider))?.version;

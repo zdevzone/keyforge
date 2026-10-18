@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
+
+import type { z } from "zod";
 
 import {
   describeSigningKey,
@@ -8,7 +10,13 @@ import {
   resolveSigningKey,
   verifyLicenseToken,
 } from "../src/keypair.js";
-import { generateSigningKeyPair, signLicenseToken, type LicenseTokenV2 } from "../src/sign.js";
+import { generateSigningKeyPair } from "../src/sign.js";
+import type { licenseTokenSchema } from "../src/token-contract.js";
+type LicenseTokenPayload = z.infer<typeof licenseTokenSchema>;
+function signLicenseToken(payload: LicenseTokenPayload, key: string) {
+  const bytes = Buffer.from(JSON.stringify(payload));
+  return bytes.toString("base64url") + "." + sign(null, bytes, key).toString("base64url");
+}
 
 /**
  * The signing key, and the ways it goes wrong.
@@ -21,10 +29,19 @@ import { generateSigningKeyPair, signLicenseToken, type LicenseTokenV2 } from ".
 
 const ed = generateSigningKeyPair();
 
-/** A v2 token, which is the version that carries both a kid and entitlements. */
-function payload(overrides: Partial<LicenseTokenV2> = {}): LicenseTokenV2 {
+/** Current v1 token with explicit product/subject and authorization context. */
+function payload(overrides: Partial<LicenseTokenPayload> = {}): LicenseTokenPayload {
   return {
-    v: 2,
+    v: 1,
+    kind: "license",
+    iss: "default",
+    productId: "default",
+    subject: { kind: "installation", id: "5f3a" },
+    accountId: null,
+    authorizationRevision: 1,
+    paidImportsGranted: null,
+    recoveryGeneration: 0,
+    trialConverted: true,
     kid: "test-key",
     licenseId: "9c1e4d2a",
     plan: "pro",
@@ -100,7 +117,7 @@ test("a token verifies against its own key and against no other", () => {
 
   const mine = verifyLicenseToken(token, info.publicKeyPem);
   assert.equal(mine.valid, true);
-  assert.deepEqual((mine.payload as LicenseTokenV2).entitlements, { seats: 5 });
+  assert.deepEqual((mine.payload as LicenseTokenPayload).entitlements, { seats: 5 });
 
   const theirs = verifyLicenseToken(token, generateSigningKeyPair().publicKey);
   assert.equal(theirs.valid, false);
@@ -118,7 +135,7 @@ test("a tampered payload does not verify, even though it still decodes", () => {
   ).toString("base64url");
   const result = verifyLicenseToken(`${forged}.${signature}`, ed.publicKey);
   assert.equal(result.valid, false);
-  assert.deepEqual((result.payload as LicenseTokenV2).entitlements, { seats: 5000 });
+  assert.deepEqual((result.payload as LicenseTokenPayload).entitlements, { seats: 5000 });
 });
 
 test("malformed tokens are reported as answers, not thrown as errors", () => {

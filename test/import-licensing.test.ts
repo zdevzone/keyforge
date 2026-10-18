@@ -142,7 +142,7 @@ test("additive purchases, paid/trial separation, rollover, idempotency, payment 
     client = new KeyForgeClient(h.options(storage));
   const trial = await client.startTrial();
   assert.equal(trial.state, "trial");
-  if (trial.state === "trial") assert.equal(trial.token.v, 3);
+  if (trial.state === "trial") assert.equal(trial.token.v, 1);
   const trialEvent = randomUUID();
   await client.consumeImport(trialEvent, 12000);
   assert.equal((await client.consumeImport(trialEvent, 12000)).recorded, false);
@@ -366,11 +366,10 @@ test("signed ordering rejects downgrade and conflicting same-revision grants; cr
   );
   for (const outcome of outcomes)
     if (outcome.status === "rejected") assert.equal(outcome.reason.code, "storage_conflict");
-  const noCAS = { load: () => storage.load(), save: (s: any) => storage.save(s) };
-  await assert.rejects(
-    () => new KeyForgeClient(h.options(storage, { storage: noCAS })).consumeImport(randomUUID()),
-    { code: "atomic_storage_required" },
-  );
+  const noCAS = { load: () => storage.load() } as any;
+  assert.throws(() => new KeyForgeClient(h.options(storage, { storage: noCAS })), {
+    code: "invalid_configuration",
+  });
   const context = {
     ...h.options(storage),
     installationId: (await storage.load())!.installationId,
@@ -403,60 +402,12 @@ test("new identities cannot claim old import accounts; renewal rollback and revo
   const other = new KeyForgeClient(h.options());
   await assert.rejects(() => other.activate(issued.key), { code: "recovery_required" });
   const state = new MemoryStorage(),
-    legacyClient = new KeyForgeClient(h.options(state));
-  await legacyClient.register();
+    freshClient = new KeyForgeClient(h.options(state));
+  await freshClient.register();
   const stored = (await state.load())!;
-  delete stored.importUsage;
+  delete (stored as any).importUsage;
   await state.save(stored);
-  await assert.rejects(() => legacyClient.activate(issued.key), { code: "recovery_required" });
-});
-
-test("legacy adoption preserves finance and requires explicit verified local usage", async (t) => {
-  const h = await fixture(t),
-    issued = await h.issue(),
-    s = "product:default";
-  const { importAccountId: _account, ...legacy } = (await h.records.get<any>(
-    s,
-    "license",
-    issued.license.id,
-  ))!;
-  await h.records.put(s, "license", legacy);
-  const storage = new MemoryStorage(),
-    client = new KeyForgeClient(h.options(storage));
-  await client.activate(issued.key);
-  const state = (await storage.load())!;
-  delete state.importUsage;
-  await storage.save(state);
-  const before = await h.admin("GET", "/finance");
-  const grant = (await h.admin("GET", "/licenses/" + legacy.id)).license;
-  await h.admin("POST", "/licenses/" + legacy.id + "/import-account", {
-    requestId: randomUUID(),
-    revision: grant.revision,
-    granted: 50000,
-    reason: "Reconciled existing allowance without a new sale",
-  });
-  await assert.rejects(() => client.refresh(), { code: "usage_migration_required" });
-  assert.equal((await client.getAuthorization()).state, "reconnect_required");
-  await client.adoptLegacyImportUsage({
-    lifetimeImports: 12000,
-    paidConsumed: 12000,
-    trialConsumed: 0,
-    lifetimeKnown: true,
-  });
-  const migrated = await client.refresh();
-  assert.equal(migrated.state, "licensed");
-  if (migrated.state === "licensed") assert.equal(migrated.remainingImports, 38000);
-  assert.deepEqual((await h.admin("GET", "/finance")).sales, before.sales);
-  await assert.rejects(
-    () =>
-      client.adoptLegacyImportUsage({
-        lifetimeImports: 0,
-        paidConsumed: 0,
-        trialConsumed: 0,
-        lifetimeKnown: true,
-      }),
-    { code: "usage_already_initialized" },
-  );
+  await assert.rejects(() => freshClient.activate(issued.key), { code: "invalid_stored_state" });
 });
 
 test("altered recovery signatures and expired approvals cannot replace local usage", async (t) => {

@@ -14,7 +14,7 @@ import { LicenseDatabase } from "../src/db.js";
 import { Platform, WORKSPACE } from "../src/platform.js";
 import { generateSigningKeyPair } from "../src/sign.js";
 
-test("backup credentials migrate once, remain encrypted, preserve archive versions and verify without environment credentials", async (t) => {
+test("backup credentials are configured explicitly, remain encrypted, preserve archive versions and verify without environment credentials", async (t) => {
   const database = await LicenseDatabase.open({ sqlitePath: ":memory:" });
   t.after(() => database.close());
   const platform = new Platform({
@@ -43,10 +43,9 @@ test("backup credentials migrate once, remain encrypted, preserve archive versio
     },
   };
   const storage = new BackupStorage(platform, options);
-  await storage.migrate();
+  await storage.save("blob", { revision: 0, token: "old-private-provider-token" });
   const version = await storage.version("blob");
   assert.ok(version);
-  await storage.migrate();
   assert.equal(await storage.version("blob"), version);
   const before = await storage.metadata("blob");
   assert.equal(before.source, "database");
