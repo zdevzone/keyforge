@@ -195,7 +195,7 @@ try {
     } else {
       assert.ok(pkg.dependencies["@zdevzone/keyforge-client"]);
       await run("vp", ["run", "typecheck"], project, env);
-      await cp(join(project, ".env.example"), join(project, ".env"));
+      await cp(join(project, ".env.example"), join(project, ".env.local"));
       const demo = await run("vp", ["run", "demo"], project, env);
       assert.match(demo.stdout, /Authorization: unlicensed/);
       await writeFile(
