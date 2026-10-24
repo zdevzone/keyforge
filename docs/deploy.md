@@ -25,7 +25,7 @@ See [Vercel deployment](vercel.md) for a single project with `main` production a
 
 The Dockerfile builds with Vite+, installs only production dependencies into the runtime, includes compatible Postgres dump/restore tools, and starts the compiled Node server. Keep secrets outside the image. Build via docker build -t keyforge . or use docker compose up --build. Ports, volumes and secret mounts are infrastructure commands, not package-manager commands.
 
-The existing repository compose file keeps Postgres 16 on its latest supported patch to preserve existing major-version data compatibility. POSTGRES_IMAGE can override it only after a deliberate database upgrade. New scaffolds use a supported pinned major. Never switch a populated Postgres volume to another major image without pg_upgrade or dump/restore.
+The repository compose file and new scaffolds use Postgres 18 with a volume mounted at `/var/lib/postgresql`. The repository uses a new `keyforge-pgdata-v18` volume, leaving any old Postgres 16 volume untouched. To move data from an older volume, use `pg_upgrade` or dump/restore; changing the image alone does not migrate it.
 
 For SQLite, mount the ledger/auth directory, secrets and backup directory persistently. For Postgres, provide DATABASE_URL and a durable external database; local database paths are ignored. Mount key-ring files persistently in either case. Backup providers can run concurrently; configure S3, R2 and UploadThing credentials through server secrets, and custom upload URLs in the console. Keep LICENSE_BACKUP_DIR persistent (shared across replicas for custom-endpoint downloads). Each provider has an independent daily UTC schedule; see [backups](backups.md).
 

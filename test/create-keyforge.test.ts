@@ -167,8 +167,8 @@ test("generated env carries distinct real secrets, not placeholders", () => {
   assert.match(env, /^LICENSE_ADMIN_TOKEN="a{43}"$/m);
   assert.match(env, /^LICENSE_AUTH_SECRET="b{43}"$/m);
   // The signing key is never invented here — keygen has to write it.
-  assert.doesNotMatch(env, /^LICENSE_SIGNING_KEY=/m);
-  assert.match(env, /^LICENSE_SIGNING_KEY_FILE=/m);
+  assert.match(env, /^LICENSE_SIGNING_KEY=$/m);
+  assert.doesNotMatch(env, /^LICENSE_SIGNING_KEY_FILE=/m);
   assert.match(
     buildEnvLocal({
       productName: "Acme",
@@ -257,7 +257,7 @@ test("scaffolds a working project from a local template", async (t) => {
   assert.deepEqual(config.auth.admin, ["operators", "sessions", "bans"]);
   assert.equal(config.licenses.defaultPlan, "monthly");
 
-  const env = await readFile(join(directory, ".env.local"), "utf8");
+  const env = await readFile(join(directory, ".env"), "utf8");
   const adminToken = env.match(/^LICENSE_ADMIN_TOKEN="(.+)"$/m)?.[1] ?? "";
   const authSecret = env.match(/^LICENSE_AUTH_SECRET="(.+)"$/m)?.[1] ?? "";
   assert.ok(adminToken.length >= 32, "admin token should be long");
@@ -333,7 +333,7 @@ test("scaffolds a working project from a local template", async (t) => {
     run("git", ["check-ignore", "--quiet", ".env.example"], { cwd: directory }),
     ".env.example is meant to be committed",
   );
-  await run("git", ["check-ignore", "--quiet", ".env.local"], { cwd: directory });
+  await run("git", ["check-ignore", "--quiet", ".env"], { cwd: directory });
 });
 
 test("refuses to overwrite a directory that already has files", async (t) => {
@@ -739,11 +739,17 @@ test("the generated compose file is one Compose accepts", async (t) => {
       join(directory, "docker-compose.yml"),
       platformFiles(answers)["docker-compose.yml"],
     );
-    await run("docker", ["compose", "config"], {
+    const { stdout } = await run("docker", ["compose", "config", "--format", "json"], {
       cwd: directory,
       // LICENSE_SIGNING_KEY is declared required (:?); supply anything.
-      env: { ...process.env, LICENSE_SIGNING_KEY: "test-key" },
+      env: { ...process.env, LICENSE_SIGNING_KEY: "test-key", POSTGRES_PORT: "5433" },
     });
+    const config = JSON.parse(stdout);
+    assert.equal(config.services["acme-licensing"].ports[0].published, "4100");
+    if (database === "postgres") {
+      assert.equal(config.services.postgres.ports[0].published, "5433");
+      assert.match(config.services["acme-licensing"].environment.DATABASE_URL, /sslmode=disable$/);
+    }
   }
 });
 

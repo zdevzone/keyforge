@@ -21,7 +21,7 @@ const cleanEnv = Object.fromEntries(
 test("environment updates preserve Windows paths, comments and unrelated settings without duplicate keys", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "keyforge-env-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  const file = join(cwd, ".env.local");
+  const file = join(cwd, ".env");
   await writeFile(
     file,
     "# Existing settings\nLICENSE_SIGNING_KEY_FILE=old\nLICENSE_SIGNING_KEY_FILE=duplicate\nUNRELATED=keep\nconstructor=keep-too\n",
@@ -46,16 +46,16 @@ test("fresh secret setup writes a complete local environment and never rotates e
       stdio: ["pipe", "pipe", "pipe"],
     });
   const output = run();
-  const path = join(cwd, ".env.local");
+  const path = join(cwd, ".env");
   const source = await readFile(path, "utf8"),
     values = parseEnv(source);
   for (const key of ["LICENSE_AUTH_SECRET", "LICENSE_ADMIN_TOKEN", "CRON_SECRET"]) {
     assert.equal(values[key]!.length, 64);
     assert.equal(output.includes(values[key]!), false);
   }
-  const privateKey = await readFile(join(cwd, values.LICENSE_SIGNING_KEY_FILE!));
+  const privateKey = values.LICENSE_SIGNING_KEY!.replaceAll("\\n", "\n");
   assert.equal(createPublicKey(privateKey).asymmetricKeyType, "ed25519");
-  assert.equal(values.LICENSE_SIGNING_KEY_FILE!, "./secrets/license-signing.key");
+  assert.equal(values.LICENSE_SIGNING_KEY_FILE, undefined);
   const data = await readFile(join(cwd, values.LICENSE_DATA_KEYRING_FILE!), "utf8");
   assert.notEqual(data, await readFile(join(cwd, values.LICENSE_BACKUP_KEYRING_FILE!), "utf8"));
   const refused = spawnSync(process.execPath, ["--", init], {
@@ -68,16 +68,16 @@ test("fresh secret setup writes a complete local environment and never rotates e
   assert.equal(await readFile(path, "utf8"), source);
   run("--yes");
   assert.equal(await readFile(path, "utf8"), source);
-  assert.deepEqual(await readFile(join(cwd, values.LICENSE_SIGNING_KEY_FILE!)), privateKey);
+  assert.equal(
+    parseEnv(await readFile(path, "utf8")).LICENSE_SIGNING_KEY,
+    values.LICENSE_SIGNING_KEY,
+  );
   assert.equal(await readFile(join(cwd, values.LICENSE_DATA_KEYRING_FILE!), "utf8"), data);
 });
 test("keygen appends its path, requires confirmation for existing setup and refuses accidental overwrite", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "keyforge-keygen-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  await writeFile(
-    join(cwd, ".env.local"),
-    "# Keep this\nLICENSE_SERVER_URL=https://example.test\n",
-  );
+  await writeFile(join(cwd, ".env"), "# Keep this\nLICENSE_SERVER_URL=https://example.test\n");
   const run = (...args: string[]) =>
     spawnSync(process.execPath, ["--", keygen, "keygen", ...args], {
       cwd,
@@ -87,7 +87,7 @@ test("keygen appends its path, requires confirmation for existing setup and refu
     });
   assert.notEqual(run().status, 0);
   assert.equal(run("--yes").status, 0);
-  const source = await readFile(join(cwd, ".env.local"), "utf8");
+  const source = await readFile(join(cwd, ".env"), "utf8");
   assert.ok(source.includes("# Keep this"));
   assert.equal(parseEnv(source).LICENSE_SIGNING_KEY_FILE, "./secrets/license-signing.key");
   const key = await readFile(join(cwd, "secrets/license-signing.key"));
@@ -98,7 +98,7 @@ test("keygen appends its path, requires confirmation for existing setup and refu
 test("named environments isolate keys and ignore ambient production credentials", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "keyforge-named-secrets-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  await writeFile(join(cwd, ".env.local"), "# Local configuration must remain unchanged\n");
+  await writeFile(join(cwd, ".env"), "# Local configuration must remain unchanged\n");
   const env = {
     ...cleanEnv,
     LICENSE_SIGNING_KEY: "ambient-production-key",
@@ -118,15 +118,10 @@ test("named environments isolate keys and ignore ambient production credentials"
     const values = parseEnv(source);
     assert.ok(!source.includes("ambient-"));
     assert.equal(
-      createPublicKey(await readFile(join(cwd, values.LICENSE_SIGNING_KEY_FILE!)))
-        .asymmetricKeyType,
+      createPublicKey(values.LICENSE_SIGNING_KEY!.replaceAll("\\n", "\n")).asymmetricKeyType,
       "ed25519",
     );
-    assert.ok(
-      values
-        .LICENSE_SIGNING_KEY_FILE!.replaceAll("\\", "/")
-        .startsWith("secrets/" + target + "/keys/"),
-    );
+    assert.equal(values.LICENSE_SIGNING_KEY_FILE, undefined);
     run();
     assert.ok(
       source === (await readFile(join(cwd, file), "utf8")),
@@ -136,7 +131,7 @@ test("named environments isolate keys and ignore ambient production credentials"
   }
   assert.ok(sources[0] !== sources[1], "Environments must not share generated secrets");
   assert.equal(
-    await readFile(join(cwd, ".env.local"), "utf8"),
+    await readFile(join(cwd, ".env"), "utf8"),
     "# Local configuration must remain unchanged\n",
   );
   const selected = join("secrets", "recovery", "server.env");
@@ -155,7 +150,7 @@ test("portable exports preserve signing/encryption material and omit platform cr
   const cwd = await mkdtemp(join(tmpdir(), "keyforge-export-secrets-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   execFileSync(process.execPath, ["--", init], { cwd, env: cleanEnv, stdio: "pipe" });
-  const sourceFile = join(cwd, ".env.local");
+  const sourceFile = join(cwd, ".env");
   await writeFile(
     sourceFile,
     (await readFile(sourceFile, "utf8")) +
@@ -180,7 +175,11 @@ test("portable exports preserve signing/encryption material and omit platform cr
     ),
   );
   for (const name of ["LICENSE_SIGNING_KEY", "LICENSE_DATA_KEYRING", "LICENSE_BACKUP_KEYRING"]) {
-    assert.ok(exported[name] === (await readFile(join(cwd, values[name + "_FILE"]!), "utf8")));
+    const expected =
+      name === "LICENSE_SIGNING_KEY"
+        ? values[name]
+        : await readFile(join(cwd, values[name + "_FILE"]!), "utf8");
+    assert.ok(exported[name] === expected);
     assert.ok(
       !first.stdout.includes(exported[name]!),
       "Secret values must never reach command output",
@@ -199,7 +198,7 @@ test("portable exports preserve signing/encryption material and omit platform cr
 test("masked host exports cannot silently generate replacement production keys", async (t) => {
   const cwd = await mkdtemp(join(tmpdir(), "keyforge-masked-secrets-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
-  await writeFile(join(cwd, ".env.local"), "LICENSE_SIGNING_KEY='[SENSITIVE]'\n");
+  await writeFile(join(cwd, ".env"), "LICENSE_SIGNING_KEY='[SENSITIVE]'\n");
   for (const [script, args] of [
     [init, ["--yes"]],
     [exportSecrets, ["--output", "portable.env"]],

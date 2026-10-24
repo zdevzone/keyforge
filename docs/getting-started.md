@@ -17,13 +17,13 @@ The snippets use a POSIX shell unless labelled PowerShell. `vp` and `node` comma
 git clone https://github.com/zdevzone/keyforge.git
 cd keyforge
 vp install --frozen-lockfile
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 In PowerShell, replace the last command with:
 
 ```powershell
-Copy-Item .env.example .env.local
+Copy-Item .env.example .env
 ```
 
 Do not overwrite an existing deployment's environment or keys. The [scaffolder](../packages/create-keyforge/README.md) generates independent deployment secrets with `vp create keyforge@latest`. The source-checkout procedure above also lets you run the server directly.
@@ -55,20 +55,20 @@ Run this once from the project root (a pre-existing environment file is optional
 vp run secrets:init
 ```
 
-This creates an Ed25519 private key at `secrets/license-signing.key`, independent data and backup keyrings, an administrative API token, a session secret and a cron secret. It appends the matching settings to the ignored `.env.local` file without printing secret values. The public verification key may be shared with dependent apps. Configure your deployment URL, database and administrator separately; provider credentials are entered in **Settings → Backups**.
+This creates an Ed25519 private key as `LICENSE_SIGNING_KEY` in the ignored `.env` file, independent data and backup keyrings, an administrative API token, a session secret and a cron secret. It writes settings without printing secret values. The public verification key may be shared with dependent apps. Configure your deployment URL, database and administrator separately; provider credentials are entered in **Settings → Backups**.
 
 For a separate deployment, use `vp run secrets:init --env-file secrets/environments/staging/server.env` instead of copying another environment's credentials. Export inline settings for any host with `vp run secrets:export --env-file secrets/environments/staging/server.env --output secrets/environments/staging/deploy.env`. See [portable environments](configuration.md#portable-environments-and-recovery-files). When moving an existing deployment, restore its original keys rather than generating new ones.
 
 On an existing setup, confirm the **[Y/n]** prompt before the file is updated. Existing keys and configured secrets are retained. For reviewed, noninteractive automation, pass `--yes`; a pipe without that flag cannot silently change an existing environment file. Recognized example placeholders are replaced, while real configured values are retained.
 
-Keep `vp run license keygen` for explicitly generating a signing key, or `vp run license keygen --force` for a deliberate replacement. It also saves `LICENSE_SIGNING_KEY_FILE` in `.env.local`, asks before updating an existing file, and refuses to replace an existing key without `--force`. An inline signing key must be removed explicitly before switching to a newly generated file. Rotation changes client trust; distribute public keys deliberately. Never rotate production keys just to complete setup.
+Keep `vp run license keygen` for explicitly generating a signing key, or `vp run license keygen --force` for a deliberate replacement. It also saves `LICENSE_SIGNING_KEY_FILE` in `.env`, asks before updating an existing file, and refuses to replace an existing key without `--force`. An inline signing key must be removed explicitly before switching to a newly generated file. Rotation changes client trust; distribute public keys deliberately. Never rotate production keys just to complete setup.
 
 ## Configure a local server
 
-Edit `.env.local`, retaining your actual generated secrets:
+Edit `.env`, retaining your actual generated secrets:
 
 ```dotenv
-LICENSE_SIGNING_KEY_FILE=./secrets/license-signing.key
+LICENSE_SIGNING_KEY=<your-generated-private-key>
 LICENSE_AUTH_SECRET=<your-generated-console-secret>
 LICENSE_ADMIN_TOKEN=<your-separately-generated-optional-admin-token>
 LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json
@@ -150,7 +150,7 @@ Other languages can use REST directly. Safe offline support additionally require
 
 ## Deploy to production
 
-Follow the [deployment guide](deploy.md) for your platform. Transfer secrets using its secret manager or durable mounts; never put `.env.local`, private keys, database files or encryption rings in Git or a container image.
+Follow the [deployment guide](deploy.md) for your platform. Transfer secrets using its secret manager or durable mounts; never put `.env`, private keys, database files or encryption rings in Git or a container image.
 
 On **Render**, use the repository's Blueprint or its documented build/start commands, rather than an old Yarn command. If `LICENSE_SERVER_URL` is unset, KeyForge uses Render's `RENDER_EXTERNAL_URL`. For a custom domain, set `LICENSE_SERVER_URL` to that HTTPS origin. Leave `LICENSE_PORT` unset to honor Render's assigned `PORT`. Remove the local HTTP origin and local port override when configuring production.
 

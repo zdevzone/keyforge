@@ -37,7 +37,7 @@ await writeFile(
       engines: source.engines,
       dependencies,
       overrides: source.overrides,
-      scripts: { start: "node --env-file-if-exists=.env.local dist/src/index.js" },
+      scripts: { start: "node --env-file-if-exists=.env dist/src/index.js" },
     },
     null,
     2,
