@@ -1,4 +1,3 @@
-import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
 /**
@@ -18,7 +17,7 @@ import { z } from "zod";
  *
  * ## Almost everything here is optional, on purpose
  *
- * This is not the usual T3 Env shape, where absent variables are errors. Most
+ * Most
  * of Keyforge's configuration is *absence-driven*, and those defaults are
  * promises the README makes:
  *
@@ -149,28 +148,29 @@ export const envSchema = {
  * presence check and fails everything after it.
  */
 export function parseEnv(runtimeEnv: Record<string, string | undefined> = process.env) {
-  return createEnv({
-    server: envSchema,
-    runtimeEnv: {
-      ...runtimeEnv,
-      LICENSE_SERVER_URL:
-        runtimeEnv.LICENSE_SERVER_URL ||
-        runtimeEnv.RENDER_EXTERNAL_URL ||
-        (runtimeEnv.VERCEL_URL ? `https://${runtimeEnv.VERCEL_URL}` : undefined),
-    },
-    emptyStringAsUndefined: true,
-    onValidationError: (issues) => {
-      const lines = issues.map((issue) => {
-        const name = issue.path?.join(".") ?? "(unknown)";
-        return `  ${name}: ${issue.message}`;
-      });
-      throw new Error(
-        `Environment is not usable:\n${lines.join("\n")}\n\n` +
-          "See docs/deploy.md for what each variable does. Most are optional — " +
-          "an unset variable is fine, a malformed one is not.",
-      );
-    },
-  });
+  const parsed = z.object(envSchema).safeParse(
+    Object.fromEntries(
+      Object.entries({
+        ...runtimeEnv,
+        LICENSE_SERVER_URL:
+          runtimeEnv.LICENSE_SERVER_URL ||
+          runtimeEnv.RENDER_EXTERNAL_URL ||
+          (runtimeEnv.VERCEL_URL ? `https://${runtimeEnv.VERCEL_URL}` : undefined),
+      }).map(([name, value]) => [name, value === "" ? undefined : value]),
+    ),
+  );
+  if (!parsed.success) {
+    const lines = parsed.error.issues.map((issue) => {
+      const name = issue.path?.join(".") ?? "(unknown)";
+      return `  ${name}: ${issue.message}`;
+    });
+    throw new Error(
+      `Environment is not usable:\n${lines.join("\n")}\n\n` +
+        "See docs/deploy.md for what each variable does. Most are optional — " +
+        "an unset variable is fine, a malformed one is not.",
+    );
+  }
+  return parsed.data;
 }
 
 export type Env = ReturnType<typeof parseEnv>;

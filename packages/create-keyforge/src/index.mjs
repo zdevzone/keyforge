@@ -249,7 +249,7 @@ async function writeProject(directory, answers) {
 
   await writeFile(at("keyforge.config.json"), `${JSON.stringify(buildConfig(answers), null, 2)}\n`);
   await writeFile(
-    at(".env.local"),
+    at(".env"),
     buildEnvLocal({ ...answers, adminToken: secret(), authSecret: secret() }),
   );
   await writeFile(at(".env.example"), buildEnvExample(answers));
@@ -401,6 +401,6 @@ function report(io, answers, context) {
     for (const note of notes) io.write(`  ! ${note}\n`);
   }
   io.write(
-    `\n${dim(".env.local holds generated secrets — it is gitignored; set the same variables on your host.")}\n\n`,
+    `\n${dim(".env holds generated secrets — it is gitignored; set the same variables on your host.")}\n\n`,
   );
 }

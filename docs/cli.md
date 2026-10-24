@@ -6,7 +6,7 @@ Set `LICENSE_SERVER_URL` and `LICENSE_ADMIN_TOKEN` for API commands. Use `--prod
 
 | Command | Purpose |
 | --- | --- |
-| `vp run license keygen` | Generate startup Ed25519 keys under secrets/ (or LICENSE_SIGNING_KEY_FILE) and save the path to the selected environment file, .env.local by default. Existing setup asks [Y/n]; --yes confirms automation. --force permits explicit key replacement and can invalidate client trust. |
+| `vp run license keygen` | Generate startup Ed25519 keys under secrets/ (or LICENSE_SIGNING_KEY_FILE) and save the path to the selected environment file, .env by default. Existing setup asks [Y/n]; --yes confirms automation. --force permits explicit key replacement and can invalidate client trust. |
 | `vp run license keycheck` | Check configured private key, public fingerprint; --expect PEM/file, --token token, --server compare deployment. |
 | `vp run license issue` | Issue from --plan ID with --to name, optional --installation ID or --subject installation/service, and a stable --request-id UUID. Add --paid --method METHOD --reference ID to record full payment. Terms come from the saved plan. |
 | `vp run license list` | First page of selected product licenses. |
@@ -20,7 +20,7 @@ Set `LICENSE_SERVER_URL` and `LICENSE_ADMIN_TOKEN` for API commands. Use `--prod
 | `vp run db mirror` | Copy the configured active ledger to --to file/URL. |
 | `vp run db verify` | Compare --from and --to engine-neutral row contents. |
 | `vp run admin:create` | Create an operator with --email and --password; --name and --role admin/support are optional. |
-| `vp run secrets:init` | Initialize missing signing, data/backup encryption, admin, auth and cron secrets; save references/values to .env.local. Use --env-file PATH for an isolated named environment and --secrets-dir PATH for its key files. Existing setup asks [Y/n]; --yes confirms automation. Existing secrets are retained. |
+| `vp run secrets:init` | Initialize missing signing, data/backup encryption, admin, auth and cron secrets; save values and keyring references to .env. Use --env-file PATH for an isolated named environment and --secrets-dir PATH for its key files. Existing setup asks [Y/n]; --yes confirms automation. Existing secrets are retained. |
 | `vp run secrets:export` | With --env-file PATH and --output PATH, write a private provider-neutral environment file embedding existing key files. No key rotation; provider identity variables are omitted. Existing output requires confirmation. |
 | `vp run backup:restore` | Explicit maintenance-only restore of an encrypted archive; see backups guide. |
 
@@ -56,7 +56,7 @@ vp run storage:init
 
 The default app reset drops and recreates Keyforge ledger and operator tables, then recreates the configured bootstrap admin. SQLite database mode removes and recreates the single selected unified database file. SQLite resets refuse unrelated tables and paths outside the project. data:clean removes obsolete Keyforge SQLite files under db/database and UUID .kfbackup files in the configured backup directory; it retains active databases, unrelated databases and key files. It leaves remote uploads and backup history intact, so standalone cleanup can remove local-only download copies. demo:reset combines reset, local cleanup and seed. These offline commands differ from the account-preserving **Settings → System** reset; see [database maintenance](database.md).
 
-Demo seed creates fictional products, active/expired/revoked licenses, registered and trial machines, support conversations, metered usage and admin/support operators. Random demo login credentials and client fixture IDs are written to the private, ignored .artifacts/demo/manifest.json file. The stored seed manifest is encrypted using the data ring. Completed seeds are idempotent; interrupted seeds require a reset before retrying. Existing configured bootstrap credentials are retained separately in .env.local. Demo sign-up is enabled only inside the unserved seeding process; the running app still disables public sign-up.
+Demo seed creates fictional products, active/expired/revoked licenses, registered and trial machines, support conversations, metered usage and admin/support operators. Random demo login credentials and client fixture IDs are written to the private, ignored .artifacts/demo/manifest.json file. The stored seed manifest is encrypted using the data ring. Completed seeds are idempotent; interrupted seeds require a reset before retrying. Existing configured bootstrap credentials are retained separately in .env. Demo sign-up is enabled only inside the unserved seeding process; the running app still disables public sign-up.
 
 Postgres app mode preserves unrelated tables and fails if external dependencies prevent dropping app tables. For a dedicated app schema, use `vp run db:reset --scope schema --confirm SCHEMA_NAME --apply --maintenance`; unrelated objects or cross-schema foreign keys/views prevent a schema reset. Schema mode recreates the owner but not custom grants, which must be reapplied.
 
@@ -64,7 +64,7 @@ For a whole Postgres database, set LICENSE_DATABASE_ADMIN_URL to a privileged co
 
 Reset removes online licensing records, operators, sessions and trial history. It does not rotate signing keys or invalidate already-issued offline tokens cryptographically; client expiry and online refresh still determine their remaining validity.
 
-storage:init creates a uniquely named private AWS S3 and/or R2 bucket when a configured provider lacks a bucket, then writes its canonical setting to .env.local. Existing configured buckets are verified instead of recreated. Use --provider s3/r2/all, --name keyforge-storage-YOUR_UNIQUE_SUFFIX or --env-file PATH as needed. Setup needs bucket-creation permission in addition to normal backup permissions. S3 Block Public Access stays enabled. Provider request/storage charges apply to real uploads; configure independent schedules in Backups.
+storage:init creates a uniquely named private AWS S3 and/or R2 bucket when a configured provider lacks a bucket, then writes its canonical setting to .env. Existing configured buckets are verified instead of recreated. Use --provider s3/r2/all, --name keyforge-storage-YOUR_UNIQUE_SUFFIX or --env-file PATH as needed. Setup needs bucket-creation permission in addition to normal backup permissions. S3 Block Public Access stays enabled. Provider request/storage charges apply to real uploads; configure independent schedules in Backups.
 
 ## Database setup and demo reset
 

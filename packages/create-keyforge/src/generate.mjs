@@ -215,11 +215,10 @@ function envBlock(lines) {
 }
 
 /**
- * `.env.local` — the file every npm script in the template loads. Secrets are
+ * `.env` — the file every npm script in the template loads. Secrets are
  * generated, not placeheld: a deployer who never edits this file still gets a
  * unique admin token and session secret rather than a shared example value.
- * The signing key is the one thing left blank, because `npm run license
- * keygen` has to write it.
+ * The signing key is left blank for `secrets:init` to generate.
  */
 export function buildEnvLocal(answers) {
   const lines = [
@@ -227,8 +226,11 @@ export function buildEnvLocal(answers) {
     "# Secrets below were generated for this project. Never commit this file;",
     "# set the same variables in your host's dashboard when you deploy.",
     "",
-    `# The trust root. Generate the pair with: ${commands(answers.packageManager).run("license")} keygen`,
-    "LICENSE_SIGNING_KEY_FILE=./secrets/license-signing.key",
+    `# Initialize the trust root with: ${commands(answers.packageManager).run("secrets:init")} --yes`,
+    "# Ed25519 private key; secrets:init fills this without printing it.",
+    "LICENSE_SIGNING_KEY=",
+    "",
+    "# Encryption keyrings are created by secrets:init and kept under secrets/.",
     "LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json",
     "LICENSE_BACKUP_KEYRING_FILE=./secrets/backup.keyring.json",
     "",
@@ -242,6 +244,13 @@ export function buildEnvLocal(answers) {
     'LICENSE_SERVER_URL="http://localhost:4100/"',
     "",
   ];
+  if (answers.platform === "docker" && answers.database === "postgres") {
+    lines.push(
+      "# Host port for the bundled Postgres. Use 5433 if 5432 is already taken.",
+      "POSTGRES_PORT=5432",
+      "",
+    );
+  }
   if (answers.database === "postgres") {
     lines.push(
       "# Ledger and operator accounts both live in Postgres. Any provider works;",
@@ -268,12 +277,12 @@ export function buildEnvLocal(answers) {
   return envBlock(lines);
 }
 
-/** The committable twin of `.env.local`: same variables, no values. */
+/** The committable twin of `.env`: same variables, no values. */
 export function buildEnvExample(answers) {
   const lines = [
-    `# ${answers.productName} license service — copy to .env.local and fill in.`,
-    `# Generate the signing key pair with: ${commands(answers.packageManager).run("license")} keygen`,
-    "LICENSE_SIGNING_KEY_FILE=./secrets/license-signing.key",
+    `# ${answers.productName} license service — copy to .env and fill in.`,
+    `# Generate the signing key with: ${commands(answers.packageManager).run("secrets:init")} --yes`,
+    "LICENSE_SIGNING_KEY=",
     "LICENSE_DATA_KEYRING_FILE=./secrets/data.keyring.json",
     "LICENSE_BACKUP_KEYRING_FILE=./secrets/backup.keyring.json",
     '# LICENSE_SIGNING_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"',
@@ -601,13 +610,23 @@ export function nextSteps(answers) {
   const steps = [
     `cd ${answers.relativeDirectory}`,
     ...(answers.installed ? [] : [run.install]),
-    `${run.run("license")} keygen`.padEnd(29) + "# writes the signing key pair into secrets/",
+    `${run.run("secrets:init")} --yes`.padEnd(29) +
+      "# writes the signing key and missing secrets into .env",
+    `${run.run("env:check")}`.padEnd(29) + "# validate .env with Varlock",
   ];
   if (answers.database === "postgres") {
-    steps.push("# point DATABASE_URL at your Postgres instance in .env.local");
+    steps.push("# point DATABASE_URL at your Postgres instance in .env");
+  }
+  steps.push(run.run("build:all").padEnd(29) + "# server -> dist/, console -> dist/public");
+  if (answers.platform === "docker" && answers.database === "postgres") {
+    steps.push(...platformSteps(answers).slice(0, 2));
+    steps.push("docker compose up -d --build    # start Postgres and the server");
+    steps.push(
+      run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"'),
+    );
+    return steps;
   }
   steps.push(
-    run.run("build:all").padEnd(29) + "# server -> dist/, console -> dist/public",
     run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"'),
     run.run("start").padEnd(29) + "# console on http://localhost:4100/",
   );
@@ -632,6 +651,16 @@ function describeAuthScope(scope) {
  */
 export function buildReadme(answers) {
   const run = commands(answers.packageManager);
+  const dockerPostgres = answers.platform === "docker" && answers.database === "postgres";
+  const startSteps = dockerPostgres
+    ? [
+        "docker compose up -d --build    # start Postgres and the server",
+        run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"'),
+      ]
+    : [
+        run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"'),
+        run.run("start").padEnd(29) + "# console on http://localhost:4100/",
+      ];
   const useCase = USE_CASES.find((entry) => entry.id === answers.useCase);
   const plans = Object.keys(buildConfig(answers).licenses.planPresets).join(", ");
   const database =
@@ -659,20 +688,23 @@ documentation is kept in [docs/keyforge.md](docs/keyforge.md).
 
 Deployment policy lives in \`keyforge.config.json\`. Its catalog seeds the first
 product; later plan and entitlement changes are saved in the database through
-the console. Secrets live in \`.env.local\`, never in the policy file.
+the console. Secrets live in \`.env\`, never in the policy file.
 
 ## Run it
 
 \`\`\`bash
 ${run.install}
-${`${run.run("license")} keygen`.padEnd(29)}# one-time: the Ed25519 signing key pair
+${`${run.run("secrets:init")} --yes`.padEnd(29)}# one-time: signing key and missing secrets in .env
+${run.run("env:check").padEnd(29)}# validate the local environment with Varlock
 ${run.run("build:all").padEnd(29)}# server -> dist/, console -> dist/public
-${run.runWithFlags("admin:create", '--email you@example.com --password "<strong-password>"')}
-${run.run("start").padEnd(29)}# console on http://localhost:4100/
+${startSteps.join("\n")}
 \`\`\`
 
-The private signing key is the trust root: it exists only on this server, and
+${dockerPostgres ? "For host commands, `DATABASE_URL` uses `localhost:5432` (or `POSTGRES_PORT` if changed). Compose uses `postgres:5432` inside Docker. If you change `POSTGRES_PASSWORD`, set `COMPOSE_DATABASE_URL` to match.\n\n" : ""}The private signing key is the trust root: it exists only on this server, and
 your app ships the public half to verify tokens offline. Never commit it.
+
+For optional environment validation and secret management, see
+[Varlock's introduction](https://varlock.dev/getting-started/introduction/).
 
 ## Plans
 

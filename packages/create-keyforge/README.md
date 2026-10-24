@@ -18,6 +18,8 @@ vp create keyforge -- my-license-server --deploy docker --db postgres --pm vp --
 
 Follow the printed steps to install dependencies, generate the signing key, build, create the first operator and start the server. See the [beginner guide](../../docs/getting-started.md) for credential purposes and your first license workflow.
 
+The generated project includes a Varlock `.env.schema`; run `vp run env:check` after `vp run secrets:init --yes` to validate its local `.env`. See [Varlock's introduction](https://varlock.dev/getting-started/introduction/).
+
 ## Run from a source checkout
 
 To use the generator directly from the repository:
@@ -34,7 +36,7 @@ Or run a noninteractive source-checkout deployment:
 vp node packages/create-keyforge/bin/create-keyforge.mjs ../my-license-server --template . --deploy docker --db postgres --pm vp --runtime node --yes
 ```
 
-Set `DATABASE_URL` in the generated `.env.local` before starting a PostgreSQL deployment.
+Set `DATABASE_URL` in the generated `.env` before starting a PostgreSQL deployment.
 
 You can also [use this template](https://github.com/new?template_name=keyforge&template_owner=zdevzone) for a source copy. Maintainers: see [package releases](../../docs/publishing.md) for archive checks and release order.
 
@@ -54,7 +56,7 @@ Run `node packages/create-keyforge/bin/create-keyforge.mjs --help` for the full 
 
 ## Generated project
 
-The generator removes upstream identity, local databases, dependency folders, build output and secret files. Protect the generated `.env.local` and `secrets/` directory. Select trusted templates: they supply executable project sources.
+The generator removes upstream identity, local databases, dependency folders, build output and secret files. Protect the generated `.env` and `secrets/` directory. Select trusted templates: they supply executable project sources.
 
 Manage products, entitlement definitions and priced plans in the console. The root configuration seeds the initial catalog once; later console changes live in the database. Issuance snapshots the selected plan's terms and price into the license and sale.
 

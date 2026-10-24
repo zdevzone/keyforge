@@ -329,7 +329,8 @@ const DOCKER = {
   files: (answers) => ({ "docker-compose.yml": composeYaml(answers) }),
   keep: [],
   steps: (answers) => [
-    "# put the same variables from .env.local into .env (Compose reads it)",
+    "# Compose reads the generated .env; initialize its signing key first",
+    "# if host Postgres port 5432 is occupied, set POSTGRES_PORT=5433 in .env",
     answers.database === "postgres"
       ? "docker compose up --build       # ledger and postgres together"
       : "docker compose up --build       # SQLite in the named volume",
@@ -355,6 +356,7 @@ function composeYaml(answers) {
     "    volumes:",
     `      - ${name}-data:/data`,
     "      - ./keyforge.config.json:/app/keyforge.config.json:ro",
+    "      - ./secrets:/app/secrets:ro",
     "    environment:",
     "      # Required: the PEM private key (or mount a file and set _FILE).",
     "      LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:?set it in .env}",
@@ -364,18 +366,22 @@ function composeYaml(answers) {
     "      LICENSE_SEED_ADMIN_EMAIL: ${LICENSE_SEED_ADMIN_EMAIL:-}",
     "      LICENSE_SEED_ADMIN_PASSWORD: ${LICENSE_SEED_ADMIN_PASSWORD:-}",
     "      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}",
+    "      LICENSE_DATA_KEYRING_FILE: ${LICENSE_DATA_KEYRING_FILE:-./secrets/data.keyring.json}",
+    "      LICENSE_BACKUP_KEYRING_FILE: ${LICENSE_BACKUP_KEYRING_FILE:-./secrets/backup.keyring.json}",
   ];
   if (postgres) {
     lines.push(
       "      # Compose does not nest substitutions: change POSTGRES_PASSWORD and you",
       "      # must set DATABASE_URL to match.",
-      "      DATABASE_URL: ${DATABASE_URL:-postgres://keyforge:keyforge@postgres:5432/keyforge}",
+      "      DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://keyforge:keyforge@postgres:5432/keyforge?sslmode=disable}",
       "    depends_on:",
       "      postgres:",
       "        condition: service_healthy",
       "",
       "  postgres:",
       "    image: postgres:18.6",
+      "    ports:",
+      '      - "${POSTGRES_PORT:-5432}:5432"',
       "    environment:",
       "      POSTGRES_USER: keyforge",
       "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keyforge}",
