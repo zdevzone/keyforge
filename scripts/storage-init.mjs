@@ -21,7 +21,7 @@ if (!["all", "s3", "r2"].includes(provider)) throw Error("Use --provider all, s3
 const name = value("name") || "keyforge-storage-" + randomBytes(6).toString("hex");
 if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(name))
   throw Error("Use a lowercase bucket name with 3–63 letters, digits or hyphens.");
-const file = value("env-file") || ".env.local";
+const file = value("env-file") || ".env";
 let source = await readFile(file, "utf8");
 const env = { ...parseEnv(source), ...process.env },
   options = storageOptionsFromEnv(env);

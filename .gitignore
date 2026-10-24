@@ -12,6 +12,7 @@ license-signing.key
 .env
 .env.*
 !.env.example
+!.env.schema
 secrets/
 backups/
 *.keyring.json

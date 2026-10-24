@@ -5,14 +5,19 @@ services:
       - "4100:4100"
     volumes:
       - keyforge-data:/data
+      - ./secrets:/app/secrets:ro
       # Uncomment to supply a deployment config:
       # - ./keyforge.config.json:/app/keyforge.config.json:ro
     environment:
       # Unset = SQLite in the volume. Point at the postgres service below
       # (docker compose --profile postgres up) for a durable ledger.
-      DATABASE_URL: ${DATABASE_URL:-}
+      # Set COMPOSE_DATABASE_URL for container-to-container Postgres access.
+      # DATABASE_URL can keep its host-facing localhost URL for local CLI commands.
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-${DATABASE_URL:-}}
       # Required: PEM private key (or mount a file and use LICENSE_SIGNING_KEY_FILE).
       LICENSE_SIGNING_KEY: ${LICENSE_SIGNING_KEY:?set in .env}
+      LICENSE_DATA_KEYRING_FILE: ${LICENSE_DATA_KEYRING_FILE:-./secrets/data.keyring.json}
+      LICENSE_BACKUP_KEYRING_FILE: ${LICENSE_BACKUP_KEYRING_FILE:-./secrets/backup.keyring.json}
       # Optional surfaces — each is disabled when unset.
       LICENSE_ADMIN_TOKEN: ${LICENSE_ADMIN_TOKEN:-}
       LICENSE_AUTH_SECRET: ${LICENSE_AUTH_SECRET:-}
@@ -22,23 +27,24 @@ services:
 
   # Optional durable ledger:
   #   docker compose --profile postgres up
-  #   DATABASE_URL=postgres://keyforge:keyforge@postgres:5432/keyforge
+  #   COMPOSE_DATABASE_URL=postgres://keyforge:keyforge@postgres:5432/keyforge?sslmode=disable
   postgres:
-    # Keep the existing data-directory major; upgrading to 18 requires pg_upgrade.
-    image: ${POSTGRES_IMAGE:-postgres:16.15}
+    image: ${POSTGRES_IMAGE:-postgres:18.6-bookworm}
     profiles: ["postgres"]
     environment:
       POSTGRES_USER: keyforge
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keyforge}
-      POSTGRES_DB: keyforge
+      POSTGRES_DB: ${POSTGRES_DB:-keyforge}
+    ports:
+      - ${POSTGRES_PORT:-55433}:5432
     volumes:
-      - keyforge-pgdata:/var/lib/postgresql/data
+      - keyforge-pgdata-v18:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keyforge"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
   keyforge-data:
-  keyforge-pgdata:
+  keyforge-pgdata-v18:

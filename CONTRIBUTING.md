@@ -9,7 +9,7 @@ documented recipes are preferred over new required machinery.
 
 ```bash
 vp install
-cp .env.example .env.local    # fill in secrets first
+cp .env.example .env    # fill in secrets first
 vp run build                # CLI imports compiled server modules
 vp run license keygen        # local signing key
 vp run secrets:init

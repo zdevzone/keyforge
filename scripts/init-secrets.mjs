@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomBytes } from "node:crypto";
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import {
@@ -11,7 +11,7 @@ import {
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(
-    "Usage: vp run secrets:init [--env-file PATH] [--secrets-dir PATH] [--yes]\nFill missing server secrets without rotating existing keys. Defaults to .env.local; named environments own their keys/ directory.",
+    "Usage: vp run secrets:init [--env-file PATH] [--secrets-dir PATH] [--yes]\nFill missing server secrets without rotating existing keys. Defaults to .env; named environments own their keys/ directory.",
   );
   process.exit(0);
 }
@@ -65,24 +65,21 @@ for (const name of ["data", "backup"]) {
   settings[variable + "_FILE"] = path;
 }
 if (!configured("LICENSE_SIGNING_KEY")) {
-  const path = configured("LICENSE_SIGNING_KEY_FILE") || keyPath("license-signing.key");
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  try {
-    await access(path);
-    console.log("Existing signing key retained.");
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+  const path = configured("LICENSE_SIGNING_KEY_FILE");
+  if (path) {
+    await readFile(path, "utf8");
+    console.log("Existing signing key file retained.");
+  } else {
     const pair = generateKeyPairSync("ed25519");
-    await writeFile(path, pair.privateKey.export({ type: "pkcs8", format: "pem" }), {
-      flag: "wx",
-      mode: 0o600,
-    });
-    console.log("Created private signing key in " + path + ".");
+    settings.LICENSE_SIGNING_KEY = pair.privateKey
+      .export({ type: "pkcs8", format: "pem" })
+      .trim()
+      .replaceAll("\n", "\\n");
+    console.log("Created private signing key in " + options.file + ".");
     console.log(
       "Client PUBLIC verification key:\n" + pair.publicKey.export({ type: "spki", format: "pem" }),
     );
   }
-  settings.LICENSE_SIGNING_KEY_FILE = path;
 }
 for (const name of ["LICENSE_ADMIN_TOKEN", "LICENSE_AUTH_SECRET", "CRON_SECRET"])
   if (!configured(name)) settings[name] = randomBytes(32).toString("hex");

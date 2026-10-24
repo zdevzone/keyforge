@@ -14,7 +14,7 @@ export function localEnvironmentOptions(args) {
   };
   const selected = option("env-file");
   return {
-    file: selected || ".env.local",
+    file: selected || ".env",
     explicit: Boolean(selected),
     // A named environment owns its keys; it must not silently reuse local keys.
     secretsDir: option("secrets-dir") || (selected ? join(dirname(selected), "keys") : "./secrets"),
@@ -47,7 +47,7 @@ export async function writeEnvironment(settings, file) {
   );
 }
 
-export async function readLocalEnv(file = ".env.local") {
+export async function readLocalEnv(file = ".env") {
   try {
     const source = await readFile(file, "utf8");
     return { exists: true, source, values: parseEnv(source) };
@@ -70,7 +70,7 @@ export async function confirmLocalUpdate(message, yes = false) {
   }
 }
 /** Preserve comments and unrelated variables; never print secret values. */
-export async function saveLocalEnv(settings, file = ".env.local") {
+export async function saveLocalEnv(settings, file = ".env") {
   const { source } = await readLocalEnv(file);
   const remaining = new Map(Object.entries(settings));
   const lines = source.split(/\r?\n/).flatMap((line) => {

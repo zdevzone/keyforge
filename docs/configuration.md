@@ -1,6 +1,6 @@
 # Configuration and environment
 
-For a complete first setup, follow the [beginner guide](getting-started.md). Copy `.env.example` to `.env.local` before provisioning secrets, replace its placeholders, and never commit the resulting file. A placeholder that happens to pass length validation is not a secure secret.
+For a complete first setup, follow the [beginner guide](getting-started.md). Copy `.env.example` to `.env` before provisioning secrets, replace its placeholders, and never commit the resulting file. A placeholder that happens to pass length validation is not a secure secret.
 
 ## Database selection
 
@@ -72,14 +72,14 @@ Use the reset, cleanup, demo seed and bucket setup commands in the [CLI guide](c
 
 ## Minimal environment and database-managed storage
 
-Run `vp run secrets:init` to fill missing local secrets and file references in `.env.local`; existing setup requires confirmation. The default private key path is `secrets/license-signing.key`. Never configure both inline and file values for the same key.
+Run `vp run secrets:init` to fill missing local secrets and keyring file references in `.env`; existing setup requires confirmation. The signing key defaults to an inline `LICENSE_SIGNING_KEY` value. Never configure both inline and file values for the same key.
 
 ## Portable environments and recovery files
 
 Application credentials are independent of the hosting provider. Use one private environment directory for each deployment, and keep provider access tokens separate:
 
 ```text
-.env.local                               # local development
+.env                               # local development
 secrets/license-signing.key               # existing local signing key
 secrets/data.keyring.json                 # local stored-data encryption
 secrets/backup.keyring.json               # local archive encryption
