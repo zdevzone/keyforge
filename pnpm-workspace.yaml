@@ -9,7 +9,7 @@ allowBuilds:
   msgpackr-extract: false
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@1.1.0
-  vite-plus: 1.1.0
+  vite-plus: 1.4.0
 overrides:
   # UploadThing pins an older Effect; keep the compatible patched 3.x runtime.
   effect: 3.22.2
