@@ -121,6 +121,7 @@ export async function main(argv = process.argv.slice(2), io = process.stdout) {
       2,
     ) + "\n",
   );
+  await writeFile(resolve(directory, "pnpm-workspace.yaml"), "allowBuilds:\n  esbuild: true\n");
   await cp(fileURLToPath(new URL("../template/", import.meta.url)), directory, { recursive: true });
   await writeFile(
     resolve(directory, ".gitignore"),

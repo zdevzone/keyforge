@@ -208,6 +208,7 @@ try {
       await run("vp", ["exec", "tsx", "--test", "test/docs-reader.test.ts"], project, env);
     } else {
       assert.ok(pkg.dependencies["@zdevzone/keyforge-client"]);
+      await run("vp", ["install", "--no-frozen-lockfile"], project, env);
       await run("vp", ["run", "typecheck"], project, env);
       await cp(join(project, ".env.example"), join(project, ".env.local"));
       const demo = await run("vp", ["run", "demo"], project, env);
