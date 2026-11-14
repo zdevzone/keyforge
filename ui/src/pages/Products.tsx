@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 import { fetchAdminConfig, request } from "../api";
+import type { IntegrationProfile } from "../api";
 import { Button, Card, Modal, TextField, Spinner, ErrorNote } from "../components";
 import { ActionButton } from "../components/ActionButton";
 import { Choice } from "../components/Choice";
@@ -319,6 +320,21 @@ function ProductEditor({
             Distribute a staged public key to dependent apps before activating it. Retain old
             trusted keys while grants remain in use.
           </p>
+          <Button
+            variant="secondary"
+            className="mt-4"
+            disabled={action.busy}
+            onClick={() =>
+              void action.run(async () => {
+                const profile = await request<IntegrationProfile>(
+                  "/v1/products/" + encodeURIComponent(product.id) + "/integration-profile",
+                );
+                await navigator.clipboard.writeText(JSON.stringify(profile, null, 2));
+              }, "Integration settings copied as JSON.")
+            }
+          >
+            Copy integration settings
+          </Button>
           {product.keys.map((k) => (
             <div key={k.kid} className="mt-5 border-t border-slate-200 pt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">

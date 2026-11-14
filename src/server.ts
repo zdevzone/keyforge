@@ -118,6 +118,7 @@ export async function createLicenseServer(serverless = false) {
       privateKey,
       signingKey,
       kid,
+      publicOrigin: env.LICENSE_SERVER_URL?.replace(/\/$/, ""),
       adminToken: env.LICENSE_ADMIN_TOKEN,
       database,
       config,

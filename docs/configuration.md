@@ -17,12 +17,15 @@ The CLI, server and admin seeding use the same selection rules. System settings 
 | `LICENSE_AUTH_SECRET` | Better Auth cryptographic secret for the web console. Missing disables console authentication. |
 | `LICENSE_ADMIN_TOKEN` | Optional privileged bearer credential for automation and the admin CLI. Missing disables that access method. Keep it out of customer apps. |
 | `LICENSE_SERVER_URL` | Public server origin, used for console authentication and as the CLI destination. Overrides Render's `RENDER_EXTERNAL_URL` when supplied. A valid explicit URL or Render fallback is required for the production console. |
+
 | `RENDER_EXTERNAL_URL` | Render-provided public URL. Used automatically for console authentication when `LICENSE_SERVER_URL` is unset or empty. Configure `LICENSE_SERVER_URL` to use a custom domain. |
 | `BETTER_AUTH_URL` | Better Auth's generic environment convention. Keyforge passes its own explicit base URL from `LICENSE_SERVER_URL`; configure that canonical setting. |
 | `LICENSE_SIGNING_KEY` / `LICENSE_SIGNING_KEY_FILE` | Ed25519 private signing material. Exactly one source must be configured. Startup fails without a valid key. |
 | `LICENSE_PUBLIC_KEY` | A dependent app convention for its trusted public verification key; Keyforge does not read this variable. Public keys are shared; private keys stay on the server. |
 | `LICENSE_DATA_KEYRING` / `_FILE` | AES-256-GCM ring for product keys and generated per-product private keys. Required for issuance, additional products and encrypted key recovery. |
 | `LICENSE_BACKUP_KEYRING` / `_FILE` | Separate archive encryption ring. Required for archive jobs and their restore/verification, not raw SQLite downloads. |
+
+Dependent apps can read `GET /v1/products/:productId/integration-profile` without credentials to obtain the product ID, signed-token issuer, configured public server URL, and the single active public signing key (including its colon-separated fingerprint). The response contains no private key or customer data. The endpoint returns an error if the product, public URL, or a unique active key is unavailable. Operators can copy the same JSON from **Products → Signing keys → Copy integration settings**. The existing `/v1/products/:productId/keys` endpoint remains available for key lists during rotation.
 
 Use `vp run secrets:init` to generate independent data and backup ring files. A ring has `{"active":"id","keys":{"id":"<64 hexadecimal characters>"}}`. Keep old keys while records or retained archives still reference them. Changing the active ring ID affects new encryption; it does not re-encrypt existing records. Store rings outside backups and source control, with a separate recovery copy.
 

@@ -28,6 +28,18 @@ export interface License {
 export interface Meta {
   name: string;
 }
+export interface IntegrationProfile {
+  productId: string;
+  issuer: string;
+  serverUrl: string;
+  activeKey: {
+    kid: string;
+    publicKeyPem: string;
+    fingerprint: string;
+    retiredAt: null;
+    pending: false;
+  };
+}
 
 /** Public deployment identity (product name for the login page and titles). */
 export function fetchMeta(): Promise<Meta> {

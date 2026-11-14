@@ -306,6 +306,27 @@ operation(
   "",
 );
 operation(
+  "get",
+  product + "/integration-profile",
+  "getIntegrationProfile",
+  "Public integration settings for one product. Pin the public key through a trusted channel before using it to verify tokens; this response alone does not establish trust.",
+  object({
+    productId: id,
+    issuer: string({ const: "default" }),
+    serverUrl: string({ format: "uri" }),
+    activeKey: object({
+      kid: id,
+      publicKeyPem: string(),
+      fingerprint: string({ pattern: "^([0-9a-f]{2}:){7}[0-9a-f]{2}$" }),
+      retiredAt: { type: "null" },
+      pending: { const: false },
+    }),
+  }),
+  undefined,
+  200,
+  "",
+);
+operation(
   "post",
   product + "/register",
   "registerInstallation",

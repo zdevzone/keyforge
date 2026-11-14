@@ -26,7 +26,7 @@ import {
   registerImportLicensing,
   type ImportAccount,
 } from "./import-licensing.js";
-import { describeSigningKey, verifyLicenseToken } from "./keypair.js";
+import { describeSigningKey, fingerprintPublicKey, verifyLicenseToken } from "./keypair.js";
 import {
   registerLicenseDelivery,
   type LicenseRequest,
@@ -52,7 +52,7 @@ import {
 import { buildReport, reportQuerySchema, type ReportBinding, type ReportUsage } from "./reports.js";
 import { generateSigningKeyPair } from "./sign.js";
 import { normalizeSupportRequest, supportRequestBodySchema } from "./support.js";
-import { productTokenSchema } from "./token-contract.js";
+import { productTokenSchema, TOKEN_ISSUER } from "./token-contract.js";
 
 export const WORKSPACE = "workspace:default";
 const scope = (id: string) => "product:" + id;
@@ -223,6 +223,7 @@ export interface PlatformOptions {
   config: AppConfig;
   privateKey: string;
   kid: string;
+  publicOrigin?: string;
   keyring?: KeyRing;
   auth?: AuthInstance;
   now: () => Date;
@@ -357,7 +358,7 @@ export class Platform {
     return this.sign(product, {
       v: 1,
       kind: "license",
-      iss: "default",
+      iss: TOKEN_ISSUER,
       productId: product.id,
       kid: product.keys.find((k) => k.retiredAt === null && !k.pending)!.kid,
       licenseId: license.id,
@@ -659,6 +660,40 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
       keys: platform.publicProduct(await platform.product(req.params.productId)).keys,
       serverTime: platform.time(),
     })),
+  );
+  app.get(
+    device + "/integration-profile",
+    wrap(async (req) => {
+      const product = await platform.product(req.params.productId);
+      const active = product.keys.filter((key) => key.retiredAt === null && !key.pending);
+      if (active.length !== 1)
+        throw new DomainError(
+          "active_key_unavailable",
+          active.length === 0
+            ? "No active signing key is available for this product."
+            : "Multiple active signing keys are configured for this product.",
+          503,
+        );
+      if (!options.publicOrigin)
+        throw new DomainError(
+          "public_origin_unavailable",
+          "Configure LICENSE_SERVER_URL to export integration settings.",
+          503,
+        );
+      const key = active[0];
+      return {
+        productId: product.id,
+        issuer: TOKEN_ISSUER,
+        serverUrl: options.publicOrigin,
+        activeKey: {
+          kid: key.kid,
+          publicKeyPem: key.publicKeyPem,
+          fingerprint: fingerprintPublicKey(key.publicKeyPem),
+          retiredAt: null,
+          pending: false,
+        },
+      };
+    }),
   );
   app.post(
     ap + "/keys/:kid/activate",
@@ -1556,7 +1591,7 @@ export async function registerPlatform(app: FastifyInstance, options: PlatformOp
                 token: platform.sign(product, {
                   v: 1,
                   kind: "trial",
-                  iss: "default",
+                  iss: TOKEN_ISSUER,
                   productId: pid,
                   kid: product.keys.find((k) => !k.retiredAt && !k.pending)!.kid,
                   installationId: input.installationId,

@@ -182,7 +182,19 @@ try {
       env,
     );
     assert.ok(!result.stdout.includes("ENOENT"), result.stdout);
-    assert.match(result.stdout, new RegExp("Scaffolded " + directory + "(?:\\s|$)"), result.stdout);
+    assert.match(
+      result.stdout,
+      new RegExp(
+        "(?:Scaffolded\\s+" +
+          directory +
+          "|license service scaffolded in\\s+" +
+          directory +
+          "|(?:client\\s+)?starter created in" +
+          ")(?:\\s|$)",
+        "i",
+      ),
+      result.stdout,
+    );
     const project = join(workspace, directory);
     const pkg = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
     assert.equal(pkg.name, directory);
@@ -190,10 +202,13 @@ try {
       assert.ok(!(await readdir(project)).includes("packages"));
       const policy = JSON.parse(await readFile(join(project, "keyforge.config.json"), "utf8"));
       assert.ok(policy.licenses);
+      // Install the scaffold's own UI dependencies before testing its docs module.
+      await run("vp", ["install", "--no-frozen-lockfile"], project, env);
       // Upstream-only guides/workflows are pruned; the generated docs must still work.
       await run("vp", ["exec", "tsx", "--test", "test/docs-reader.test.ts"], project, env);
     } else {
       assert.ok(pkg.dependencies["@zdevzone/keyforge-client"]);
+      await run("vp", ["install", "--no-frozen-lockfile"], project, env);
       await run("vp", ["run", "typecheck"], project, env);
       await cp(join(project, ".env.example"), join(project, ".env.local"));
       const demo = await run("vp", ["run", "demo"], project, env);
