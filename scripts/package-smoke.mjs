@@ -201,6 +201,8 @@ try {
       assert.ok(!(await readdir(project)).includes("packages"));
       const policy = JSON.parse(await readFile(join(project, "keyforge.config.json"), "utf8"));
       assert.ok(policy.licenses);
+      // Install the scaffold's own UI dependencies before testing its docs module.
+      await run("vp", ["install"], project, env);
       // Upstream-only guides/workflows are pruned; the generated docs must still work.
       await run("vp", ["exec", "tsx", "--test", "test/docs-reader.test.ts"], project, env);
     } else {
