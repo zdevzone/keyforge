@@ -182,7 +182,18 @@ try {
       env,
     );
     assert.ok(!result.stdout.includes("ENOENT"), result.stdout);
-    assert.match(result.stdout, new RegExp("Scaffolded " + directory + "(?:\\s|$)"), result.stdout);
+    assert.match(
+      result.stdout,
+      new RegExp(
+        "(?:Scaffolded\\s+" +
+          directory +
+          "|license service scaffolded in\\s+" +
+          directory +
+          ")(?:\\s|$)",
+        "i",
+      ),
+      result.stdout,
+    );
     const project = join(workspace, directory);
     const pkg = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
     assert.equal(pkg.name, directory);
