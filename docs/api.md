@@ -136,6 +136,7 @@ The table is generated from an isolated server's route registration. Product-sco
 | GET | `/v1/products/:productId/installations/:installationId/support/:id` |
 | POST | `/v1/products/:productId/installations/:installationId/support/:id/messages` |
 | GET | `/v1/products/:productId/keys` |
+| GET | `/v1/products/:productId/integration-profile` |
 | POST | `/v1/products/:productId/refresh` |
 | POST | `/v1/products/:productId/register` |
 | POST | `/v1/products/:productId/usage/consume` |
@@ -149,6 +150,7 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | Code |
 | --- |
 | `account_mismatch` |
+| `active_key_unavailable` |
 | `activation_limit_reached` |
 | `admin_disabled` |
 | `admin_unauthorized` |
@@ -229,6 +231,7 @@ Domain errors use error/message/retryable/serverTime; rate limiting may include 
 | `price_required` |
 | `product_archived` |
 | `product_exists` |
+| `public_origin_unavailable` |
 | `quota_exhausted` |
 | `rate_limited` |
 | `reason_required` |

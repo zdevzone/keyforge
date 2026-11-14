@@ -220,6 +220,90 @@
         }
       }
     },
+    "/v1/products/{productId}/integration-profile": {
+      "get": {
+        "operationId": "getIntegrationProfile",
+        "summary": "get Integration Profile",
+        "description": "Public integration settings for one product. Pin the public key through a trusted channel before using it to verify tokens; this response alone does not establish trust.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "productId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "issuer": {
+                      "type": "string",
+                      "const": "default"
+                    },
+                    "serverUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "activeKey": {
+                      "type": "object",
+                      "properties": {
+                        "kid": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "publicKeyPem": {
+                          "type": "string"
+                        },
+                        "fingerprint": {
+                          "type": "string",
+                          "pattern": "^([0-9a-f]{2}:){7}[0-9a-f]{2}$"
+                        },
+                        "retiredAt": {
+                          "type": "null"
+                        },
+                        "pending": {
+                          "const": false
+                        }
+                      },
+                      "required": ["kid", "publicKeyPem", "fingerprint", "retiredAt", "pending"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["productId", "issuer", "serverUrl", "activeKey"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Failure; inspect error and retryable. Never treat an error as a grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/products/{productId}/register": {
       "post": {
         "operationId": "registerInstallation",

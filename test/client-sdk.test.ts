@@ -98,6 +98,7 @@ async function fixture(t: any) {
     database,
     privateKey: pair.privateKey,
     kid: "sdk-key",
+    publicOrigin: "https://license.example.test",
     adminToken: "sdk-test-admin",
     keyring: { active: "test", keys: { test: randomBytes(32).toString("hex") } },
     config: configSchema.parse({ limits: { enabled: false } }),
@@ -1180,6 +1181,7 @@ test("OpenAPI request links and backend metering contracts are exercised without
   await call("GET", "/healthz");
   await call("GET", "/v1/meta");
   await call("GET", "/v1/products/default/keys");
+  await call("GET", "/v1/products/default/integration-profile");
   const catalog = await call<{ products: { plans: { id: string }[] }[] }>(
       "GET",
       "/v1/license-request-catalog",

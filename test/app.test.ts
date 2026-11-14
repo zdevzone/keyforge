@@ -9,7 +9,8 @@ import { buildLicenseApp } from "../src/app.js";
 import { BackupService } from "../src/backups.js";
 import { configSchema } from "../src/config.js";
 import { LicenseDatabase } from "../src/db.js";
-import { verifyLicenseToken } from "../src/keypair.js";
+import { fingerprintPublicKey, verifyLicenseToken } from "../src/keypair.js";
+import { Records } from "../src/platform-store.js";
 import { Platform } from "../src/platform.js";
 import { generateSigningKeyPair } from "../src/sign.js";
 const pair = generateSigningKeyPair();
@@ -115,6 +116,7 @@ test("fresh contract removes legacy routes and preserves signed revocation", asy
   assert.equal(verified.valid, true);
   const payload = verified.payload as any;
   assert.equal(payload.v, 1);
+  assert.equal(payload.iss, "default");
   assert.equal(payload.productId, "default");
   assert.equal(payload.entitlements.imports, 100);
   assert.equal("allowance" in payload, false);
@@ -246,6 +248,78 @@ test("product isolation and staged rotation", async (t) => {
   ).json().token;
   assert.equal(verifyLicenseToken(after, key.publicKeyPem).valid, true);
   assert.equal(verifyLicenseToken(after, pair.publicKey).valid, false);
+});
+test("public integration profile selects the active key across rotation", async (t) => {
+  const h = await harness(t, { app: { publicOrigin: "https://license.example.test" } });
+  const url = "/v1/products/default/integration-profile";
+  const get = () => h.app.inject({ method: "GET", url });
+  let response = await get();
+  assert.equal(response.statusCode, 200, response.body);
+  const original = response.json();
+  assert.deepEqual(original, {
+    productId: "default",
+    issuer: "default",
+    serverUrl: "https://license.example.test",
+    activeKey: {
+      kid: original.activeKey.kid,
+      publicKeyPem: pair.publicKey,
+      fingerprint: fingerprintPublicKey(pair.publicKey),
+      retiredAt: null,
+      pending: false,
+    },
+  });
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(JSON.stringify(original).includes(pair.privateKey), false);
+  const prior = (await h.admin("GET", "/catalog")).json().product;
+  response = await h.admin("POST", "/keys/stage", { revision: prior.revision });
+  assert.equal(response.statusCode, 200, response.body);
+  const staged = response.json().product;
+  const pending = staged.keys.find((key: any) => key.pending);
+  assert.deepEqual((await get()).json(), original);
+  response = await h.admin("POST", "/keys/" + pending.kid + "/activate", {
+    revision: staged.revision,
+    confirm: true,
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const rotated = (await get()).json();
+  assert.equal(rotated.activeKey.kid, pending.kid);
+  assert.equal(rotated.activeKey.publicKeyPem, pending.publicKeyPem);
+  assert.equal(rotated.activeKey.fingerprint, fingerprintPublicKey(pending.publicKeyPem));
+  assert.equal(rotated.activeKey.pending, false);
+  assert.equal(rotated.activeKey.retiredAt, null);
+  assert.equal(
+    (await h.app.inject({ method: "GET", url: "/v1/products/default/keys" })).statusCode,
+    200,
+  );
+  assert.equal(
+    (await h.app.inject({ method: "GET", url: "/v1/products/absent/integration-profile" }))
+      .statusCode,
+    404,
+  );
+});
+
+test("integration profile reports missing and ambiguous active keys without changing them", async (t) => {
+  const h = await harness(t, { app: { publicOrigin: "https://license.example.test" } });
+  const records = new Records(h.db.db);
+  const product = await records.get<any>("workspace:default", "product", "default");
+  const url = "/v1/products/default/integration-profile";
+  const get = () => h.app.inject({ method: "GET", url });
+  await records.put("workspace:default", "product", { ...product, keys: [] });
+  let response = await get();
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error, "active_key_unavailable");
+  assert.deepEqual((await records.get<any>("workspace:default", "product", "default"))?.keys, []);
+  await records.put("workspace:default", "product", {
+    ...product,
+    keys: [product.keys[0], { ...product.keys[0], kid: "second" }],
+  });
+  response = await get();
+  assert.equal(response.statusCode, 503);
+  assert.match(response.json().message, /Multiple active/);
+  const noOrigin = await harness(t);
+  response = await noOrigin.app.inject({ method: "GET", url });
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error, "public_origin_unavailable");
 });
 test("encrypted key storage never leaks through listings and authenticated reveal is audited", async (t) => {
   const h = await harness(t),

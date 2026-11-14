@@ -39,6 +39,7 @@ export interface BuildLicenseAppOptions {
   /** Vercel serves assets through its filesystem router; retain SPA fallback. */
   serveStaticAssets?: boolean;
   kid?: string;
+  publicOrigin?: string;
   keyring?: KeyRing;
   backups?: BackupOptions;
   onRoute?: (method: string, url: string) => void;
@@ -213,6 +214,7 @@ export async function buildLicenseApp(options: BuildLicenseAppOptions): Promise<
     config,
     privateKey: options.privateKey,
     kid,
+    publicOrigin: options.publicOrigin,
     keyring: options.keyring,
     auth: options.auth,
     now,

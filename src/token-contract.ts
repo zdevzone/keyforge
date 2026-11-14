@@ -4,8 +4,9 @@ import { entitlementsSchema } from "./config.js";
 
 const id = z.string().min(1).max(200);
 const date = z.string().datetime({ offset: true });
+export const TOKEN_ISSUER = "default";
 const common = {
-  iss: z.literal("default"),
+  iss: z.literal(TOKEN_ISSUER),
   productId: id,
   kid: id,
   installationId: id,
