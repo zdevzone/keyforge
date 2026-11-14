@@ -189,8 +189,7 @@ try {
           directory +
           "|license service scaffolded in\\s+" +
           directory +
-          "|(?:client\\s+)?starter created in\\s+" +
-          directory +
+          "|(?:client\\s+)?starter created in" +
           ")(?:\\s|$)",
         "i",
       ),
