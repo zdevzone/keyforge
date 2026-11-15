@@ -42,6 +42,8 @@ const PRUNE = [
   "test/import-licensing.test.ts",
   // A dated review of upstream's deployment is not a new deployer's configuration.
   "docs/studio-proof-contract.md",
+  // Upstream's About page describes AndHub; generated projects use their own identity.
+  "docs/about-andhub.md",
   "test/scaffold-prompts.test.ts",
   "scripts/package-smoke.mjs",
   "scripts/release-packages.mjs",

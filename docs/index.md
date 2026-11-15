@@ -39,10 +39,6 @@ Self-hosted license management for software products.
 - [Architecture and limitations](integration-review.md) — current scope and boundaries.
 - [Documentation maintenance](documentation-site.md) — update and publish these guides.
 
-## About AndHub
-
-[AndHub builds and maintains KeyForge](about-andhub.md), MIT-licensed software for self-hosted product licensing.
-
 ## Before you deploy
 
 KeyForge is self-hosted for one company managing multiple products. It has no vendor-hosted multi-tenancy, public operator sign-up, email delivery or payment gateway. New activation requires internet; offline use continues only within a signed grant.

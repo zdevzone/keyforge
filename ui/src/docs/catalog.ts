@@ -187,6 +187,7 @@ export const docCatalog: DocEntry[] = [
     title: "About AndHub",
     group: "About",
     source: "docs/about-andhub.md",
+    optional: true,
     description: "The team behind KeyForge.",
   },
 ];

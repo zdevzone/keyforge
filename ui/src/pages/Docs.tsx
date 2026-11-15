@@ -439,7 +439,6 @@ export default function Docs() {
           </div>
           <footer className="docs-footer">
             <Link to="/welcome">KeyForge</Link>
-            <Link to={docPath("about-andhub")}>About AndHub</Link>
             <span>MIT-licensed · self-hosted</span>
             <a href={sourceRepository} target="_blank" rel="noreferrer">
               GitHub
