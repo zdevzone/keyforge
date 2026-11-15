@@ -30,7 +30,7 @@ The public support-ticket `application-shell10` listing exists, but its source r
 | Account settings | ReUI uploader and Arc tabs | `settings-profile1` composition, shadcn avatar/actions and native single-file selection. Preserve PNG/JPEG/WebP validation, 5 MB limit, 256px resize, preview, removal and explicit Save profile. |
 | Preferences, system and backups | Arc tabs plus existing page forms | Consolidated shadcn tabs: Account, Preferences, Notifications, admin-only Backups and System. Preserve security, own sessions, theme persistence, notification preferences and service status. |
 | Sign-in and public request/status pages | Shared cards and fields | Polaris theme and form primitives, preserving auth, private status links and key retrieval. |
-| Public welcome | Public source/download entry at `/welcome` | App-owned `hero1` split-hero adaptation with theme-matched synthetic Plans captures, scoped public typography, capabilities, workflow, integration, FAQ and MIT/source/docs footer. Download source is the main-branch source ZIP; Sign in opens this deployment's `/login`. |
+| Public welcome | Public product entry at `/welcome` | App-owned adaptation of Shadcnblocks Pro Landing Page 20: `hero1` for the split product preview and `feature18` for the bordered icon grid. It uses theme-matched Plans captures, a four-step licensing flow, SDK example and deployment boundaries. Testimonial and pricing blocks are omitted because KeyForge has no supported customer testimonials or hosted pricing. The footer links to docs, source and MIT license. Sign in opens this deployment's `/login`. |
 | Device recognition in installations, machines and activation history | Existing operational tables | Shared `DeviceIdentity` / `SignalAvailability` patterns show group references, signal kinds and availability. Preserve operational group IDs, distinguish active installation seats from history and reported groups, and keep registration separate from signal-update timestamps. No hashes, raw hardware or credentials are rendered. |
 | Shared feedback | Mixed text colors, Alert and modal | Semantic success/destructive feedback, visible disabled/loading states, accessible labels, focus return and internally scrolling dialogs. |
 
@@ -64,4 +64,6 @@ The later public welcome and device extension preserves this console system. Its
 - [Data table](https://www.shadcnblocks.com/block/data-table12)
 - [Profile layout](https://www.shadcnblocks.com/block/settings-profile1)
 - [Split hero composition](https://www.shadcnblocks.com/block/hero1)
+- [Landing Page 20](https://www.shadcnblocks.com/page/landing-page20)
+- [Icon feature grid](https://www.shadcnblocks.com/block/feature18)
 - [Render environment variables](https://render.com/docs/environment-variables)
