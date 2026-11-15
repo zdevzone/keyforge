@@ -182,6 +182,14 @@ export const docCatalog: DocEntry[] = [
     optional: true,
     description: "Contributions, staging, production promotion and recovery.",
   },
+  {
+    slug: "about-andhub",
+    title: "About AndHub",
+    group: "About",
+    source: "docs/about-andhub.md",
+    optional: true,
+    description: "The team behind KeyForge.",
+  },
 ];
 export function docPath(slug: string) {
   return slug ? "/docs/" + slug : "/docs";

@@ -28,6 +28,7 @@ const sources = import.meta.glob<string>(
     "../../../docs/documentation-site.md",
     "../../../docs/publishing.md",
     "../../../docs/maintaining.md",
+    "../../../docs/about-andhub.md",
     "../../../packages/keyforge-client/README.md",
     "../../../packages/create-keyforge/README.md",
   ],

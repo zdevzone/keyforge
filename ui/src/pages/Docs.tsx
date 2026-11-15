@@ -3,10 +3,10 @@ import {
   ArrowRight,
   BookOpen,
   Check,
+  ChevronRight,
   Copy,
   ExternalLink,
-  KeyRound,
-  Menu,
+  FileText,
   Search,
 } from "lucide-react";
 import { isValidElement, useEffect, useState, type ReactNode } from "react";
@@ -15,12 +15,15 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Command,
   CommandEmpty,
@@ -36,41 +39,67 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 
 import { ThemeControl } from "../components/ThemeControl";
 import { docPath, resolveDocHref, sourceRepository } from "../docs/catalog";
 import { articles, openApiUrl } from "../docs/content";
 import { headingIds, searchDocs, type DocArticle } from "../docs/markdown";
 
-function Navigation({ current, close }: { current: string; close?: () => void }) {
+function DocumentationNavigation({ current }: { current: string }) {
   return (
-    <nav aria-label="Documentation navigation" className="docs-navigation">
+    <>
       {[...new Set(articles.map((a) => a.group))].map((group) => (
-        <div key={group}>
-          <p className="docs-nav-group">{group}</p>
-          {articles
-            .filter((a) => a.group === group)
-            .map((article) => (
-              <Link
-                key={article.slug}
-                to={docPath(article.slug)}
-                aria-current={article.slug === current ? "page" : undefined}
-                onClick={close}
-              >
-                {article.title}
-              </Link>
-            ))}
-        </div>
+        <Collapsible
+          key={group}
+          defaultOpen={articles.some((a) => a.group === group && a.slug === current)}
+        >
+          <SidebarGroup className="py-0">
+            <SidebarGroupLabel asChild>
+              <CollapsibleTrigger className="group/label flex w-full items-center">
+                <ChevronRight className="mr-1 size-3.5 transition-transform group-data-[state=open]/label:rotate-90" />
+                {group}
+              </CollapsibleTrigger>
+            </SidebarGroupLabel>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {articles
+                    .filter((article) => article.group === group)
+                    .map((article) => (
+                      <SidebarMenuItem key={article.slug}>
+                        <SidebarMenuButton asChild isActive={article.slug === current}>
+                          <Link
+                            to={docPath(article.slug)}
+                            aria-current={article.slug === current ? "page" : undefined}
+                          >
+                            <FileText aria-hidden="true" />
+                            <span>{article.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
       ))}
-    </nav>
+    </>
   );
 }
 function SearchDocs() {
@@ -116,7 +145,7 @@ function SearchDocs() {
           <Command shouldFilter={false}>
             <CommandInput
               aria-label="Search all guides"
-              placeholder="Try signing keys, Render or activation…"
+              placeholder="Try signing keys, Docker or activation…"
               value={query}
               onValueChange={setQuery}
             />
@@ -199,29 +228,16 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   );
 }
 function MobileContents({ article }: { article: DocArticle }) {
-  const [expanded, setExpanded] = useState("");
   if (!article.headings.length) return null;
   return (
-    <Accordion
-      type="single"
-      collapsible
-      value={expanded}
-      onValueChange={setExpanded}
-      className="docs-mobile-toc"
-    >
-      <AccordionItem value="contents">
-        <AccordionTrigger>On this page</AccordionTrigger>
-        <AccordionContent>
-          <nav aria-label="On this page">
-            {article.headings.map((heading) => (
-              <Link key={heading.id} to={"#" + heading.id} onClick={() => setExpanded("")}>
-                {heading.title}
-              </Link>
-            ))}
-          </nav>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+    <nav className="docs-mobile-toc" aria-label="On this page">
+      <p>On this page</p>
+      {article.headings.map((heading) => (
+        <a key={heading.id} href={"#" + heading.id}>
+          {heading.title}
+        </a>
+      ))}
+    </nav>
   );
 }
 function Article({ article }: { article: DocArticle }) {
@@ -269,7 +285,6 @@ export default function Docs() {
   const { slug = "" } = useParams(),
     location = useLocation();
   const article = articles.find((a) => a.slug === slug);
-  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     document.title = (article?.title ?? "Guide not found") + " — KeyForge documentation";
     if (location.hash) {
@@ -293,128 +308,175 @@ export default function Docs() {
       <a className="welcome-skip" href="#docs-main">
         Skip to documentation
       </a>
-      <header className="docs-header">
-        <div className="docs-header-inner">
-          <Link to="/welcome" className="docs-brand" aria-label="KeyForge home">
-            <KeyRound aria-hidden="true" />
-            <span>KeyForge</span>
-          </Link>
-          <Link className="docs-header-title" to="/docs">
-            Documentation
-          </Link>
-          <SearchDocs />
-          <ThemeControl />
-          <Button asChild variant="outline" size="sm">
-            <Link to="/login">Sign in</Link>
-          </Button>
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger asChild>
-              <Button
-                className="docs-menu-trigger"
-                variant="ghost"
-                size="icon"
-                aria-label="Open documentation navigation"
-              >
-                <Menu />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="docs-menu-sheet">
-              <SheetHeader>
-                <SheetTitle>Documentation</SheetTitle>
-                <SheetDescription>
-                  Setup, administration and application integration.
-                </SheetDescription>
-              </SheetHeader>
-              <Navigation current={slug} close={() => setMenuOpen(false)} />
-            </SheetContent>
-          </Sheet>
-        </div>
-      </header>
-      <div className="docs-layout">
-        <aside className="docs-sidebar">
-          <Navigation current={slug} />
-        </aside>
-        <main id="docs-main" className="docs-main" tabIndex={-1}>
-          {article ? (
-            <>
-              <div className="docs-prose" key={article.slug}>
-                <Article article={article} />
-              </div>
-              <div className="docs-article-source">
-                <span>Included with this deployment</span>
-                <a
-                  href={sourceRepository + "/blob/main/" + article.source}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View Markdown source <ExternalLink aria-hidden="true" />
-                </a>
-              </div>
-              <nav className="docs-pagination" aria-label="Previous and next guides">
-                <div>
-                  {previous && (
-                    <Link to={docPath(previous.slug)}>
-                      <ArrowLeft aria-hidden="true" />
-                      <span>
-                        <small>Previous</small>
-                        {previous.title}
-                      </span>
-                    </Link>
+      <SidebarProvider className="docs-shell">
+        <Sidebar collapsible="offcanvas" className="docs-guide-sidebar">
+          <SidebarHeader className="docs-guide-header">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton size="lg" asChild>
+                  <Link to="/welcome">
+                    <span className="docs-sidebar-mark">
+                      <BookOpen aria-hidden="true" />
+                    </span>
+                    <span className="grid flex-1 text-left leading-tight">
+                      <span className="truncate font-semibold">KeyForge</span>
+                      <span className="truncate text-xs text-muted-foreground">Documentation</span>
+                    </span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <SearchDocs />
+          </SidebarHeader>
+          <SidebarContent className="docs-guide-content">
+            <DocumentationNavigation key={slug} current={slug} />
+            <SidebarGroup className="mt-auto">
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <a href={sourceRepository} target="_blank" rel="noreferrer">
+                        <ExternalLink aria-hidden="true" />
+                        <span>GitHub</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+        </Sidebar>
+        <SidebarInset id="docs-main" tabIndex={-1} className="docs-inset">
+          <header className="docs-header">
+            <div className="docs-header-inner">
+              <SidebarTrigger
+                className="docs-sidebar-trigger"
+                aria-label="Toggle documentation navigation"
+              />
+              <Separator orientation="vertical" className="docs-header-separator" />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem className="hidden sm:inline-flex">
+                    <BreadcrumbLink asChild>
+                      <Link to="/docs">Docs</Link>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  {article && article.group !== "Start here" && (
+                    <>
+                      <BreadcrumbSeparator className="hidden sm:block" />
+                      <BreadcrumbItem className="hidden sm:inline-flex">
+                        <BreadcrumbPage>{article.group}</BreadcrumbPage>
+                      </BreadcrumbItem>
+                    </>
                   )}
-                </div>
-                <div>
-                  {next && (
-                    <Link to={docPath(next.slug)}>
-                      <span>
-                        <small>Next</small>
-                        {next.title}
-                      </span>
-                      <ArrowRight aria-hidden="true" />
-                    </Link>
-                  )}
-                </div>
-              </nav>
-            </>
-          ) : (
-            <div className="docs-not-found">
-              <h1>Guide not found</h1>
-              <p>
-                This guide is not included in this deployment. Browse the documentation or search
-                for the topic you need.
-              </p>
-              <Button asChild>
-                <Link to="/docs">Open documentation</Link>
-              </Button>
+                  <BreadcrumbSeparator className="hidden sm:block" />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{article?.title ?? "Not found"}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+              <div className="docs-header-actions">
+                <ThemeControl />
+                <Button asChild variant="outline" size="sm" className="docs-sign-in">
+                  <Link to="/login">Sign in</Link>
+                </Button>
+              </div>
             </div>
-          )}
-        </main>
-        {article && (
-          <aside className="docs-toc">
-            <nav aria-label="On this page">
-              <p>On this page</p>
-              {article.headings.map((h) => (
-                <a
-                  className={h.depth === 3 ? "docs-toc-nested" : undefined}
-                  key={h.id}
-                  href={"#" + h.id}
-                >
-                  {h.title}
-                </a>
-              ))}
-              <a className="docs-openapi" href={openApiUrl} download="keyforge-client-openapi.json">
-                Download client OpenAPI <ExternalLink aria-hidden="true" />
-              </a>
-            </nav>
-          </aside>
-        )}
-      </div>
-      <footer className="docs-footer">
-        <Link to="/welcome">KeyForge</Link>
-        <span>MIT-licensed software for self-hosting</span>
-        <a href={sourceRepository} target="_blank" rel="noreferrer">
-          GitHub
-        </a>
-      </footer>
+          </header>
+          <div className="docs-main">
+            {article ? (
+              <>
+                <div className="docs-prose" key={article.slug}>
+                  <Article article={article} />
+                </div>
+                <div className="docs-article-source">
+                  <span>Included with this deployment</span>
+                  <a
+                    href={sourceRepository + "/blob/main/" + article.source}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View Markdown source <ExternalLink aria-hidden="true" />
+                  </a>
+                </div>
+                <nav className="docs-pagination" aria-label="Previous and next guides">
+                  <div>
+                    {previous && (
+                      <Link to={docPath(previous.slug)}>
+                        <ArrowLeft aria-hidden="true" />
+                        <span>
+                          <small>Previous</small>
+                          {previous.title}
+                        </span>
+                      </Link>
+                    )}
+                  </div>
+                  <div>
+                    {next && (
+                      <Link to={docPath(next.slug)}>
+                        <span>
+                          <small>Next</small>
+                          {next.title}
+                        </span>
+                        <ArrowRight aria-hidden="true" />
+                      </Link>
+                    )}
+                  </div>
+                </nav>
+              </>
+            ) : (
+              <div className="docs-not-found">
+                <h1>Guide not found</h1>
+                <p>
+                  This guide is not included in this deployment. Browse the documentation or search
+                  for the topic you need.
+                </p>
+                <Button asChild>
+                  <Link to="/docs">Open documentation</Link>
+                </Button>
+              </div>
+            )}
+          </div>
+          <footer className="docs-footer">
+            <Link to="/welcome">KeyForge</Link>
+            <span>MIT-licensed · self-hosted</span>
+            <a href={sourceRepository} target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+          </footer>
+        </SidebarInset>
+        {article?.headings.length ? (
+          <Sidebar side="right" collapsible="none" className="docs-toc-sidebar">
+            <SidebarHeader className="docs-toc-header">
+              <span>On this page</span>
+            </SidebarHeader>
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <nav className="docs-toc" aria-label="On this page">
+                    {article.headings.map((heading) => (
+                      <a
+                        className={heading.depth === 3 ? "docs-toc-nested" : undefined}
+                        key={heading.id}
+                        href={"#" + heading.id}
+                      >
+                        {heading.title}
+                      </a>
+                    ))}
+                    <a
+                      className="docs-openapi"
+                      href={openApiUrl}
+                      download="keyforge-client-openapi.json"
+                    >
+                      Download client OpenAPI <ExternalLink aria-hidden="true" />
+                    </a>
+                  </nav>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
+        ) : null}
+      </SidebarProvider>
     </div>
   );
 }
