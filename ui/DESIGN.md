@@ -300,7 +300,7 @@ The public welcome surface uses the scoped public-brand, public-display and publ
 
 **The Public Type Scope Rule.** Apply the public display and section roles within the welcome surface; retain operational title, metric and annotation roles in the console.
 
-The public documentation surface extends Polaris with a scoped reading hierarchy: body text at (16px) with (1.75) line height and a maximum measure of (72ch), article titles at (32px) with (1.2) line height, second-level headings at (24px), third-level headings at (20px), and monospace code blocks at (13px). Below (640px), article titles use (28px) and second-level headings use (22px). The (32px) title is an intentional documentation reading role, rather than a change to the console ramp. Semantic color pairs, locally hosted Google Sans Flex, square controls and existing overlay behavior carry through; the responsive navigation, content boundary and finish evidence belong to [the documentation brief](.impeccable/surfaces/docs.md).
+The public documentation surface extends Polaris with a scoped reading hierarchy: body text at (16px) with (1.75) line height and a maximum measure of (72ch), article titles at (32px) with (1.2) line height, second-level headings at (24px), third-level headings at (20px), and monospace code blocks at (13px). Below (640px), article titles use (28px) and second-level headings use (22px). The (32px) title is an intentional documentation reading role, rather than a change to the console ramp. Semantic color pairs, locally hosted Google Sans Flex and square controls carry through. The responsive reader adapts the paid Shadcnblocks Sidebar 20 documentation shell to the live guide catalog, search, breadcrumbs and per-page outline.
 
 ## Layout
 
@@ -310,7 +310,7 @@ Summary cards form four columns on desktop and two on mobile. Lists use wrapping
 
 Below (768px), navigation becomes a drawer, search occupies its own row, page titles reduce, content padding becomes (24px 16px 36px), and detail and profile columns stack. Dense tables scroll inside their own containers; Settings tabs remain horizontally reachable. Dialogs stay centered, scroll internally and fit within (90dvh), with a large-screen maximum width of (42rem). Labels stay above their controls at every width. Related fields use the shared responsive form group: columns fit when each has at least (15rem), with a (20px) gap, and stack when the container is narrower. Route context hides below (1100px) to leave room for header controls.
 
-The public welcome layout uses a centered maximum width of (1320px), a split copy/console-preview hero, and broader section spacing. At its tablet breakpoint the four-step walkthrough becomes two columns; on mobile the hero, walkthrough, feature, integration and FAQ layouts stack, navigation uses a Sheet and actions stretch across the available width. Its detailed composition belongs to [the welcome brief](.impeccable/surfaces/welcome.md).
+The public welcome layout uses a centered maximum width of (1320px), a split copy/console-preview hero, and broader section spacing. At its tablet breakpoint the four-step walkthrough becomes two columns; on mobile the hero, walkthrough, feature, integration and FAQ layouts stack, navigation uses a Sheet and actions stretch across the available width. Detailed composition is recorded in the design review notes.
 
 ## Elevation & Depth
 
@@ -338,7 +338,7 @@ The Polaris base radius is square. App-owned styling applies it to cards, button
 - **Command search:** GlobalCommand provides Ctrl/Cmd K navigation and API-backed license results within the active product, with loading/error feedback. It does not interrupt an edit dialog. Direct list filters remain local inputs.
 - **Dialogs and reports:** use the shared Radix-backed Modal for accessible titles, focus trapping, dismissal and focus return. Creation, edits, payments and confirmations use focused dialogs. Reports show real product/date/customer/status context, separate meter units and ETB amounts, and export all filtered rows through CSV or browser Print / Save PDF. Status reports are current-state; usage dates include whole overlapping buckets, and lifetime totals require no dates.
 
-The complete screen inventory, source provenance, preserved behavior and known registry gaps are in [the redesign record](../docs/ui-redesign.md). Surface-specific workflow contracts remain in [the console brief](.impeccable/surfaces/console-patterns.md).
+The complete screen inventory, source provenance, preserved behavior and known registry gaps are in [the redesign record](../docs/ui-redesign.md). Surface-specific workflow contracts remain in the console design review notes.
 
 ## Do's and Don'ts
 

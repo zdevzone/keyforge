@@ -1,46 +1,50 @@
 # KeyForge documentation
 
-Deploy your own license server, issue licenses from priced plans, and connect your software to signed online and bounded offline authorization.
+Self-hosted license management for software products.
 
-**New to KeyForge? Start with the [beginner guide](getting-started.md).** It takes you from a source checkout to your first license activation and explains which secrets belong on the server and which configuration belongs in your app.
+**New here?** Follow the [beginner guide](getting-started.md) to run the server and activate a license.
 
 ## Run a server
 
-- [Setup and first license](getting-started.md): prerequisites, environment, generated secrets, first operator and verification.
-- [Project CLI](../packages/create-keyforge/README.md): generate a deployment with your database, licensing model and host settings.
-- [Configuration](configuration.md): environment variables, databases, deployment policy and defaults.
-- [Deployment](deploy.md): Render, Docker, local/VPS, Fly.io, Railway, Koyeb and cPanel.
-- [Backups and recovery](backups.md): encrypted archives, independent schedules, verification and restoration.
-- [Database maintenance](database.md): SQLite/PostgreSQL selection, demo data and the admin-preserving reset.
-- [Upgrade an existing installation](database.md#fresh-v1-baseline): backups, schema changes and older client compatibility.
+- [Project CLI](../packages/create-keyforge/README.md) — generate a deployment.
+- [Configuration](configuration.md) — environment variables and defaults.
+- [Deployment](deploy.md) — Docker, VPS, Render, Fly.io, Railway, Koyeb, Vercel and cPanel.
+- [Vercel deployment](vercel.md) — hosted setup and backups.
+- [cPanel deployment](cpanel-guide.md) — prebuilt releases and Passenger.
+- [Backups and recovery](backups.md) — create, verify and restore archives.
+- [Database maintenance](database.md) — manage SQLite or PostgreSQL.
 
 ## Operate KeyForge
 
-- [Licenses, requests and payments](license-sales.md): plans, automatic ETB sales, unpaid balances, payment recording and delivery.
-- [CLI reference](cli.md): key generation, diagnostics, issuance, revocation, seat release and maintenance commands.
-- [API reference](api.md): authentication, permissions, routes, request bodies and errors.
-- [Package publishing](publishing.md): GitHub Actions releases and manual Bash/Windows PowerShell commands for the SDK and both CLIs.
-- [Maintainer guide](maintaining.md): contributions, testing on Render, production promotion and rollback.
+- [Licenses and payments](license-sales.md) — plans, issuance, balances and payment records.
+- [CLI reference](cli.md) — issue, revoke and inspect licenses.
+- [API reference](api.md) — routes, access rules and errors.
+- [Package releases](publishing.md) — publish the SDK and command-line tools.
+- [Maintainer guide](maintaining.md) — contribute, deploy and recover.
 
 ## Connect an application
 
-- [Integration guide](dependent-app-integration.md): registration, activation, offline authorization, support and trusted metering.
-- [Import licensing and recovery](import-licensing.md): additive paid allowances, permanent trial conversion, atomic local usage and staff-approved recovery.
-- [TypeScript SDK](../packages/keyforge-client/README.md): secure storage, retries, signed-token verification and client methods.
-- [Device recognition](device-identity.md): optional Windows, Linux and macOS signals, diagnostics and recovery.
-- [Token verification](verify-token.md): the exact Ed25519 license/trial v1 contract for any language.
-- [Client OpenAPI](client-openapi.json): download the language-independent client API contract.
-- [Studio Proof contract review](studio-proof-contract.md): production verification, endpoint details, migration boundaries and outstanding product decisions.
-- [AI integration context](dependent-app-ai-context.md): concise instructions for your app's coding assistant.
+- [Integration guide](dependent-app-integration.md) — registration, activation and offline use.
+- [Import licensing and recovery](import-licensing.md) — paid allowances and approved recovery.
+- [TypeScript SDK](../packages/keyforge-client/README.md) — verify grants and call the API.
+- [Device recognition](device-identity.md) — optional device signals and recovery.
+- [Windows adapter](windows-device-identity.md) — Windows-specific identity details.
+- [Studio Proof contract](studio-proof-contract.md) — the verified integration contract.
+- [Token verification](verify-token.md) — the Ed25519 token contract.
+- [Client OpenAPI](client-openapi.json) — download the API schema.
+- [AI integration context](dependent-app-ai-context.md) — instructions for coding assistants.
 
-## Understand the boundaries
+## Reference
 
-KeyForge is MIT-licensed, self-hosted software for one company managing multiple products. It does not currently provide multi-tenant vendor hosting, public operator sign-up, email delivery or a payment gateway. Sales and payments are manually recorded in ETB. New activation and trial authorization require internet; offline use only continues within a previously signed grant.
+- [Architecture and limitations](integration-review.md) — current scope and boundaries.
+- [Documentation maintenance](documentation-site.md) — update and publish these guides.
 
-See [current limitations and architecture](integration-review.md) before making production or hosted-service commitments.
+## About AndHub
 
-## About these guides
+[AndHub builds and maintains KeyForge](about-andhub.md), MIT-licensed software for self-hosted product licensing.
 
-This site bundles an explicit selection of the repository's Markdown with each UI build. It does not fetch GitHub on each visit. Update the files, run the checks and rebuild/redeploy to update this site's content. GitHub remains the source and download location; the documentation shown here describes the code shipped with this deployment.
+## Before you deploy
 
-Maintain the reader and its public file allowlist using the [documentation maintenance guide](documentation-site.md).
+KeyForge is self-hosted for one company managing multiple products. It has no vendor-hosted multi-tenancy, public operator sign-up, email delivery or payment gateway. New activation requires internet; offline use continues only within a signed grant.
+
+Read [architecture and limitations](integration-review.md) before making production or hosted-service commitments.
