@@ -199,22 +199,22 @@ try {
   await page.evaluate(() => localStorage.setItem("keyforge.theme", "light"));
   await page.reload();
   assert.equal(
-    await page.getByRole("link", { name: "Download source", exact: true }).getAttribute("href"),
-    "https://github.com/zdevzone/keyforge/archive/refs/heads/main.zip",
+    await page.getByRole("link", { name: "View source", exact: true }).getAttribute("href"),
+    "https://github.com/zdevzone/keyforge",
   );
   await page.keyboard.press("Tab");
   assert.equal(await page.locator(":focus").textContent(), "Skip to content");
   await page.keyboard.press("Enter");
   assert.equal(await page.locator(":focus").getAttribute("id"), "welcome-main");
-  await page.getByRole("button", { name: "Can I download and host KeyForge myself?" }).click();
-  await page.getByText("Yes. KeyForge is MIT-licensed source code.", { exact: false }).waitFor();
-  await page.getByRole("button", { name: "Can I download and host KeyForge myself?" }).click();
+  await page.getByRole("heading", { name: "Know how it runs." }).waitFor();
+  await page.getByText("No gateway is included.", { exact: false }).waitFor();
+  await page.getByRole("link", { name: "Documentation", exact: true }).waitFor();
   await page.getByRole("button", { name: "Switch to dark theme" }).click();
   await page.reload();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page.getByRole("dialog").getByRole("link", { name: "Features", exact: true }).click();
+  await page.getByRole("dialog").getByRole("link", { name: "Capabilities", exact: true }).click();
   assert.equal(await page.getByRole("dialog").count(), 0);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.getByRole("button", { name: "Switch to light theme" }).click();
