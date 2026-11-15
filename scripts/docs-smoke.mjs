@@ -102,6 +102,10 @@ try {
     });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.equal(await page.locator("html").getAttribute("data-theme"), theme);
+    if (width <= 639) {
+      await page.getByRole("button", { name: "Toggle documentation navigation" }).click();
+      await page.locator('[data-mobile="true"] a[aria-current="page"]').waitFor();
+    }
     const contrast = await page.evaluate(() => {
       const canvas = document.createElement("canvas"),
         context = canvas.getContext("2d");
@@ -115,17 +119,20 @@ try {
         });
         return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
       };
-      const style = getComputedStyle(
-        document.querySelector('.docs-navigation a[aria-current="page"]'),
-      );
+      const selector =
+        innerWidth <= 639
+          ? '[data-mobile="true"] a[aria-current="page"]'
+          : '.docs-guide-sidebar a[aria-current="page"]';
+      const style = getComputedStyle(document.querySelector(selector));
       const a = luminance(style.color),
         b = luminance(style.backgroundColor);
       return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     });
     assert.ok(contrast >= 4.5, theme + " selected navigation contrast: " + contrast);
+    if (width <= 639) await page.keyboard.press("Escape");
     await page.screenshot({ path: join(captures, name + ".png"), fullPage: true });
   }
-  await page.getByRole("button", { name: "Open documentation navigation" }).click();
+  await page.getByRole("button", { name: "Toggle documentation navigation" }).click();
   await page.screenshot({ path: join(captures, "mobile-navigation.png") });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -142,14 +149,16 @@ try {
     await page.getByRole("heading", { name: "Generate secrets", exact: true }).waitFor();
     await page.screenshot({ path: join(captures, "beginner-secrets-" + name + ".png") });
   }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(origin + "/docs");
-  await page.getByRole("button", { name: "Open documentation navigation" }).click();
-  await page.getByRole("dialog").getByRole("link", { name: "Beginner guide", exact: true }).click();
-  await page.getByRole("heading", { name: "Beginner guide", exact: true }).waitFor();
-  assert.equal(await page.getByRole("dialog").count(), 0);
-  await page.getByRole("button", { name: "On this page", exact: true }).click();
   await page
-    .getByRole("navigation", { name: "On this page", exact: true })
+    .locator(".docs-guide-sidebar")
+    .getByRole("link", { name: "Beginner guide", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Beginner guide", exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .locator(".docs-mobile-toc")
     .getByRole("link", { name: "Understand the keys and credentials" })
     .click();
   await page.waitForURL(/#understand-the-keys-and-credentials$/);
